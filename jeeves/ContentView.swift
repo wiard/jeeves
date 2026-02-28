@@ -38,7 +38,30 @@ struct ContentView: View {
         }
     }
 
+    @State private var selectedTab = 0
+
     private var mainTabView: some View {
+        #if os(macOS)
+        NavigationSplitView {
+            List(selection: $selectedTab) {
+                Label("Jeeves", systemImage: "bubble.left.fill").tag(0)
+                Label("Huis", systemImage: "house.fill").tag(1)
+                Label("Logboek", systemImage: "scroll.fill").tag(2)
+                Label("Instellingen", systemImage: "gearshape.fill").tag(3)
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 160, ideal: 180)
+        } detail: {
+            switch selectedTab {
+            case 0: ChatView()
+            case 1: HouseView()
+            case 2: LogbookView()
+            case 3: SettingsView()
+            default: ChatView()
+            }
+        }
+        .tint(Color.jeevesGold)
+        #else
         TabView {
             Tab("Jeeves", systemImage: "bubble.left.fill") {
                 ChatView()
@@ -57,5 +80,6 @@ struct ContentView: View {
             }
         }
         .tint(.jeevesGold)
+        #endif
     }
 }
