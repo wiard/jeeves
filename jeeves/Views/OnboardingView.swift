@@ -40,12 +40,16 @@ struct OnboardingView: View {
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.URL)
                     .autocorrectionDisabled()
+                    #if os(iOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .accessibilityLabel("Gateway IP adres")
 
                 TextField("Poort", text: $port)
                     .textFieldStyle(.roundedBorder)
+                    #if os(iOS)
                     .keyboardType(.numberPad)
+                    #endif
                     .accessibilityLabel("Gateway poort")
             }
             .padding(.horizontal, 40)
@@ -53,7 +57,7 @@ struct OnboardingView: View {
             if let error = errorMessage {
                 Text(error)
                     .font(.jeevesCaption)
-                    .foregroundStyle(.consentRed)
+                    .foregroundStyle(Color.consentRed)
             }
 
             VStack(spacing: 12) {

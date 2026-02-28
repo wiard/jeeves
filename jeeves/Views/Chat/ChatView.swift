@@ -16,7 +16,9 @@ struct ChatView: View {
                 ChatInputBar(onSend: sendMessage)
             }
             .navigationTitle("Jeeves")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 1) {
@@ -24,7 +26,7 @@ struct ChatView: View {
                             .font(.jeevesHeadline)
                         Text(gateway.isConnected ? "Verbonden" : "Niet verbonden")
                             .font(.jeevesCaption)
-                            .foregroundStyle(gateway.isConnected ? .consentGreen : .secondary)
+                            .foregroundStyle(gateway.isConnected ? Color.consentGreen : Color.secondary)
                     }
                 }
             }

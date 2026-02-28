@@ -16,7 +16,7 @@ struct KernelCard: View {
                     .font(.jeevesMono)
                 Text("[ORANJE]")
                     .font(.jeevesMono)
-                    .foregroundStyle(.consentOrange)
+                    .foregroundStyle(Color.consentOrange)
             }
 
             HStack {
@@ -36,7 +36,7 @@ struct KernelCard: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color(.secondarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

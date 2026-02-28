@@ -35,7 +35,7 @@ struct MessageBubble: View {
         } else if sender == .system {
             return AnyShapeStyle(Color.secondary.opacity(0.15))
         } else {
-            return AnyShapeStyle(Color(.systemGray5))
+            return AnyShapeStyle(Color(.secondarySystemFill))
         }
     }
 }

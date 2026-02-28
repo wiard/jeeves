@@ -24,7 +24,7 @@ struct SecuritySettings: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text("Geen token")
-                        .foregroundStyle(.consentRed)
+                        .foregroundStyle(Color.consentRed)
                 }
             }
 
@@ -55,7 +55,7 @@ struct SecuritySettings: View {
                 Spacer()
                 Text("trusted")
                     .font(.jeevesMono)
-                    .foregroundStyle(.consentGreen)
+                    .foregroundStyle(Color.consentGreen)
             }
         }
     }

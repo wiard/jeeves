@@ -1,23 +1,29 @@
+#if canImport(UIKit)
 import UIKit
+#endif
 
 enum JeevesHaptics {
-    /// Consent prompt received
     static func consentPrompt() {
+        #if canImport(UIKit)
         UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        #endif
     }
 
-    /// Consent approved
     static func approved() {
+        #if canImport(UIKit)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        #endif
     }
 
-    /// Action blocked
     static func blocked() {
+        #if canImport(UIKit)
         UINotificationFeedbackGenerator().notificationOccurred(.error)
+        #endif
     }
 
-    /// Kill switch activated
     static func killSwitch() {
+        #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        #endif
     }
 }

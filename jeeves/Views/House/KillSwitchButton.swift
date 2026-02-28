@@ -18,7 +18,7 @@ struct KillSwitchButton: View {
                     .foregroundStyle(.secondary)
                 Text(isActive ? "AAN" : "UIT")
                     .font(.jeevesMono)
-                    .foregroundStyle(isActive ? .consentRed : .consentGreen)
+                    .foregroundStyle(isActive ? Color.consentRed : Color.consentGreen)
             }
 
             Button(action: { showConfirmation = true }) {
@@ -53,7 +53,7 @@ struct KillSwitchButton: View {
             }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color(.secondarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

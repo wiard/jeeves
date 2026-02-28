@@ -18,11 +18,11 @@ struct BudgetCard: View {
                     .foregroundStyle(.secondary)
                 Text(budget.hardStop ? "ja" : "nee")
                     .font(.jeevesMono)
-                    .foregroundStyle(budget.hardStop ? .consentRed : .consentGreen)
+                    .foregroundStyle(budget.hardStop ? Color.consentRed : Color.consentGreen)
             }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color(.secondarySystemFill))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }

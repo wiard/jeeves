@@ -1,5 +1,8 @@
 import SwiftUI
+
+#if canImport(Speech)
 import Speech
+#endif
 
 struct ChatInputBar: View {
     let onSend: (String) -> Void
@@ -19,21 +22,21 @@ struct ChatInputBar: View {
                     .onSubmit(send)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color(.systemGray6))
+                    .background(Color(.tertiarySystemFill))
                     .clipShape(RoundedRectangle(cornerRadius: 20))
 
                 if inputText.isEmpty {
                     Button(action: toggleSpeech) {
                         Image(systemName: isRecording ? "mic.fill" : "mic")
                             .font(.title3)
-                            .foregroundStyle(isRecording ? .consentRed : .jeevesGold)
+                            .foregroundStyle(isRecording ? Color.consentRed : Color.jeevesGold)
                     }
                     .accessibilityLabel(isRecording ? "Stop spraakherkenning" : "Start spraakherkenning")
                 } else {
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.jeevesGold)
+                            .foregroundStyle(Color.jeevesGold)
                     }
                     .accessibilityLabel("Verstuur bericht")
                 }

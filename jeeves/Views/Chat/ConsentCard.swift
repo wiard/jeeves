@@ -61,14 +61,14 @@ struct ConsentCard: View {
                     Text(approved == true ? "Goedgekeurd" : "Geweigerd")
                         .font(.jeevesCaption)
                 }
-                .foregroundStyle(approved == true ? .consentGreen : .secondary)
+                .foregroundStyle(approved == true ? Color.consentGreen : Color.secondary)
             } else if isBlocked {
                 HStack {
                     Image(systemName: "lock.fill")
                     Text("Geblokkeerd")
                         .font(.jeevesCaption)
                 }
-                .foregroundStyle(.consentRed)
+                .foregroundStyle(Color.consentRed)
             }
         }
         .padding()

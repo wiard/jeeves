@@ -12,7 +12,9 @@ struct SettingsView: View {
                 infoSection
             }
             .navigationTitle("Instellingen")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
+            #endif
         }
     }
 

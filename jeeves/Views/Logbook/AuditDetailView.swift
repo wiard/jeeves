@@ -38,7 +38,9 @@ struct AuditDetailView: View {
                 }
             }
             .navigationTitle("Detail")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
         }
     }
 

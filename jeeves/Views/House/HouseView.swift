@@ -31,7 +31,9 @@ struct HouseView: View {
                 .padding()
             }
             .navigationTitle("De Grote Kamer")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
+            #endif
             .refreshable {
                 await refreshStatus()
             }

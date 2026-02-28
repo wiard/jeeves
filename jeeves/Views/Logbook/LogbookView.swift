@@ -67,7 +67,9 @@ struct LogbookView: View {
                 }
             }
             .navigationTitle("Logboek")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
+            #endif
             .searchable(text: $searchText, prompt: "Zoek in logboek...")
             .refreshable {
                 await loadEntries()

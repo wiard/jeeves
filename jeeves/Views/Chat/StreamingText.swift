@@ -12,12 +12,12 @@ struct StreamingText: View {
                 if showCursor {
                     Text("|")
                         .font(.jeevesBody)
-                        .foregroundStyle(.jeevesGold)
+                        .foregroundStyle(Color.jeevesGold)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color(.systemGray5))
+            .background(Color(.secondarySystemFill))
             .clipShape(RoundedRectangle(cornerRadius: 18))
 
             Spacer(minLength: 60)
