@@ -95,24 +95,14 @@ struct OnboardingView: View {
         isConnecting = true
         errorMessage = nil
 
-        // Save connection
         let connection = GatewayConnection(host: host, port: portNum)
         modelContext.insert(connection)
 
-        // Try to connect (for now always use mock)
-        gateway.useMock = false
-        gateway.connect(host: host, port: portNum, token: "pending", channelId: "ios-app")
-
-        // For development: fall back to mock if real connection fails
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            if !gateway.isConnected {
-                gateway.useMock = true
-                gateway.connect(host: host, port: portNum, token: "mock", channelId: "ios-app")
-            }
-            isConnecting = false
-            onComplete()
-        }
+        // For development: use mock mode since no gateway is running yet
+        gateway.useMock = true
+        gateway.connect(host: host, port: portNum, token: "mock", channelId: "ios-app")
+        isConnecting = false
+        onComplete()
     }
 
     private func connectMock() {

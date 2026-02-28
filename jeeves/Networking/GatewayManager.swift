@@ -22,6 +22,8 @@ final class GatewayManager {
     private var webSocketTask: URLSessionWebSocketTask?
     private var messageHandler: ((IncomingMessage) -> Void)?
     private var reconnectDelay: TimeInterval = 1.0
+    private var maxReconnectAttempts = 5
+    private var reconnectAttempts = 0
     private var heartbeatTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     private var host: String = ""
@@ -40,6 +42,9 @@ final class GatewayManager {
     // MARK: - Connection
 
     func connect(host: String, port: Int, token: String, channelId: String = "ios-app") {
+        // Clean up any existing connection
+        disconnect()
+
         self.host = host
         self.port = port
         self.token = token
@@ -65,8 +70,10 @@ final class GatewayManager {
         webSocketTask = session.webSocketTask(with: request)
         webSocketTask?.resume()
 
-        connectionState = .connected
+        // Don't set .connected until we successfully receive a message
+        // startReceiving will handle the state transition
         reconnectDelay = 1.0
+        reconnectAttempts = 0
 
         startReceiving()
         startHeartbeat()
@@ -74,7 +81,9 @@ final class GatewayManager {
 
     func disconnect() {
         heartbeatTask?.cancel()
+        heartbeatTask = nil
         receiveTask?.cancel()
+        receiveTask = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         connectionState = .disconnected
@@ -119,8 +128,6 @@ final class GatewayManager {
             return status
         }
 
-        // In real mode, status comes via WebSocket status messages
-        // For now return cached status
         if let status = currentStatus {
             return status
         }
@@ -132,7 +139,6 @@ final class GatewayManager {
             return mockGateway.mockAuditEntries()
         }
 
-        // Real implementation would call /api/safeclash/audit
         throw GatewayError.notConnected
     }
 
@@ -142,7 +148,6 @@ final class GatewayManager {
             return
         }
 
-        // Real implementation would call the gateway
         throw GatewayError.notConnected
     }
 
@@ -163,6 +168,13 @@ final class GatewayManager {
             while !Task.isCancelled {
                 do {
                     guard let message = try await self.webSocketTask?.receive() else { return }
+                    await MainActor.run {
+                        // First successful receive means we're connected
+                        if self.connectionState != .connected {
+                            self.connectionState = .connected
+                            self.reconnectAttempts = 0
+                        }
+                    }
                     switch message {
                     case .string(let text):
                         if let data = text.data(using: .utf8),
@@ -181,8 +193,10 @@ final class GatewayManager {
                         break
                     }
                 } catch {
-                    await MainActor.run {
-                        self.handleDisconnect()
+                    if !Task.isCancelled {
+                        await MainActor.run {
+                            self.handleDisconnect()
+                        }
                     }
                     return
                 }
@@ -198,6 +212,7 @@ final class GatewayManager {
     }
 
     private func handleDisconnect() {
+        guard connectionState != .disconnected else { return }
         connectionState = .reconnecting
         scheduleReconnect()
     }
@@ -205,9 +220,16 @@ final class GatewayManager {
     // MARK: - Reconnect
 
     private func scheduleReconnect() {
+        reconnectAttempts += 1
+        guard reconnectAttempts <= maxReconnectAttempts else {
+            connectionState = .disconnected
+            return
+        }
+
         Task {
             try? await Task.sleep(for: .seconds(reconnectDelay))
-            reconnectDelay = min(reconnectDelay * 2, 30.0) // Exponential backoff, max 30s
+            reconnectDelay = min(reconnectDelay * 2, 30.0)
+            guard connectionState == .reconnecting else { return }
             connect(host: host, port: port, token: token, channelId: channelId)
         }
     }
