@@ -1,18 +1,14 @@
-//
-//  jeevesApp.swift
-//  jeeves
-//
-//  Created by wiard vasen on 28/02/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
-struct jeevesApp: App {
+struct JeevesApp: App {
+    @State private var gatewayManager = GatewayManager()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            ChatMessage.self,
+            GatewayConnection.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -26,6 +22,7 @@ struct jeevesApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(gatewayManager)
         }
         .modelContainer(sharedModelContainer)
     }

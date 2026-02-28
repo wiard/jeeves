@@ -1,66 +1,61 @@
-//
-//  ContentView.swift
-//  jeeves
-//
-//  Created by wiard vasen on 28/02/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Environment(GatewayManager.self) private var gateway
+    @Query private var connections: [GatewayConnection]
+    @State private var showOnboarding: Bool = false
+
+    private var hasConnection: Bool { !connections.isEmpty }
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+        Group {
+            if showOnboarding || !hasConnection {
+                OnboardingView {
+                    withAnimation {
+                        showOnboarding = false
                     }
                 }
-                .onDelete(perform: deleteItems)
+            } else {
+                mainTabView
             }
-#if os(macOS)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-#endif
-            .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+        }
+        .onAppear {
+            if !hasConnection {
+                showOnboarding = true
+            } else if !gateway.isConnected {
+                // Auto-connect with mock for development
+                gateway.useMock = true
+                if let conn = connections.first {
+                    gateway.connect(
+                        host: conn.host,
+                        port: conn.port,
+                        token: KeychainHelper.load(for: "\(conn.host):\(conn.port)") ?? "mock",
+                        channelId: conn.channelId
+                    )
                 }
-#endif
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
             }
         }
     }
-}
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+    private var mainTabView: some View {
+        TabView {
+            Tab("Jeeves", systemImage: "bubble.left.fill") {
+                ChatView()
+            }
+
+            Tab("Huis", systemImage: "house.fill") {
+                HouseView()
+            }
+
+            Tab("Logboek", systemImage: "scroll.fill") {
+                LogbookView()
+            }
+
+            Tab("Instellingen", systemImage: "gearshape.fill") {
+                SettingsView()
+            }
+        }
+        .tint(.jeevesGold)
+    }
 }
