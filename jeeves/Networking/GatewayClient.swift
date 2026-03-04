@@ -256,7 +256,17 @@ actor GatewayClient {
             let clusterId = parseString(item, keys: ["clusterId", "id", "key"]) ?? "cluster-\(index)"
             let sourceTypes = parseStringArray(item, keys: ["sourceTypes", "sources", "types", "dimensions"]) ?? []
             let density = parseDouble(item, keys: ["densityScore", "density", "score", "relevanceScore"]) ?? 0
-            let summary = parseString(item, keys: ["summary", "description", "text"]) ?? "No summary available."
+            let rawSummary = parseString(item, keys: ["summary", "description", "text"])
+            let kind = parseString(item, keys: ["kind", "type"]) ?? ""
+            let summary: String
+            if let rawSummary, rawSummary != "No summary available." {
+                summary = rawSummary
+            } else if !sourceTypes.isEmpty {
+                let kindLabel = kind.isEmpty ? "Cluster" : kind.capitalized
+                summary = "Emergent patroon: \(kindLabel) [\(sourceTypes.joined(separator: "/"))]"
+            } else {
+                summary = "Emergent patroon: \(kind.isEmpty ? "onbekend" : kind)"
+            }
             let position = parsePosition(item["cubePosition"])
                 ?? parsePosition(item["position"])
                 ?? parsePosition(item["cell"])

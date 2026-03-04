@@ -20,6 +20,11 @@ struct HouseView: View {
                             errorText: knowledgeError,
                             onRefresh: refreshKnowledgeStatus
                         )
+                        NavigationLink {
+                            ObservatoryView()
+                        } label: {
+                            MachinekamerObservatoryCard()
+                        }
                         KillSwitchButton(
                             isActive: status.killSwitch.active,
                             onActivate: activateKillSwitch,
@@ -92,6 +97,25 @@ struct HouseView: View {
             try? await gateway.deactivateKillSwitch()
             status = gateway.currentStatus
         }
+    }
+}
+
+private struct MachinekamerObservatoryCard: View {
+    var body: some View {
+        HStack {
+            Label("Machinekamer", systemImage: "cpu")
+                .font(.jeevesHeadline)
+            Spacer()
+            Text("Observatory")
+                .font(.jeevesMono)
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(Color(.secondarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

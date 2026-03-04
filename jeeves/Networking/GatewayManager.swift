@@ -19,6 +19,7 @@ final class GatewayManager {
     var latencyMs: Int?
     var currentStatus: GatewayStatus?
     var currentKnowledgeStatus: KnowledgeStatus?
+    var currentObservatoryBundle: ObservatoryGatewayBundle?
 
     var useMock: Bool = false
     var host: String = "mock"
@@ -100,6 +101,7 @@ final class GatewayManager {
         latencyMs = nil
         currentStatus = nil
         currentKnowledgeStatus = nil
+        currentObservatoryBundle = nil
     }
 
     func fetchStatus() async throws -> GatewayStatus {
@@ -141,6 +143,34 @@ final class GatewayManager {
         let status = try await ConductorAPI.knowledgeStatus(host: host, port: port, token: token)
         currentKnowledgeStatus = status
         return status
+    }
+
+    func fetchObservatoryBundle() async throws -> ObservatoryGatewayBundle {
+        if useMock || host.lowercased() == "mock" {
+            let mock = mockObservatoryBundle()
+            currentObservatoryBundle = mock
+            return mock
+        }
+
+        let token = try requireToken()
+        async let clock = ConductorAPI.fabricClock(host: host, port: port, token: token)
+        async let emergence = ConductorAPI.fabricEmergence(host: host, port: port, token: token)
+        async let fabricState = ConductorAPI.fabricState(host: host, port: port, token: token)
+        async let challenges = ConductorAPI.lobbyChallenges(host: host, port: port, token: token)
+        async let openclaw = ConductorAPI.openclawSkillsSummary(host: host, port: port, token: token)
+        async let alerts = ConductorAPI.observatoryAlerts(host: host, port: port, token: token)
+
+        let bundle = try await ObservatoryGatewayBundle(
+            clock: clock,
+            emergence: emergence,
+            fabricState: fabricState,
+            challenges: challenges,
+            openclawSummary: openclaw,
+            alerts: alerts,
+            fetchedAt: Date()
+        )
+        currentObservatoryBundle = bundle
+        return bundle
     }
 
     func fetchAudit(period: AuditPeriod) async throws -> [AuditEntry] {
@@ -322,6 +352,175 @@ final class GatewayManager {
                 )
             ],
             lastScanAtIso: "2026-03-04T09:10:00.000Z"
+        )
+    }
+
+    private func mockObservatoryBundle() -> ObservatoryGatewayBundle {
+        let nowIso = "2026-03-04T12:00:00.000Z"
+        let clock = FabricClockState(
+            source: "sim",
+            tickN: 42,
+            height: nil,
+            timeIso: nowIso,
+            degraded: false,
+            error: nil
+        )
+        let emergence = FabricEmergenceResponse(
+            clock: clock,
+            heatmap: """
+z=0 (cells 0–8)
+  · 0  ░ 1  ░ 2
+  ░ 3  ▒ 4  ▓ 5
+  · 6  ░ 7  █ 8
+
+z=1 (cells 9–17)
+  · 9  ░10  ▒11
+  ░12  ▒13  ▓14
+  ·15  ░16  █17
+
+z=2 (cells 18–26)
+  ·18  ░19  ▒20
+  ░21  ▒22  ▓23
+  ·24  ░25  █26
+""",
+            topRoutes: [
+                FabricEmergenceRoute(start: 4, path: [4, 5, 8, 17], totalScore: 1.82),
+                FabricEmergenceRoute(start: 13, path: [13, 14, 17, 26], totalScore: 1.74),
+                FabricEmergenceRoute(start: 22, path: [22, 23, 26], totalScore: 1.31)
+            ],
+            suggestions: [
+                "Sterkste residue: cel 26 (0.8800)",
+                "Beste route: 4 → 5 → 8 → 17 (1.8200)",
+                "Actieve cel: 15 (residue 0.1200)"
+            ],
+            clusters: [
+                FabricEmergenceCluster(
+                    kind: "hotspot",
+                    cells: [5, 8, 17],
+                    totalScore: 1.62,
+                    summary: "Residue hotspot rond route 5→8→17"
+                ),
+                FabricEmergenceCluster(
+                    kind: "corridor",
+                    cells: [13, 14, 17, 23, 26],
+                    totalScore: 2.25,
+                    summary: "Corridor naar bovenlaag"
+                )
+            ],
+            knowledgeHitsToday: 6,
+            knowledgeTopCubeAddresses: [
+                "trust-model|external|emerging",
+                "architecture|external|current",
+                "surface|external|current"
+            ]
+        )
+        let fabricState = FabricStateSummaryResponse(
+            tickN: 42,
+            activeCell: 15,
+            clockSource: "sim",
+            topCells: [
+                FabricTopCell(cell: 26, score: 0.88, events: 9, lastTickN: 42),
+                FabricTopCell(cell: 17, score: 0.71, events: 7, lastTickN: 41),
+                FabricTopCell(cell: 8, score: 0.64, events: 6, lastTickN: 41)
+            ]
+        )
+        let challenges: [LobbyChallengeItem] = [
+            LobbyChallengeItem(
+                challengeId: "c-001",
+                createdAtIso: "2026-03-04T11:35:00.000Z",
+                title: "Onderzoek OpenClaw skill hotspot",
+                description: "Hot cell trust-model|external|emerging",
+                domain: "external",
+                suggestedIntentKey: "intent.openclaw.skills.review",
+                maxRisk: "orange",
+                status: "open",
+                claimedByAgentId: nil
+            ),
+            LobbyChallengeItem(
+                challengeId: "c-002",
+                createdAtIso: "2026-03-04T10:50:00.000Z",
+                title: "Controleer fabric route drift",
+                description: "Route score verandert",
+                domain: "engine",
+                suggestedIntentKey: "intent.fabric.tick",
+                maxRisk: "green",
+                status: "claimed",
+                claimedByAgentId: "jeeves"
+            ),
+            LobbyChallengeItem(
+                challengeId: "c-003",
+                createdAtIso: "2026-03-04T09:10:00.000Z",
+                title: "Daily extern scan",
+                description: "Routine check",
+                domain: "external",
+                suggestedIntentKey: "intent.scan.openclaw",
+                maxRisk: "green",
+                status: "completed",
+                claimedByAgentId: "commonphone"
+            )
+        ]
+        let openclawSummary = OpenclawSkillsSummary(
+            generatedAtIso: nowIso,
+            totalSkillsScanned: 12,
+            topSkillsByResidue: [
+                OpenclawSkillResult(
+                    skillName: "discord",
+                    fileCountScanned: 8,
+                    markersFound: OpenclawSkillMarkers(secrets: 2, writes: 1, externalIO: 6, consentWords: 0),
+                    cubePosition: OpenclawSkillCubePosition(wat: "trust-model", waar: "external", wanneer: "emerging"),
+                    residueValue: 0.75
+                ),
+                OpenclawSkillResult(
+                    skillName: "github",
+                    fileCountScanned: 5,
+                    markersFound: OpenclawSkillMarkers(secrets: 0, writes: 1, externalIO: 4, consentWords: 1),
+                    cubePosition: OpenclawSkillCubePosition(wat: "trust-model", waar: "external", wanneer: "current"),
+                    residueValue: 0.40
+                )
+            ],
+            hotCells: [
+                OpenclawHotCellSummary(
+                    cubeAddress: "trust-model|external|emerging",
+                    count: 4,
+                    sumResidue: 2.3,
+                    topSkills: ["discord", "github", "slack"],
+                    hasAnomaly: true
+                )
+            ],
+            anomalies: [
+                OpenclawSkillResult(
+                    skillName: "discord",
+                    fileCountScanned: 8,
+                    markersFound: OpenclawSkillMarkers(secrets: 2, writes: 1, externalIO: 6, consentWords: 0),
+                    cubePosition: OpenclawSkillCubePosition(wat: "trust-model", waar: "external", wanneer: "emerging"),
+                    residueValue: 0.75
+                )
+            ]
+        )
+        let alerts = ObservatoryAlertsResponse(
+            updatedAtIso: nowIso,
+            alerts: [
+                ObservatoryAlertItem(
+                    alertId: "a-001",
+                    kind: "emergence",
+                    severity: "high",
+                    title: "Emergent patroon gedetecteerd",
+                    summary: "3 clusters, 7 hits, 12 signalen",
+                    cube: ObservatoryAlertCube(a1: "trust-model", a2: "external", a3: "emerging", cell: 20),
+                    evidence: ObservatoryAlertEvidence(sources: ["fabric", "signals", "git"]),
+                    recommendedAction: "escalate_to_iphone",
+                    escalatedAtIso: "2026-03-04T11:58:00.000Z"
+                )
+            ]
+        )
+        return ObservatoryGatewayBundle(
+            clock: clock,
+            emergence: emergence,
+            fabricState: fabricState,
+            challenges: challenges,
+            openclawSummary: openclawSummary,
+            alerts: alerts,
+            fetchedAt: Date()
         )
     }
 }

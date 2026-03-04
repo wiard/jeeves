@@ -1,19 +1,222 @@
 import Foundation
 
+struct ObservatoryDashboardSnapshot: Sendable {
+    let conductor: ConductorState?
+    let alerts: [ObservatoryAlert]
+    let fabricClock: FabricClockState?
+    let fabricEmergence: FabricEmergence?
+    let lobbyOpenChallenges: [LobbyChallenge]
+    let signals: SignalsState?
+    let knowledgeStatus: KnowledgeStatus?
+    let knowledgeEmergence: KnowledgeEmergence?
+    let fetchedAt: Date
+}
+
+struct ObservatoryAlert: Decodable, Sendable, Identifiable {
+    let id: String
+    let title: String?
+    let summary: String?
+    let timestampIso: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case alertId
+        case title
+        case summary
+        case message
+        case timestampIso
+        case timestamp
+        case escalatedAtIso
+        case createdAtIso
+    }
+
+    init(id: String, title: String?, summary: String?, timestampIso: String?) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.timestampIso = timestampIso
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+            ?? c.decodeIfPresent(String.self, forKey: .alertId)
+            ?? UUID().uuidString
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+            ?? c.decodeIfPresent(String.self, forKey: .message)
+        timestampIso = try c.decodeIfPresent(String.self, forKey: .timestampIso)
+            ?? c.decodeIfPresent(String.self, forKey: .timestamp)
+            ?? c.decodeIfPresent(String.self, forKey: .escalatedAtIso)
+            ?? c.decodeIfPresent(String.self, forKey: .createdAtIso)
+    }
+}
+
+struct FabricEmergence: Decodable, Sendable {
+    let strongestCell: String?
+    let warmLayer: String?
+    let suggestions: [String]
+    let clusters: [KnowledgeEmergenceCluster]
+
+    private enum CodingKeys: String, CodingKey {
+        case strongestCell
+        case warmLayer
+        case suggestions
+        case clusters
+    }
+
+    init(strongestCell: String?, warmLayer: String?, suggestions: [String], clusters: [KnowledgeEmergenceCluster]) {
+        self.strongestCell = strongestCell
+        self.warmLayer = warmLayer
+        self.suggestions = suggestions
+        self.clusters = clusters
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        strongestCell = try c.decodeIfPresent(String.self, forKey: .strongestCell)
+        warmLayer = try c.decodeIfPresent(String.self, forKey: .warmLayer)
+        suggestions = try c.decodeIfPresent([String].self, forKey: .suggestions) ?? []
+        clusters = try c.decodeIfPresent([KnowledgeEmergenceCluster].self, forKey: .clusters) ?? []
+    }
+}
+
+struct LobbyChallenge: Decodable, Sendable, Identifiable {
+    let id: String
+    let title: String?
+    let key: String?
+    let createdAtIso: String?
+    let status: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case challengeId
+        case title
+        case key
+        case suggestedIntentKey
+        case createdAtIso
+        case status
+    }
+
+    init(id: String, title: String?, key: String?, createdAtIso: String?, status: String?) {
+        self.id = id
+        self.title = title
+        self.key = key
+        self.createdAtIso = createdAtIso
+        self.status = status
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+            ?? c.decodeIfPresent(String.self, forKey: .challengeId)
+            ?? UUID().uuidString
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+            ?? c.decodeIfPresent(String.self, forKey: .suggestedIntentKey)
+        createdAtIso = try c.decodeIfPresent(String.self, forKey: .createdAtIso)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+    }
+}
+
+struct SignalsState: Decodable, Sendable {
+    let signalsToday: Int?
+    let challengesToday: Int?
+    let proposalsToday: Int?
+    let executedActions: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case signalsToday
+        case challengesToday
+        case proposalsToday
+        case executedActions
+        case signals
+        case challenges
+        case proposals
+        case executed
+    }
+
+    init(signalsToday: Int?, challengesToday: Int?, proposalsToday: Int?, executedActions: Int?) {
+        self.signalsToday = signalsToday
+        self.challengesToday = challengesToday
+        self.proposalsToday = proposalsToday
+        self.executedActions = executedActions
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        signalsToday = try c.decodeIfPresent(Int.self, forKey: .signalsToday)
+            ?? c.decodeIfPresent(Int.self, forKey: .signals)
+        challengesToday = try c.decodeIfPresent(Int.self, forKey: .challengesToday)
+            ?? c.decodeIfPresent(Int.self, forKey: .challenges)
+        proposalsToday = try c.decodeIfPresent(Int.self, forKey: .proposalsToday)
+            ?? c.decodeIfPresent(Int.self, forKey: .proposals)
+        executedActions = try c.decodeIfPresent(Int.self, forKey: .executedActions)
+            ?? c.decodeIfPresent(Int.self, forKey: .executed)
+    }
+}
+
+struct KnowledgeEmergence: Decodable, Sendable {
+    let clusters: [KnowledgeEmergenceCluster]
+
+    private enum CodingKeys: String, CodingKey {
+        case clusters
+    }
+
+    init(clusters: [KnowledgeEmergenceCluster]) {
+        self.clusters = clusters
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        clusters = try c.decodeIfPresent([KnowledgeEmergenceCluster].self, forKey: .clusters) ?? []
+    }
+}
+
+struct KnowledgeEmergenceCluster: Decodable, Sendable, Identifiable {
+    let id: String
+    let summary: String?
+    let score: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case clusterId
+        case summary
+        case score
+        case relevanceScore
+        case densityScore
+    }
+
+    init(id: String, summary: String?, score: Double?) {
+        self.id = id
+        self.summary = summary
+        self.score = score
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+            ?? c.decodeIfPresent(String.self, forKey: .clusterId)
+            ?? UUID().uuidString
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        score = try c.decodeIfPresent(Double.self, forKey: .score)
+            ?? c.decodeIfPresent(Double.self, forKey: .relevanceScore)
+            ?? c.decodeIfPresent(Double.self, forKey: .densityScore)
+    }
+}
+
 struct CubePosition: Hashable, Codable, Sendable {
     let x: Int
     let y: Int
     let z: Int
 
     init(x: Int, y: Int, z: Int) {
-        self.x = max(0, min(2, x))
-        self.y = max(0, min(2, y))
-        self.z = max(0, min(2, z))
+        self.x = x
+        self.y = y
+        self.z = z
     }
 
     var id: String { "\(x)-\(y)-\(z)" }
-
-    static let origin = CubePosition(x: 0, y: 0, z: 0)
 }
 
 struct ClashdCell: Identifiable, Sendable {
@@ -23,10 +226,6 @@ struct ClashdCell: Identifiable, Sendable {
     let routeArrows: [String]
 
     var id: String { position.id }
-
-    var residueClamped: Double {
-        max(0, min(1, residue))
-    }
 }
 
 struct ClashdRoute: Identifiable, Sendable {
@@ -76,10 +275,6 @@ struct JeevesDecisionEvent: Identifiable, Sendable {
     let kind: JeevesDecisionKind
     let title: String
     let timestamp: Date
-
-    var isAnomaly: Bool {
-        kind == .escalated
-    }
 }
 
 struct EmergenceAlert: Identifiable, Sendable {
@@ -124,131 +319,48 @@ struct ObservatorySnapshot: Sendable {
     )
 
     static func demo(tick: Int, now: Date = Date()) -> ObservatorySnapshot {
-        let cells = demoCells(tick: tick)
-        let routes = demoRoutes(tick: tick)
-        let clusters = demoClusters(tick: tick)
-        let decisions = demoDecisions(tick: tick, now: now)
+        let clusters = [
+            KnowledgeCollisionCluster(
+                clusterId: "demo-\(tick)",
+                sourceTypes: ["signal", "knowledge"],
+                densityScore: 0.6,
+                cubePosition: CubePosition(x: 1, y: 1, z: 1),
+                summary: "Demo cluster",
+                isEmergence: tick % 2 == 0
+            )
+        ]
 
-        let lastCycle = 5.4 + Double((tick * 13) % 18) / 10.0
-        let avgCycle = 6.1 + Double((tick * 5) % 8) / 10.0
-        let signalsToday = 120 + ((tick * 7) % 60)
-        let challengesToday = 4 + ((tick * 3) % 5)
-        let proposalsToday = 8 + ((tick * 2) % 7)
-        let executedActions = 5 + ((tick * 11) % 9)
+        let cells = (0..<27).map { index in
+            ClashdCell(
+                position: CubePosition(x: index % 3, y: (index / 3) % 3, z: (index / 9) % 3),
+                residue: Double(index % 10) / 10.0,
+                highlightedClusterId: nil,
+                routeArrows: []
+            )
+        }
+
+        let decisions = [
+            JeevesDecisionEvent(
+                id: "decision-\(tick)",
+                kind: tick % 2 == 0 ? .escalated : .autoApproved,
+                title: "Demo decision",
+                timestamp: now
+            )
+        ]
 
         return ObservatorySnapshot(
             loop: LoopMetrics(
-                lastCycleDuration: lastCycle,
-                averageCycleDuration: avgCycle,
-                signalsToday: signalsToday,
-                challengesToday: challengesToday,
-                proposalsToday: proposalsToday,
-                executedActions: executedActions
+                lastCycleDuration: 5.0,
+                averageCycleDuration: 6.0,
+                signalsToday: 10 + tick,
+                challengesToday: 2,
+                proposalsToday: 3,
+                executedActions: 1
             ),
-            field: ClashdCubeField(cells: cells, activeRoutes: routes, clusters: clusters),
+            field: ClashdCubeField(cells: cells, activeRoutes: [], clusters: clusters),
             collisions: clusters,
             decisions: decisions,
             updatedAt: now
         )
-    }
-
-    private static func demoCells(tick: Int) -> [ClashdCell] {
-        var cells: [ClashdCell] = []
-        let hotSpots = [
-            CubePosition(x: (tick / 2) % 3, y: (tick / 3) % 3, z: (tick / 5) % 3),
-            CubePosition(x: (tick + 1) % 3, y: (tick + 2) % 3, z: (tick + 1) % 3)
-        ]
-
-        for z in 0..<3 {
-            for y in 0..<3 {
-                for x in 0..<3 {
-                    let position = CubePosition(x: x, y: y, z: z)
-                    let seed = x * 17 + y * 11 + z * 7 + tick * 3
-                    let wave = Double((seed % 100)) / 100.0
-                    let clusterId = hotSpots.contains(position) ? "cluster-\(z)-\(x)" : nil
-
-                    let arrows = buildRouteArrows(position: position, hotspots: hotSpots)
-
-                    cells.append(
-                        ClashdCell(
-                            position: position,
-                            residue: wave,
-                            highlightedClusterId: clusterId,
-                            routeArrows: arrows
-                        )
-                    )
-                }
-            }
-        }
-
-        return cells
-    }
-
-    private static func demoRoutes(tick: Int) -> [ClashdRoute] {
-        let base = CubePosition(x: tick % 3, y: (tick + 1) % 3, z: (tick + 2) % 3)
-        let neighbors = [
-            CubePosition(x: min(2, base.x + 1), y: base.y, z: base.z),
-            CubePosition(x: base.x, y: min(2, base.y + 1), z: base.z),
-            CubePosition(x: base.x, y: base.y, z: min(2, base.z + 1))
-        ]
-
-        return neighbors.enumerated().map { index, to in
-            ClashdRoute(
-                id: "route-\(index)-\(tick)",
-                from: base,
-                to: to,
-                strength: 0.45 + (Double((tick + index) % 5) / 10.0)
-            )
-        }
-    }
-
-    private static func demoClusters(tick: Int) -> [KnowledgeCollisionCluster] {
-        [
-            KnowledgeCollisionCluster(
-                clusterId: "kc-\(tick % 9)",
-                sourceTypes: ["residue", "intent", "challenge"],
-                densityScore: 0.58 + Double((tick % 7)) / 20.0,
-                cubePosition: CubePosition(x: (tick + 1) % 3, y: tick % 3, z: (tick / 2) % 3),
-                summary: "Cross-domain residue overlap observed between challenge and intent streams.",
-                isEmergence: tick % 2 == 0
-            ),
-            KnowledgeCollisionCluster(
-                clusterId: "kc-secondary-\(tick % 5)",
-                sourceTypes: ["audit", "signal"],
-                densityScore: 0.42 + Double((tick % 5)) / 25.0,
-                cubePosition: CubePosition(x: (tick + 2) % 3, y: (tick + 1) % 3, z: tick % 3),
-                summary: "Localized collision around repeated signal requests.",
-                isEmergence: tick % 3 == 0
-            )
-        ]
-    }
-
-    private static func demoDecisions(tick: Int, now: Date) -> [JeevesDecisionEvent] {
-        let templates: [(JeevesDecisionKind, String)] = [
-            (.autoApproved, "Low-risk proposal executed"),
-            (.escalated, "Orange risk proposal escalated"),
-            (.autoDenied, "Policy denied high-risk proposal"),
-            (.autoApproved, "Knowledge sync executed")
-        ]
-
-        return templates.enumerated().map { index, template in
-            JeevesDecisionEvent(
-                id: "decision-\(tick)-\(index)",
-                kind: template.0,
-                title: template.1,
-                timestamp: now.addingTimeInterval(TimeInterval(-index * 180 - (tick % 90)))
-            )
-        }
-    }
-
-    private static func buildRouteArrows(position: CubePosition, hotspots: [CubePosition]) -> [String] {
-        var arrows: [String] = []
-        if hotspots.contains(where: { $0.x > position.x }) { arrows.append("->") }
-        if hotspots.contains(where: { $0.x < position.x }) { arrows.append("<-") }
-        if hotspots.contains(where: { $0.y > position.y }) { arrows.append("v") }
-        if hotspots.contains(where: { $0.y < position.y }) { arrows.append("^") }
-        if hotspots.contains(where: { $0.z > position.z }) { arrows.append("+z") }
-        if hotspots.contains(where: { $0.z < position.z }) { arrows.append("-z") }
-        return arrows
     }
 }

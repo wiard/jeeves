@@ -46,18 +46,50 @@ struct LobbyView: View {
     }
 
     private var cardStack: some View {
-        ZStack {
-            ForEach(poller.pendingProposals.reversed()) { proposal in
+        VStack(spacing: 20) {
+            if let topProposal = poller.pendingProposals.first {
                 SwipeCard(
-                    proposal: proposal,
-                    isTop: proposal.id == poller.pendingProposals.first?.id,
+                    proposal: topProposal,
+                    isTop: true,
                     onSwipe: { direction in
-                        handleSwipe(proposal: proposal, direction: direction)
+                        handleSwipe(proposal: topProposal, direction: direction)
                     }
                 )
+                .id(topProposal.id)
+                .transition(.asymmetric(
+                    insertion: .opacity,
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+
+                HStack(spacing: 16) {
+                    Button {
+                        handleSwipe(proposal: topProposal, direction: .left)
+                    } label: {
+                        Text(TextKeys.Lobby.deny)
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(.red)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    Button {
+                        handleSwipe(proposal: topProposal, direction: .right)
+                    } label: {
+                        Text(TextKeys.Lobby.approve)
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(.green)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
             }
         }
         .padding()
+        .animation(.spring(response: 0.4), value: poller.pendingProposals.first?.id)
     }
 
     private func handleSwipe(proposal: Proposal, direction: SwipeDirection) {
@@ -168,21 +200,9 @@ private struct SwipeCard: View {
             Text(timeSince)
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
-
-            Spacer()
-
-            HStack {
-                Text("\u{2190} \(TextKeys.Lobby.deny)")
-                    .font(.jeevesCaption)
-                    .foregroundStyle(.red)
-                Spacer()
-                Text("\(TextKeys.Lobby.approve) \u{2192}")
-                    .font(.jeevesCaption)
-                    .foregroundStyle(.green)
-            }
         }
         .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 280)
+        .frame(maxWidth: .infinity)
         .background(riskBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.1), radius: 4, y: 2)

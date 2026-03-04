@@ -120,6 +120,17 @@ private struct ProposalRow: View {
 private struct EmergenceRow: View {
     let cluster: EmergenceCluster
 
+    private func emergenceSummary(for cluster: EmergenceCluster) -> String {
+        let text = cluster.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty && text != "No summary available." {
+            return text
+        }
+        if !cluster.dimensions.isEmpty {
+            return "Emergent patroon: \(cluster.dimensions.joined(separator: "/"))"
+        }
+        return "Emergent patroon"
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text("")
@@ -129,7 +140,7 @@ private struct EmergenceRow: View {
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(cluster.summary)
+                Text(emergenceSummary(for: cluster))
                     .font(.jeevesMono)
                     .fontWeight(.medium)
 

@@ -112,6 +112,16 @@ private struct KnowledgeStatusEnvelope: Decodable {
     let status: KnowledgeStatus?
 }
 
+private struct LobbyChallengesEnvelope: Decodable {
+    let challenges: [LobbyChallengeItem]?
+    let items: [LobbyChallengeItem]?
+    let data: [LobbyChallengeItem]?
+}
+
+private struct OpenclawSkillsSummaryEnvelope: Decodable {
+    let summary: OpenclawSkillsSummary?
+}
+
 struct ConductorAuditEvent: Decodable {
     let id: String?
     let timestamp: String?
@@ -217,6 +227,95 @@ enum ConductorAPI {
         }
 
         return .empty
+    }
+
+    static func fabricClock(host: String, port: Int, token: String) async throws -> FabricClockState {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/fabric/clock",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+        return (try? JSONDecoder().decode(FabricClockState.self, from: data)) ?? .empty
+    }
+
+    static func fabricEmergence(host: String, port: Int, token: String) async throws -> FabricEmergenceResponse {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/fabric/emergence",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+        return (try? JSONDecoder().decode(FabricEmergenceResponse.self, from: data)) ?? .empty
+    }
+
+    static func fabricState(host: String, port: Int, token: String) async throws -> FabricStateSummaryResponse {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/fabric/state",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+        return (try? JSONDecoder().decode(FabricStateSummaryResponse.self, from: data)) ?? .empty
+    }
+
+    static func lobbyChallenges(host: String, port: Int, token: String) async throws -> [LobbyChallengeItem] {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/lobby/challenges",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+
+        let decoder = JSONDecoder()
+        if let direct = try? decoder.decode([LobbyChallengeItem].self, from: data) {
+            return direct
+        }
+        if let wrapped = try? decoder.decode(LobbyChallengesEnvelope.self, from: data) {
+            return wrapped.challenges ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
+
+    static func openclawSkillsSummary(host: String, port: Int, token: String) async throws -> OpenclawSkillsSummary {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/openclaw/skills/summary",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+
+        let decoder = JSONDecoder()
+        if let wrapped = try? decoder.decode(OpenclawSkillsSummaryEnvelope.self, from: data),
+           let summary = wrapped.summary {
+            return summary
+        }
+        if let direct = try? decoder.decode(OpenclawSkillsSummary.self, from: data) {
+            return direct
+        }
+        return .empty
+    }
+
+    static func observatoryAlerts(host: String, port: Int, token: String) async throws -> ObservatoryAlertsResponse {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/observatory/alerts",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+        return (try? JSONDecoder().decode(ObservatoryAlertsResponse.self, from: data)) ?? .empty
     }
 
     static func postIntent(host: String, port: Int, token: String, body: Data) async throws -> Data {
