@@ -26,4 +26,16 @@ enum JeevesHaptics {
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         #endif
     }
+
+    static func swipeApprove() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
+    }
+
+    static func swipeDeny() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        #endif
+    }
 }

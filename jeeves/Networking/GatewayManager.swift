@@ -1,261 +1,274 @@
 import Foundation
-import SwiftUI
-import SwiftData
-
-enum ConnectionState: Sendable {
-    case disconnected
-    case connecting
-    case connected
-    case reconnecting
-}
+import Observation
 
 @MainActor
 @Observable
 final class GatewayManager {
+
+    enum ConnectionState {
+        case disconnected
+        case connecting
+        case reconnecting
+        case connected
+        case failed
+
+        static var idle: ConnectionState { .disconnected }
+    }
+
     var connectionState: ConnectionState = .disconnected
-    var currentStatus: GatewayStatus?
     var latencyMs: Int?
+    var currentStatus: GatewayStatus?
 
-    // Mock mode for development
-    var useMock: Bool = true
-
-    private var webSocketTask: URLSessionWebSocketTask?
-    private var messageHandler: ((IncomingMessage) -> Void)?
-    private var reconnectDelay: TimeInterval = 1.0
-    private var maxReconnectAttempts = 5
-    private var reconnectAttempts = 0
-    private var heartbeatTask: Task<Void, Never>?
-    private var receiveTask: Task<Void, Never>?
-    private var host: String = ""
-    private var port: Int = 19001
-    private var token: String = ""
-    private var channelId: String = "ios-app"
-
-    private let mockGateway = MockGateway()
+    var useMock: Bool = false
+    var host: String = "mock"
+    var port: Int = 19001
+    var channelId: String = "ios-app"
+    private(set) var token: String?
 
     var isConnected: Bool { connectionState == .connected }
 
+    private let mock = MockGateway()
+    private var connectivityTask: Task<Void, Never>?
+    private var messageHandler: ((IncomingMessage) -> Void)?
+    private let iso8601 = ISO8601DateFormatter()
+
     func onMessage(_ handler: @escaping (IncomingMessage) -> Void) {
-        self.messageHandler = handler
+        messageHandler = handler
     }
 
-    // MARK: - Connection
+    func connect(host: String, port: Int, token: String?) {
+        connect(host: host, port: port, token: token, channelId: channelId)
+    }
 
-    func connect(host: String, port: Int, token: String, channelId: String = "ios-app") {
-        // Clean up any existing connection
-        disconnect()
+    func connect(host: String, port: Int, token: String?, channelId: String) {
+        connectivityTask?.cancel()
+        connectivityTask = nil
 
-        self.host = host
-        self.port = port
-        self.token = token
-        self.channelId = channelId
+        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedChannel = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if useMock {
-            connectionState = .connected
-            currentStatus = mockGateway.mockStatus()
+        let resolvedHost = normalizedHost.isEmpty ? self.host : normalizedHost
+        let resolvedPort = port > 0 ? port : self.port
+        let resolvedChannel = normalizedChannel.isEmpty ? self.channelId : normalizedChannel
+
+        self.host = resolvedHost
+        self.port = resolvedPort
+        self.channelId = resolvedChannel
+        self.latencyMs = nil
+
+        if useMock || resolvedHost.lowercased() == "mock" {
+            self.token = token
+            self.connectionState = .connected
+            self.currentStatus = mock.mockStatus()
             return
         }
 
-        connectionState = .connecting
+        let key = "\(resolvedHost):\(resolvedPort)"
+        let rawToken = (token ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedToken = rawToken.isEmpty ? KeychainHelper.load(for: key) : rawToken
 
-        guard let url = URL(string: "ws://\(host):\(port)/ws/ios-app") else {
-            connectionState = .disconnected
+        guard let resolvedToken, !resolvedToken.isEmpty else {
+            self.token = nil
+            self.connectionState = .failed
             return
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        self.token = resolvedToken
 
-        let session = URLSession(configuration: .default)
-        webSocketTask = session.webSocketTask(with: request)
-        webSocketTask?.resume()
+        do {
+            try KeychainHelper.save(token: resolvedToken, for: key)
+        } catch {
+            self.connectionState = .failed
+            return
+        }
 
-        // Don't set .connected until we successfully receive a message
-        // startReceiving will handle the state transition
-        reconnectDelay = 1.0
-        reconnectAttempts = 0
+        let previous = connectionState
+        self.connectionState = (previous == .connected || previous == .reconnecting) ? .reconnecting : .connecting
 
-        startReceiving()
-        startHeartbeat()
+        connectivityTask = Task { [weak self] in
+            guard let self else { return }
+            await self.refreshConnectivityAndStatus(host: resolvedHost, port: resolvedPort, token: resolvedToken)
+        }
     }
 
     func disconnect() {
-        heartbeatTask?.cancel()
-        heartbeatTask = nil
-        receiveTask?.cancel()
-        receiveTask = nil
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
+        connectivityTask?.cancel()
+        connectivityTask = nil
         connectionState = .disconnected
-    }
-
-    // MARK: - Sending
-
-    func send(text: String) async throws {
-        if useMock {
-            let messages = await mockGateway.simulateResponse(for: text)
-            for msg in messages {
-                messageHandler?(msg)
-            }
-            return
-        }
-
-        let message = OutgoingMessage.chat(text: text, channelId: channelId)
-        let data = try JSONEncoder().encode(message)
-        guard let jsonString = String(data: data, encoding: .utf8) else { return }
-        try await webSocketTask?.send(.string(jsonString))
-    }
-
-    func respondToConsent(id: String, approved: Bool, tool: String? = nil) async throws {
-        if useMock {
-            if approved, let tool = tool {
-                let response = await mockGateway.simulateConsentApproval(tool: tool)
-                messageHandler?(response)
-            }
-            return
-        }
-
-        let response = ConsentResponseMessage(id: id, approved: approved)
-        let data = try JSONEncoder().encode(response)
-        guard let jsonString = String(data: data, encoding: .utf8) else { return }
-        try await webSocketTask?.send(.string(jsonString))
+        latencyMs = nil
+        currentStatus = nil
     }
 
     func fetchStatus() async throws -> GatewayStatus {
-        if useMock {
-            let status = mockGateway.mockStatus()
+        if useMock || host.lowercased() == "mock" {
+            let status = mock.mockStatus()
             currentStatus = status
             return status
         }
 
-        if let status = currentStatus {
-            return status
-        }
-        throw GatewayError.notConnected
+        let token = try requireToken()
+        let state = try await ConductorAPI.state(host: host, port: port, token: token)
+
+        let status = GatewayStatus(
+            budget: BudgetStatus(
+                daily: BudgetPeriod(used: 0, limit: state.budget.remaining),
+                weekly: BudgetPeriod(used: 0, limit: state.budget.remaining),
+                monthly: BudgetPeriod(used: 0, limit: state.budget.remaining),
+                hardStop: state.budget.hardStop
+            ),
+            consent: ConsentStatus(pending: state.consentPending, active: 0),
+            killSwitch: KillSwitchStatus(active: state.killSwitch.active),
+            channels: [
+                ChannelInfo(id: channelId, trust: .trusted, connected: true)
+            ]
+        )
+
+        currentStatus = status
+        return status
     }
 
     func fetchAudit(period: AuditPeriod) async throws -> [AuditEntry] {
-        if useMock {
-            return mockGateway.mockAuditEntries()
+        if useMock || host.lowercased() == "mock" {
+            return mock.mockAuditEntries()
         }
 
-        throw GatewayError.notConnected
+        let token = try requireToken()
+        let remotePeriod: String
+        switch period {
+        case .today:
+            remotePeriod = "daily"
+        case .week:
+            remotePeriod = "weekly"
+        case .month:
+            remotePeriod = "monthly"
+        }
+
+        let events = try await ConductorAPI.audit(host: host, port: port, token: token, period: remotePeriod)
+
+        return events.enumerated().map { index, event in
+            let timestampString = event.timestamp ?? ""
+            let date = iso8601.date(from: timestampString) ?? Date()
+
+            let statusValue: AuditStatus
+            let decision = (event.decision ?? event.status ?? "").lowercased()
+            switch decision {
+            case "block", "blocked", "deny", "denied":
+                statusValue = .blocked
+            case "consent", "consent_requested", "pending":
+                statusValue = .consentRequested
+            default:
+                statusValue = .allowed
+            }
+
+            let toolName = event.toolName ?? event.event ?? "unknown"
+
+            return AuditEntry(
+                id: event.id ?? "audit-\(index)-\(timestampString)",
+                timestamp: date,
+                tool: toolName,
+                status: statusValue,
+                channel: event.channel ?? channelId,
+                reason: event.reason,
+                cost: event.cost,
+                params: event.params
+            )
+        }
     }
 
     func activateKillSwitch(reason: String) async throws {
-        if useMock {
-            currentStatus?.killSwitch = KillSwitchStatus(active: true)
+        if useMock || host.lowercased() == "mock" {
+            var status = currentStatus ?? mock.mockStatus()
+            status.killSwitch.active = true
+            currentStatus = status
             return
         }
 
-        throw GatewayError.notConnected
+        let token = try requireToken()
+        try await ConductorAPI.killActivate(host: host, port: port, token: token, reason: reason)
+        _ = try? await fetchStatus()
     }
 
     func deactivateKillSwitch() async throws {
-        if useMock {
-            currentStatus?.killSwitch = KillSwitchStatus(active: false)
+        if useMock || host.lowercased() == "mock" {
+            var status = currentStatus ?? mock.mockStatus()
+            status.killSwitch.active = false
+            currentStatus = status
             return
         }
 
-        throw GatewayError.notConnected
+        let token = try requireToken()
+        try await ConductorAPI.killDeactivate(host: host, port: port, token: token)
+        _ = try? await fetchStatus()
     }
 
-    // MARK: - Receiving
+    func send(text: String) async throws {
+        if useMock || host.lowercased() == "mock" {
+            let messages = await mock.simulateResponse(for: text)
+            messages.forEach { handleIncoming($0) }
+            return
+        }
 
-    private func startReceiving() {
-        receiveTask = Task { [weak self] in
-            guard let self = self else { return }
-            while !Task.isCancelled {
-                do {
-                    guard let message = try await self.webSocketTask?.receive() else { return }
-                    await MainActor.run {
-                        // First successful receive means we're connected
-                        if self.connectionState != .connected {
-                            self.connectionState = .connected
-                            self.reconnectAttempts = 0
-                        }
-                    }
-                    switch message {
-                    case .string(let text):
-                        if let data = text.data(using: .utf8),
-                           let incoming = IncomingMessageDecoder.decode(from: data) {
-                            await MainActor.run {
-                                self.handleMessage(incoming)
-                            }
-                        }
-                    case .data(let data):
-                        if let incoming = IncomingMessageDecoder.decode(from: data) {
-                            await MainActor.run {
-                                self.handleMessage(incoming)
-                            }
-                        }
-                    @unknown default:
-                        break
-                    }
-                } catch {
-                    if !Task.isCancelled {
-                        await MainActor.run {
-                            self.handleDisconnect()
-                        }
-                    }
-                    return
-                }
-            }
+        let token = try requireToken()
+        let body = try JSONEncoder().encode(OutgoingMessage.chat(text: text, channelId: channelId))
+        let response = try await ConductorAPI.postIntent(host: host, port: port, token: token, body: body)
+
+        if let incoming = IncomingMessageDecoder.decode(from: response) {
+            handleIncoming(incoming)
         }
     }
 
-    private func handleMessage(_ message: IncomingMessage) {
+    func respondToConsent(id: String, approved: Bool, tool: String? = nil) async throws {
+        if useMock || host.lowercased() == "mock" {
+            guard approved, let tool else { return }
+            let response = await mock.simulateConsentApproval(tool: tool)
+            handleIncoming(response)
+            return
+        }
+
+        let token = try requireToken()
+        let body = try JSONEncoder().encode(ConsentResponseMessage(id: id, approved: approved))
+        let response = try await ConductorAPI.postIntent(host: host, port: port, token: token, body: body)
+
+        if let incoming = IncomingMessageDecoder.decode(from: response) {
+            handleIncoming(incoming)
+        }
+    }
+
+    private func refreshConnectivityAndStatus(host: String, port: Int, token: String) async {
+        let startedNs = DispatchTime.now().uptimeNanoseconds
+
+        do {
+            let health = try await ConductorAPI.health(host: host, port: port, token: token)
+            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - startedNs) / 1_000_000)
+            latencyMs = health.responseTimeMs ?? elapsedMs
+            connectionState = health.ok ? .connected : .failed
+
+            if health.ok {
+                _ = try? await fetchStatus()
+            }
+        } catch {
+            latencyMs = nil
+            connectionState = .failed
+        }
+    }
+
+    private func requireToken() throws -> String {
+        if let token, !token.isEmpty {
+            return token
+        }
+
+        if let stored = KeychainHelper.load(for: "\(host):\(port)"), !stored.isEmpty {
+            self.token = stored
+            return stored
+        }
+
+        throw NSError(domain: "Gateway", code: 401, userInfo: [NSLocalizedDescriptionKey: "Missing token"])
+    }
+
+    private func handleIncoming(_ message: IncomingMessage) {
         if case .status(let status) = message {
             currentStatus = status
         }
         messageHandler?(message)
-    }
-
-    private func handleDisconnect() {
-        guard connectionState != .disconnected else { return }
-        connectionState = .reconnecting
-        scheduleReconnect()
-    }
-
-    // MARK: - Reconnect
-
-    private func scheduleReconnect() {
-        reconnectAttempts += 1
-        guard reconnectAttempts <= maxReconnectAttempts else {
-            connectionState = .disconnected
-            return
-        }
-
-        Task {
-            try? await Task.sleep(for: .seconds(reconnectDelay))
-            reconnectDelay = min(reconnectDelay * 2, 30.0)
-            guard connectionState == .reconnecting else { return }
-            connect(host: host, port: port, token: token, channelId: channelId)
-        }
-    }
-
-    // MARK: - Heartbeat
-
-    private func startHeartbeat() {
-        heartbeatTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
-                guard let self = self else { return }
-                let ping = #"{"type":"ping"}"#
-                try? await self.webSocketTask?.send(.string(ping))
-            }
-        }
-    }
-}
-
-enum GatewayError: Error, LocalizedError {
-    case notConnected
-    case invalidResponse
-
-    var errorDescription: String? {
-        switch self {
-        case .notConnected: "Niet verbonden met de gateway"
-        case .invalidResponse: "Ongeldig antwoord van de gateway"
-        }
     }
 }

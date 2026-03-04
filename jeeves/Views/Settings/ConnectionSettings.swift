@@ -3,17 +3,21 @@ import SwiftData
 
 struct ConnectionSettings: View {
     @Environment(GatewayManager.self) private var gateway
-    @Environment(\.modelContext) private var modelContext
     @Query private var connections: [GatewayConnection]
 
-    private var connection: GatewayConnection? { connections.first }
+    private var saved: GatewayConnection? { connections.first }
+    private let runtime = RuntimeConfig.shared
 
     var body: some View {
-        Section("Verbinding") {
+        Section {
+            VStack(alignment: .leading, spacing: 0) {
+
+
+
             HStack {
                 Text("Gateway")
                 Spacer()
-                Text(connection.map { "\($0.host):\($0.port)" } ?? "Niet geconfigureerd")
+                Text(gatewayLabel)
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
             }
@@ -43,18 +47,66 @@ struct ConnectionSettings: View {
             HStack {
                 Text("Kanaal")
                 Spacer()
-                Text(connection?.channelId ?? "ios-app")
+                Text(saved?.channelId ?? "ios-app")
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Beveiliging") {
+                HStack {
+                    Text("Token")
+                    Spacer()
+                    Text(tokenLabel)
+                        .font(.jeevesMono)
+                        .foregroundStyle(tokenLabel == "Geen token" ? .red : .secondary)
+                }
+
+                HStack {
+                    Text("Mock")
+                    Spacer()
+                    Text(runtime.useMock ? "aan" : "uit")
+                        .font(.jeevesMono)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        
+            }
+        } header: {
+            Text("Verbinding")
         }
+    }
+
+    private var gatewayLabel: String {
+        // 1) toon runtime als die er is (dit is je “echte” run)
+        if let h = runtime.host, let p = runtime.port {
+            return "\(h):\(p)"
+        }
+        // 2) anders toon wat in DB staat
+        if let c = saved {
+            return "\(c.host):\(c.port)"
+        }
+        return "Niet geconfigureerd"
+    }
+
+    private var tokenLabel: String {
+        // 1) runtime token (ENV of /tmp file)
+        if let t = runtime.token, !t.isEmpty {
+            return "\(t.prefix(10))…"
+        }
+        // 2) keychain fallback
+        if let h = saved?.host, let p = saved?.port,
+           let t = KeychainHelper.load(for: "\(h):\(p)"),
+           !t.isEmpty, t != "mock" {
+            return "\(t.prefix(10))…"
+        }
+        return "Geen token"
     }
 
     private var statusColor: Color {
         switch gateway.connectionState {
         case .connected: .consentGreen
         case .connecting, .reconnecting: .consentOrange
-        case .disconnected: .consentRed
+        case .idle, .disconnected, .failed: .consentRed
         }
     }
 
@@ -63,7 +115,8 @@ struct ConnectionSettings: View {
         case .connected: "Verbonden"
         case .connecting: "Verbinden..."
         case .reconnecting: "Opnieuw verbinden..."
-        case .disconnected: "Niet verbonden"
+        case .idle, .disconnected: "Niet verbonden"
+        case .failed: "Verbinding mislukt"
         }
     }
 }

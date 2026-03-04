@@ -4,6 +4,7 @@ import SwiftData
 @main
 struct JeevesApp: App {
     @State private var gatewayManager = GatewayManager()
+    @State private var proposalPoller = ProposalPoller()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -23,6 +24,10 @@ struct JeevesApp: App {
         WindowGroup {
             ContentView()
                 .environment(gatewayManager)
+                .environment(proposalPoller)
+                .onAppear {
+                    NotificationManager.shared.requestPermission()
+                }
         }
         .modelContainer(sharedModelContainer)
     }
