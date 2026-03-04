@@ -71,6 +71,12 @@ private struct ProposalRow: View {
         return .orange
     }
 
+    private var statusLabel: String {
+        if proposal.isApproved { return TextKeys.Stream.approved }
+        if proposal.isDenied { return TextKeys.Stream.denied }
+        return TextKeys.Stream.pending
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(timeString)
@@ -90,15 +96,13 @@ private struct ProposalRow: View {
                 Text(proposal.title)
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-
-                if proposal.isApproved && !proposal.intent.requiresConsent {
-                    Text(TextKeys.Stream.autoApproved)
-                        .font(.jeevesCaption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             Spacer()
+
+            Text(statusLabel)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(statusColor)
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 12)

@@ -1,39 +1,48 @@
-//
-//  jeevesUITests.swift
-//  jeevesUITests
-//
-//  Created by wiard vasen on 28/02/2026.
-//
-
 import XCTest
 
 final class jeevesUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
+    override func tearDownWithError() throws {}
 
     @MainActor
     func testExample() throws {
-        // UI tests must launch the application that they test.
         let app = XCUIApplication()
         app.launch()
+    }
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+    @MainActor
+    func testKnowledgeCardVisibleInHouse() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["MOCK"] = "1"
+        app.launch()
+
+        let mockButton = app.buttons["Gebruik mock modus"]
+        if mockButton.waitForExistence(timeout: 3.0) {
+            mockButton.tap()
+        }
+
+        let houseTab = app.tabBars.buttons["Huis"]
+        if houseTab.waitForExistence(timeout: 5.0) {
+            houseTab.tap()
+        } else {
+            let moreTab = app.tabBars.buttons["More"]
+            XCTAssertTrue(moreTab.waitForExistence(timeout: 5.0))
+            moreTab.tap()
+            let houseCell = app.tables.staticTexts["Huis"]
+            XCTAssertTrue(houseCell.waitForExistence(timeout: 5.0))
+            houseCell.tap()
+        }
+
+        let knowledgeTitle = app.staticTexts["Observatory / Knowledge"]
+        XCTAssertTrue(knowledgeTitle.waitForExistence(timeout: 8.0))
     }
 
     @MainActor
     func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }

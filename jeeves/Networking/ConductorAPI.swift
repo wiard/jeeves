@@ -34,6 +34,84 @@ struct ConductorState: Decodable {
     }
 }
 
+struct KnowledgeStatus: Decodable, Sendable {
+    struct ChallengeSummary: Decodable, Sendable {
+        let challengeId: String
+        let createdAtIso: String
+        let title: String
+        let maxRisk: String
+        let status: String
+
+        private enum CodingKeys: String, CodingKey {
+            case challengeId
+            case createdAtIso
+            case title
+            case maxRisk
+            case status
+        }
+
+        init(challengeId: String, createdAtIso: String, title: String, maxRisk: String, status: String) {
+            self.challengeId = challengeId
+            self.createdAtIso = createdAtIso
+            self.title = title
+            self.maxRisk = maxRisk
+            self.status = status
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            challengeId = try c.decodeIfPresent(String.self, forKey: .challengeId) ?? ""
+            createdAtIso = try c.decodeIfPresent(String.self, forKey: .createdAtIso) ?? ""
+            title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+            maxRisk = try c.decodeIfPresent(String.self, forKey: .maxRisk) ?? "green"
+            status = try c.decodeIfPresent(String.self, forKey: .status) ?? "open"
+        }
+    }
+
+    let last24hSignalsCount: Int
+    let topCubeCells: [String]
+    let emergenceClustersCount: Int
+    let lastKnowledgeChallenges: [ChallengeSummary]
+    let lastScanAtIso: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case last24hSignalsCount
+        case topCubeCells
+        case emergenceClustersCount
+        case lastKnowledgeChallenges
+        case lastScanAtIso
+    }
+
+    init(last24hSignalsCount: Int, topCubeCells: [String], emergenceClustersCount: Int, lastKnowledgeChallenges: [ChallengeSummary], lastScanAtIso: String?) {
+        self.last24hSignalsCount = last24hSignalsCount
+        self.topCubeCells = topCubeCells
+        self.emergenceClustersCount = emergenceClustersCount
+        self.lastKnowledgeChallenges = lastKnowledgeChallenges
+        self.lastScanAtIso = lastScanAtIso
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        last24hSignalsCount = try c.decodeIfPresent(Int.self, forKey: .last24hSignalsCount) ?? 0
+        topCubeCells = try c.decodeIfPresent([String].self, forKey: .topCubeCells) ?? []
+        emergenceClustersCount = try c.decodeIfPresent(Int.self, forKey: .emergenceClustersCount) ?? 0
+        lastKnowledgeChallenges = try c.decodeIfPresent([ChallengeSummary].self, forKey: .lastKnowledgeChallenges) ?? []
+        lastScanAtIso = try c.decodeIfPresent(String.self, forKey: .lastScanAtIso)
+    }
+
+    static let empty = KnowledgeStatus(
+        last24hSignalsCount: 0,
+        topCubeCells: [],
+        emergenceClustersCount: 0,
+        lastKnowledgeChallenges: [],
+        lastScanAtIso: nil
+    )
+}
+
+private struct KnowledgeStatusEnvelope: Decodable {
+    let status: KnowledgeStatus?
+}
+
 struct ConductorAuditEvent: Decodable {
     let id: String?
     let timestamp: String?
@@ -116,6 +194,29 @@ enum ConductorAPI {
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return try JSONDecoder().decode(ConductorState.self, from: data)
+    }
+
+    static func knowledgeStatus(host: String, port: Int, token: String) async throws -> KnowledgeStatus {
+        let req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/knowledge/status",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+
+        let decoder = JSONDecoder()
+        if let wrapped = try? decoder.decode(KnowledgeStatusEnvelope.self, from: data),
+           let status = wrapped.status {
+            return status
+        }
+
+        if let direct = try? decoder.decode(KnowledgeStatus.self, from: data) {
+            return direct
+        }
+
+        return .empty
     }
 
     static func postIntent(host: String, port: Int, token: String, body: Data) async throws -> Data {

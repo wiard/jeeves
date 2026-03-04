@@ -4,10 +4,34 @@ import UserNotifications
 @MainActor
 final class NotificationManager {
     static let shared = NotificationManager()
+    private let emergenceCategory = "emergence-card"
 
     private init() {}
 
     func requestPermission() {
+        let investigate = UNNotificationAction(
+            identifier: "investigate",
+            title: "Investigate",
+            options: [.foreground]
+        )
+        let ignore = UNNotificationAction(
+            identifier: "ignore",
+            title: "Ignore",
+            options: []
+        )
+        let bookmark = UNNotificationAction(
+            identifier: "bookmark",
+            title: "Bookmark",
+            options: []
+        )
+        let category = UNNotificationCategory(
+            identifier: emergenceCategory,
+            actions: [investigate, ignore, bookmark],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
     }
 
@@ -34,8 +58,9 @@ final class NotificationManager {
 
     func notifyEmergence(_ cluster: EmergenceCluster) {
         let content = UNMutableNotificationContent()
-        content.title = TextKeys.appTitle
-        content.body = TextKeys.Notifications.emergenceDetected
+        content.title = "Unexpected connection detected"
+        content.body = cluster.summary
+        content.categoryIdentifier = emergenceCategory
         content.sound = .default
         scheduleNotification(id: "emergence-\(cluster.clusterId)", content: content)
     }

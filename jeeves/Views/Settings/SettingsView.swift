@@ -1,13 +1,20 @@
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
     @Environment(GatewayManager.self) private var gateway
+    @Environment(ProposalPoller.self) private var poller
+    @Query private var connections: [GatewayConnection]
+    @State private var testResult: String?
+    @State private var isTesting = false
 
     var body: some View {
         NavigationStack {
             List {
                 ConnectionSettings()
                 SecuritySettings()
+                tokenInfoSection
+                actionsSection
                 displaySection
                 infoSection
             }
@@ -15,6 +22,89 @@ struct SettingsView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             #endif
+        }
+    }
+
+    private var tokenInfoSection: some View {
+        Section("Token details") {
+            if let conn = connections.first,
+               let token = KeychainHelper.load(for: "\(conn.host):\(conn.port)") {
+                let decoded = TokenDecoder.decode(token)
+                if let decoded {
+                    HStack {
+                        Text("Scope")
+                        Spacer()
+                        Text(decoded.scope)
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Session")
+                        Spacer()
+                        Text(String(decoded.sessionId.prefix(12)) + "...")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        if decoded.isExpired {
+                            Text(TextKeys.Settings.tokenExpired)
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.red)
+                        } else {
+                            Text(TextKeys.Settings.tokenValid)
+                                .font(.jeevesMono)
+                                .foregroundStyle(.green)
+                        }
+                    }
+                } else {
+                    HStack {
+                        Text("Formaat")
+                        Spacer()
+                        Text("Niet-standaard token")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("Geen token opgeslagen")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var actionsSection: some View {
+        Section("Acties") {
+            Button {
+                testConnection()
+            } label: {
+                HStack {
+                    Text(TextKeys.Settings.testConnection)
+                    Spacer()
+                    if isTesting {
+                        ProgressView()
+                    } else if let result = testResult {
+                        Text(result)
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .disabled(isTesting)
+
+            Button {
+                reseed()
+            } label: {
+                HStack {
+                    Text(TextKeys.Seed.button)
+                    Spacer()
+                    if poller.isSeeding {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(poller.isSeeding)
         }
     }
 
@@ -65,5 +155,72 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
         }
+    }
+
+    private func testConnection() {
+        isTesting = true
+        testResult = nil
+        Task {
+            guard let token = gateway.token else {
+                testResult = TextKeys.Settings.disconnected
+                isTesting = false
+                return
+            }
+            let client = GatewayClient(host: gateway.host, port: gateway.port, token: token)
+            do {
+                let proposals = try await client.fetchProposals()
+                testResult = "\(proposals.count) \(TextKeys.Settings.proposalsFound)"
+            } catch {
+                testResult = TextKeys.Settings.disconnected
+            }
+            isTesting = false
+        }
+    }
+
+    private func reseed() {
+        Task {
+            await poller.seedIfNeeded(gateway: gateway, force: true)
+        }
+    }
+}
+
+enum TokenDecoder {
+    struct DecodedToken {
+        let scope: String
+        let sessionId: String
+        let expiresAt: Date?
+
+        var isExpired: Bool {
+            guard let expiresAt else { return false }
+            return expiresAt < Date()
+        }
+    }
+
+    static func decode(_ token: String) -> DecodedToken? {
+        let payload: String
+        if token.hasPrefix("v1.") {
+            payload = String(token.dropFirst(3))
+        } else {
+            payload = token
+        }
+
+        guard let data = Data(base64Encoded: payload) ??
+              Data(base64Encoded: padBase64(payload)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let scope = json["scope"] as? String ?? "unknown"
+        let sessionId = json["sessionId"] as? String ?? json["session_id"] as? String ?? "unknown"
+        let expiresIso = json["expiresAtIso"] as? String ?? json["expires_at"] as? String
+        let expiresAt = expiresIso.flatMap { ISO8601DateFormatter().date(from: $0) }
+
+        return DecodedToken(scope: scope, sessionId: sessionId, expiresAt: expiresAt)
+    }
+
+    private static func padBase64(_ string: String) -> String {
+        let remainder = string.count % 4
+        if remainder == 0 { return string }
+        return string + String(repeating: "=", count: 4 - remainder)
     }
 }

@@ -18,6 +18,7 @@ final class GatewayManager {
     var connectionState: ConnectionState = .disconnected
     var latencyMs: Int?
     var currentStatus: GatewayStatus?
+    var currentKnowledgeStatus: KnowledgeStatus?
 
     var useMock: Bool = false
     var host: String = "mock"
@@ -60,6 +61,7 @@ final class GatewayManager {
             self.token = token
             self.connectionState = .connected
             self.currentStatus = mock.mockStatus()
+            self.currentKnowledgeStatus = mockKnowledgeStatus()
             return
         }
 
@@ -97,6 +99,7 @@ final class GatewayManager {
         connectionState = .disconnected
         latencyMs = nil
         currentStatus = nil
+        currentKnowledgeStatus = nil
     }
 
     func fetchStatus() async throws -> GatewayStatus {
@@ -124,6 +127,19 @@ final class GatewayManager {
         )
 
         currentStatus = status
+        return status
+    }
+
+    func fetchKnowledgeStatus() async throws -> KnowledgeStatus {
+        if useMock || host.lowercased() == "mock" {
+            let status = mockKnowledgeStatus()
+            currentKnowledgeStatus = status
+            return status
+        }
+
+        let token = try requireToken()
+        let status = try await ConductorAPI.knowledgeStatus(host: host, port: port, token: token)
+        currentKnowledgeStatus = status
         return status
     }
 
@@ -245,6 +261,7 @@ final class GatewayManager {
 
             if health.ok {
                 _ = try? await fetchStatus()
+                _ = try? await fetchKnowledgeStatus()
             }
         } catch {
             latencyMs = nil
@@ -270,5 +287,41 @@ final class GatewayManager {
             currentStatus = status
         }
         messageHandler?(message)
+    }
+
+    private func mockKnowledgeStatus() -> KnowledgeStatus {
+        KnowledgeStatus(
+            last24hSignalsCount: 7,
+            topCubeCells: [
+                "trust-model|engine|emerging",
+                "architecture|external|current",
+                "surface|engine|current"
+            ],
+            emergenceClustersCount: 2,
+            lastKnowledgeChallenges: [
+                KnowledgeStatus.ChallengeSummary(
+                    challengeId: "knowledge-001",
+                    createdAtIso: "2026-03-04T09:00:00.000Z",
+                    title: "Knowledge collision: consent architecture",
+                    maxRisk: "green",
+                    status: "open"
+                ),
+                KnowledgeStatus.ChallengeSummary(
+                    challengeId: "knowledge-002",
+                    createdAtIso: "2026-03-04T08:40:00.000Z",
+                    title: "Knowledge collision: channel policy",
+                    maxRisk: "green",
+                    status: "claimed"
+                ),
+                KnowledgeStatus.ChallengeSummary(
+                    challengeId: "knowledge-003",
+                    createdAtIso: "2026-03-04T08:15:00.000Z",
+                    title: "Knowledge emergence: trust surface",
+                    maxRisk: "orange",
+                    status: "open"
+                )
+            ],
+            lastScanAtIso: "2026-03-04T09:10:00.000Z"
+        )
     }
 }

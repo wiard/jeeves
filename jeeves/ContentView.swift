@@ -58,6 +58,9 @@ struct ContentView: View {
         .onChange(of: gateway.isConnected) {
             if gateway.isConnected {
                 poller.start(gateway: gateway)
+                Task {
+                    await poller.seedIfNeeded(gateway: gateway)
+                }
             } else {
                 poller.stop()
             }
@@ -105,6 +108,20 @@ struct ContentView: View {
             Tab(TextKeys.Settings.header, systemImage: "gearshape.fill") { SettingsView() }
         }
         .tint(.jeevesGold)
+        .overlay(alignment: .top) {
+            if let toast = poller.seedToastMessage {
+                Text(toast)
+                    .font(.jeevesBody)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .shadow(radius: 4)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: poller.seedToastMessage)
         #endif
     }
 }

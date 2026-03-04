@@ -1,0 +1,122 @@
+// jeeves/Networking/GatewayManager.swift
+import Foundation
+import Observation
+
+/// GatewayManager lives in the SwiftUI Environment:
+/// `@Environment(GatewayManager.self) private var gateway`
+@MainActor
+@Observable
+final class GatewayManager {
+
+    // MARK: - UI State
+
+    enum ConnectionState: String, Sendable {
+        case idle
+        case connecting
+        case connected
+        case failed
+    }
+
+    var state: ConnectionState = .idle
+    var isConnected: Bool { state == .connected }
+
+    var useMock: Bool = false
+
+    var host: String = "mock"
+    var port: Int = 19001
+    var channelId: String = "ios-app"
+
+    private(set) var token: String? = nil
+
+    var tokenPreview: String {
+        guard let t = token, !t.isEmpty else { return "Geen token" }
+        return String(t.prefix(10)) + "…"
+    }
+
+    var gatewayLabel: String { "\(host):\(port)" }
+
+    var lastError: String? = nil
+    var lastConnectAt: Date? = nil
+
+    // MARK: - Dependencies (keep references, but don't assume methods)
+    private let mock = MockGateway()
+    private var api: ConductorAPI? = nil
+
+    // MARK: - Connect / Disconnect
+
+    /// Connect to the gateway (real or mock).
+    ///
+    /// Token persistence policy:
+    /// - For real connections: store token in Keychain under "\(host):\(port)".
+    /// - If token param is empty: fallback to Keychain automatically.
+    func connect(host: String, port: Int, token: String?, channelId: String) {
+        // Normalize inputs
+        let h = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cid = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let resolvedHost = h.isEmpty ? self.host : h
+        let resolvedPort = (port <= 0) ? self.port : port
+        let resolvedChannel = cid.isEmpty ? self.channelId : cid
+
+        let key = "\(resolvedHost):\(resolvedPort)"
+
+        // Resolve token: param -> keychain -> nil
+        let t0 = (token ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = KeychainHelper.load(for: key) ?? ""
+        let resolved = t0.isEmpty ? fallback : t0
+        let finalToken = resolved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : resolved
+
+        // Update visible state
+        self.host = resolvedHost
+        self.port = resolvedPort
+        self.channelId = resolvedChannel
+        self.token = finalToken
+        self.lastError = nil
+        self.state = .connecting
+
+        debugLog("connect() host=\(resolvedHost) port=\(resolvedPort) channel=\(resolvedChannel) mock=\(useMock) token=\(finalToken?.prefix(12) ?? "nil")")
+
+        // Mock mode: mark as connected (MockGateway is used elsewhere through protocol usage)
+        if useMock || resolvedHost.lowercased() == "mock" {
+            self.api = nil
+            self.state = .connected
+            self.lastConnectAt = Date()
+            debugLog("✅ connected (mock mode)")
+            return
+        }
+
+        // Real mode requires token
+        guard let finalToken, !finalToken.isEmpty else {
+            self.api = nil
+            self.state = .failed
+            self.lastError = "Missing token for real gateway \(resolvedHost):\(resolvedPort)"
+            debugLog("❌ missing token (real mode)")
+            return
+        }
+
+        // Persist token (real only) — NOTE: your KeychainHelper likely uses label `token:`
+        KeychainHelper.save(token: finalToken, for: key)
+
+        // IMPORTANT:
+        // We do NOT construct ConductorAPI here because your project’s ConductorAPI has no public initializer.
+        // The real ConductorAPI wiring must follow *your* ConductorAPI.swift API (shared/configure/factory).
+        //
+        // For now we mark connected and let the rest of the app perform real requests when configured.
+        self.state = .connected
+        self.lastConnectAt = Date()
+        debugLog("✅ connected (real mode) — token saved, awaiting ConductorAPI wiring")
+    }
+
+    func disconnect() {
+        api = nil
+        state = .idle
+        lastError = nil
+        debugLog("🧹 disconnected")
+    }
+
+    // MARK: - Helpers
+
+    private func debugLog(_ msg: String) {
+        print("GatewayManager:", msg)
+    }
+}

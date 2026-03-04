@@ -9,17 +9,30 @@ enum TextKeys {
         static let autoApproved = "Automatisch goedgekeurd"
         static let autoDenied = "Automatisch geweigerd"
         static let escalated = "Uw aandacht gevraagd, meneer"
+        static let pending = "PENDING"
+        static let approved = "APPROVED"
+        static let denied = "DENIED"
     }
 
     enum Lobby {
         static let header = "Lobby"
-        static let noProposals = "Geen voorstellen in de wachtkamer, meneer."
+        static let noProposals = "Geen voorstellen. Het huis is stil."
         static let approve = "Goedkeuren"
         static let deny = "Afwijzen"
         static let confirmOrange = "Risico oranje. Weet u het zeker, meneer?"
+        static let confirmYes = "Ja, goedkeuren"
+        static let confirmNo = "Nee, annuleer"
         static let approved = "Goedgekeurd"
         static let denied = "Afgewezen"
         static let blocked = "Geblokkeerd door beleid"
+        static let approveReason = "Goedgekeurd door Jeeves iPhone"
+        static let denyReason = "Afgewezen door Jeeves iPhone"
+    }
+
+    enum Seed {
+        static let toast = "4 voorstellen gezaaid. Het huis ontwaakt."
+        static let button = "Huis opnieuw vullen"
+        static let seeding = "Voorstellen zaaien..."
     }
 
     enum Observatory {
@@ -30,6 +43,7 @@ enum TextKeys {
         static let challengesToday = "Challenges"
         static let proposalsToday = "Voorstellen"
         static let executedToday = "Uitgevoerd"
+        static let alertUntrusted = "Onbekende agent gedetecteerd"
     }
 
     enum Rooms {
@@ -46,6 +60,21 @@ enum TextKeys {
         static let score = "score"
     }
 
+    enum House {
+        static let title = "De Grote Kamer"
+        static let loadingStatus = "Status ophalen..."
+        static let notConnectedTitle = "Niet verbonden"
+        static let notConnectedDescription = "Verbind met de gateway om de status te zien."
+        static let knowledgeHeader = "Observatory / Knowledge"
+        static let knowledgeRefresh = "Refresh"
+        static let knowledgeSignals = "Knowledge signals (24h)"
+        static let knowledgeTopCells = "Top cube cells"
+        static let knowledgeEmergence = "Emergence clusters"
+        static let knowledgeChallenges = "Last challenges"
+        static let knowledgeNoData = "Geen knowledge data."
+        static let knowledgeError = "Knowledge status niet beschikbaar."
+    }
+
     enum Settings {
         static let header = "Instellingen"
         static let gatewayUrl = "Gateway URL"
@@ -53,6 +82,10 @@ enum TextKeys {
         static let save = "Bewaar"
         static let connected = "Verbonden"
         static let disconnected = "Niet verbonden"
+        static let testConnection = "Test verbinding"
+        static let proposalsFound = "proposals gevonden"
+        static let tokenExpired = "Token verlopen. Genereer een nieuw token via bringup.sh"
+        static let tokenValid = "Token geldig"
     }
 
     enum Notifications {

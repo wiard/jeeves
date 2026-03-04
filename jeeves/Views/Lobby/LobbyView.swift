@@ -20,12 +20,12 @@ struct LobbyView: View {
             .navigationBarTitleDisplayMode(.large)
             #endif
             .alert(TextKeys.Lobby.confirmOrange, isPresented: $showOrangeConfirm) {
-                Button("Ja, meneer") {
+                Button(TextKeys.Lobby.confirmYes) {
                     if let decision = pendingDecision {
                         executeDecision(proposalId: decision.proposalId, decision: decision.decision)
                     }
                 }
-                Button("Annuleren", role: .cancel) {
+                Button(TextKeys.Lobby.confirmNo, role: .cancel) {
                     pendingDecision = nil
                 }
             }
@@ -63,7 +63,7 @@ struct LobbyView: View {
     private func handleSwipe(proposal: Proposal, direction: SwipeDirection) {
         let decision = direction == .right ? "approve" : "deny"
 
-        if direction == .right && proposal.intent.risk == "orange" {
+        if proposal.intent.risk == "orange" {
             pendingDecision = (proposal.proposalId, decision)
             showOrangeConfirm = true
             return
@@ -79,8 +79,9 @@ struct LobbyView: View {
             JeevesHaptics.swipeDeny()
         }
 
+        let reason = decision == "approve" ? TextKeys.Lobby.approveReason : TextKeys.Lobby.denyReason
         Task {
-            _ = await poller.decide(proposalId: proposalId, decision: decision, gateway: gateway)
+            _ = await poller.decide(proposalId: proposalId, decision: decision, reason: reason, gateway: gateway)
         }
 
         pendingDecision = nil
