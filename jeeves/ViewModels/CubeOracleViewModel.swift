@@ -3,9 +3,6 @@ import Foundation
 @MainActor
 final class CubeOracleViewModel: ObservableObject {
     private static let localDefaultPort = 19001
-    private static let localDiscoveryPorts: [Int] = [19001, 19002, 19003, 19004, 19005]
-    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
-
     @Published var cards: [CubeCard] = []
     @Published var currentCard: CubeCard?
     @Published var soundProfile: SoundProfile?
@@ -301,8 +298,8 @@ contentHash: \(card.ordinal.contentHash)
         }
 
         let normalizedHost = host.lowercased()
-        if Self.loopbackHosts.contains(normalizedHost) {
-            for candidatePort in Self.localDiscoveryPorts {
+        if GatewayManager.isLocalDevelopmentHost(normalizedHost) {
+            for candidatePort in GatewayManager.localDiscoveryPorts {
                 if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
                     return candidate
                 }

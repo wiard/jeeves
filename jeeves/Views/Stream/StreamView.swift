@@ -7,11 +7,14 @@ struct StreamView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if hasNoRenderableContent {
+                if !poller.hasLoadedOnce {
+                    ProgressView("Verbinding maken...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if hasNoRenderableContent {
                     ContentUnavailableView(
                         TextKeys.Stream.empty,
                         systemImage: "leaf",
-                        description: Text("Er zijn nog geen gebeurtenissen.")
+                        description: Text(poller.lastRefreshError ?? "Er zijn nog geen gebeurtenissen.")
                     )
                 } else {
                     streamList
@@ -29,6 +32,13 @@ struct StreamView: View {
                     && poller.streamEvents.isEmpty
                     && poller.emergenceClusters.isEmpty {
                     await poller.refresh(gateway: gateway)
+                }
+            }
+            .onChange(of: gateway.isConnected) {
+                if gateway.isConnected {
+                    Task {
+                        await poller.refresh(gateway: gateway)
+                    }
                 }
             }
         }
@@ -258,23 +268,11 @@ private struct StreamEventRow: View {
     }
 
     private var titleText: String {
-        if let title = event.title, !title.isEmpty {
-            return title
-        }
-        if let proposalId = event.proposalId, !proposalId.isEmpty {
-            return proposalId
-        }
-        if let clusterId = event.clusterId, !clusterId.isEmpty {
-            return clusterId
-        }
-        if let eventName = event.event, !eventName.isEmpty {
-            return eventName
-        }
-        return "event"
+        event.displayTitle
     }
 
     private var detailText: String {
-        let source = event.agentId ?? event.peerId ?? "observatory"
+        let source = event.agentId ?? event.sourceId ?? event.peerId ?? "observatory"
         if let reason = event.reason, !reason.isEmpty {
             return "\(source) · \(reason)"
         }

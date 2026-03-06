@@ -3,8 +3,6 @@ import SwiftData
 
 struct ChatView: View {
     private static let localDefaultPort = 19001
-    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
-
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @Query(sort: \ChatMessage.timestamp) private var messages: [ChatMessage]
@@ -241,7 +239,7 @@ struct ChatView: View {
 
         Task { @MainActor in
             let preferredToken = gateway.token ?? KeychainHelper.load(for: "\(gateway.host):\(gateway.port)")
-            let resolution = Self.loopbackHosts.contains(gateway.host.lowercased())
+            let resolution = GatewayManager.isLocalDevelopmentHost(gateway.host)
                 ? await gateway.resolveLocalDevelopmentGateway(
                     host: gateway.host,
                     preferredPort: gateway.port,

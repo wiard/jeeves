@@ -9,6 +9,21 @@ final class GatewayManager {
     private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
     private static let localGatewayDiscoveryFile = ".openclashd/gateway.json"
 
+    /// Returns true if the host is a loopback address or a private/local IP
+    /// that likely represents a local development gateway.
+    static func isLocalDevelopmentHost(_ host: String) -> Bool {
+        let lower = host.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if loopbackHosts.contains(lower) { return true }
+        if lower.hasSuffix(".local") { return true }
+        // Check for private IPv4 ranges
+        let parts = lower.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        if parts[0] == 10 { return true }
+        if parts[0] == 172, (16...31).contains(parts[1]) { return true }
+        if parts[0] == 192, parts[1] == 168 { return true }
+        return false
+    }
+
     enum ConnectionState {
         case disconnected
         case connecting
@@ -55,12 +70,14 @@ final class GatewayManager {
         let host: String?
         let port: Int?
         let healthPath: String?
+        let token: String?
 
         enum CodingKeys: String, CodingKey {
             case baseURL = "base_url"
             case host
             case port
             case healthPath = "health_path"
+            case token
         }
     }
 
@@ -103,7 +120,7 @@ final class GatewayManager {
             ? (
                 KeychainHelper.load(for: key)
                 ?? (
-                    Self.loopbackHosts.contains(normalizedLowerHost)
+                    Self.isLocalDevelopmentHost(normalizedLowerHost)
                     ? Self.localDiscoveryPorts
                         .map { KeychainHelper.load(for: "\(resolvedHost):\($0)") }
                         .first(where: { ($0 ?? "").isEmpty == false })
@@ -148,7 +165,7 @@ final class GatewayManager {
         let normalizedPreferredPort = preferredPort > 0 ? preferredPort : Self.localDefaultPort
         let normalizedPreferredToken = preferredToken?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard Self.loopbackHosts.contains(normalizedLower) else {
+        guard Self.isLocalDevelopmentHost(normalizedHost) else {
             return LocalGatewayResolution(
                 host: normalizedHost,
                 port: normalizedPreferredPort,
@@ -161,10 +178,27 @@ final class GatewayManager {
             var ordered: [GatewayEndpoint] = [
                 GatewayEndpoint(host: normalizedHost, port: normalizedPreferredPort)
             ]
-            if allowPortFallback, let discovered = loadLocalGatewayDiscoveryEndpoint(), !ordered.contains(discovered) {
+            let discovered = allowPortFallback ? loadLocalGatewayDiscoveryEndpoint() : nil
+            if let discovered, !ordered.contains(discovered) {
                 ordered.append(discovered)
             }
+            // When discovery provides a non-loopback host (e.g. bridge IP for simulator),
+            // also try that host with all common ports — localhost won't reach the Mac from
+            // the iOS Simulator.
+            let discoveredHost = discovered?.host
+            let discoveredHostIsNonLoopback = discoveredHost.map {
+                !Self.loopbackHosts.contains($0.lowercased())
+            } ?? false
             if allowPortFallback {
+                if discoveredHostIsNonLoopback, let bridgeHost = discoveredHost {
+                    // Prefer bridge host with all ports (reachable from simulator)
+                    for port in Self.localDiscoveryPorts {
+                        let candidate = GatewayEndpoint(host: bridgeHost, port: port)
+                        if !ordered.contains(candidate) {
+                            ordered.append(candidate)
+                        }
+                    }
+                }
                 for port in Self.localDiscoveryPorts {
                     let candidate = GatewayEndpoint(host: normalizedHost, port: port)
                     if !ordered.contains(candidate) {
@@ -179,6 +213,12 @@ final class GatewayManager {
         if let normalizedPreferredToken, !normalizedPreferredToken.isEmpty {
             tokenCandidates.append(normalizedPreferredToken)
         }
+        // Token from the discovery file itself (backend publishes it for local dev)
+        if let discoveryToken = loadDiscoveredGatewayToken(),
+           !discoveryToken.isEmpty,
+           !tokenCandidates.contains(discoveryToken) {
+            tokenCandidates.append(discoveryToken)
+        }
         for endpoint in endpoints {
             if let token = KeychainHelper.load(for: "\(endpoint.host):\(endpoint.port)"),
                !token.isEmpty,
@@ -192,11 +232,18 @@ final class GatewayManager {
             tokenCandidates.append(activeToken)
         }
 
+        #if DEBUG
+        print("[Jeeves][GatewayManager] resolveLocal endpoints=\(endpoints.map { "\($0.host):\($0.port)" }) tokenCandidates=\(tokenCandidates.count)")
+        #endif
+
         var firstHealthyWithoutTokenEndpoint: GatewayEndpoint?
 
         for endpoint in endpoints {
             for candidateToken in tokenCandidates {
                 let status = await probeConductorHealth(host: endpoint.host, port: endpoint.port, token: candidateToken)
+                #if DEBUG
+                print("[Jeeves][GatewayManager] probe \(endpoint.host):\(endpoint.port) auth=true status=\(status)")
+                #endif
                 if status == .healthy {
                     return LocalGatewayResolution(
                         host: endpoint.host,
@@ -208,12 +255,18 @@ final class GatewayManager {
             }
 
             let unauthStatus = await probeConductorHealth(host: endpoint.host, port: endpoint.port, token: nil)
+            #if DEBUG
+            print("[Jeeves][GatewayManager] probe \(endpoint.host):\(endpoint.port) auth=false status=\(unauthStatus)")
+            #endif
             if unauthStatus == .unauthorized || unauthStatus == .healthy {
                 firstHealthyWithoutTokenEndpoint = firstHealthyWithoutTokenEndpoint ?? endpoint
             }
         }
 
         let fallbackEndpoint = firstHealthyWithoutTokenEndpoint ?? endpoints.first ?? GatewayEndpoint(host: normalizedHost, port: normalizedPreferredPort)
+        #if DEBUG
+        print("[Jeeves][GatewayManager] resolveLocal result=\(fallbackEndpoint.host):\(fallbackEndpoint.port) healthy=\(firstHealthyWithoutTokenEndpoint != nil)")
+        #endif
         return LocalGatewayResolution(
             host: fallbackEndpoint.host,
             port: fallbackEndpoint.port,
@@ -438,7 +491,7 @@ final class GatewayManager {
         }
 
         let normalizedHost = host.lowercased()
-        if Self.loopbackHosts.contains(normalizedHost) {
+        if Self.isLocalDevelopmentHost(normalizedHost) {
             for candidatePort in Self.localDiscoveryPorts {
                 if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
                     self.token = candidate
@@ -496,23 +549,42 @@ final class GatewayManager {
     }
 
     private func loadDiscoveredGatewayToken() -> String? {
-        guard let endpoint = loadLocalGatewayDiscoveryEndpoint() else { return nil }
-        let key = "\(endpoint.host):\(endpoint.port)"
-        guard let token = KeychainHelper.load(for: key), !token.isEmpty else { return nil }
+        let (_, token) = loadLocalGatewayDiscovery()
         return token
     }
 
     private func loadLocalGatewayDiscoveryEndpoint() -> GatewayEndpoint? {
+        let (endpoint, _) = loadLocalGatewayDiscovery()
+        return endpoint
+    }
+
+    /// Returns (endpoint, token) from the first valid discovery file.
+    private func loadLocalGatewayDiscovery() -> (GatewayEndpoint?, String?) {
         let fm = FileManager.default
         for path in localGatewayDiscoveryPaths() {
             guard fm.fileExists(atPath: path) else { continue }
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { continue }
             guard let record = try? JSONDecoder().decode(LocalGatewayDiscoveryRecord.self, from: data) else { continue }
-            if let endpoint = gatewayEndpoint(from: record) {
-                return endpoint
+            let endpoint = gatewayEndpoint(from: record)
+            // Token from discovery file itself (local dev)
+            let fileToken = record.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let discoveredToken: String? = {
+                if let fileToken, !fileToken.isEmpty { return fileToken }
+                // Fall back to keychain entry for the discovered endpoint
+                if let ep = endpoint {
+                    let key = "\(ep.host):\(ep.port)"
+                    if let stored = KeychainHelper.load(for: key), !stored.isEmpty { return stored }
+                }
+                return nil
+            }()
+            if endpoint != nil || (discoveredToken != nil && !(discoveredToken?.isEmpty ?? true)) {
+                #if DEBUG
+                print("[Jeeves][GatewayManager] discovery file=\(path) endpoint=\(endpoint.map { "\($0.host):\($0.port)" } ?? "nil") token=\(discoveredToken != nil ? "present" : "nil")")
+                #endif
+                return (endpoint, discoveredToken)
             }
         }
-        return nil
+        return (nil, nil)
     }
 
     private func gatewayEndpoint(from record: LocalGatewayDiscoveryRecord) -> GatewayEndpoint? {

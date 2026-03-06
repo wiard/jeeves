@@ -32,6 +32,13 @@ struct ObservatoryView: View {
                     await vm.refresh(gateway: gateway, connection: connections.first)
                 }
             }
+            .onChange(of: gateway.isConnected) {
+                if gateway.isConnected {
+                    Task {
+                        await vm.refresh(gateway: gateway, connection: connections.first)
+                    }
+                }
+            }
         }
     }
 

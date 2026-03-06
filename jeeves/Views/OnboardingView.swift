@@ -3,8 +3,6 @@ import SwiftData
 
 struct OnboardingView: View {
     private static let localDefaultPort = 19001
-    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
-
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @State private var host = "localhost"
@@ -95,7 +93,7 @@ struct OnboardingView: View {
             return
         }
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isLoopback = Self.loopbackHosts.contains(normalizedHost.lowercased())
+        let isLocalDev = GatewayManager.isLocalDevelopmentHost(normalizedHost)
         let normalizedPort = portNum
 
         isConnecting = true
@@ -106,7 +104,7 @@ struct OnboardingView: View {
 
         Task { @MainActor in
             let directToken = KeychainHelper.load(for: "\(normalizedHost):\(normalizedPort)")
-            let resolution = isLoopback
+            let resolution = isLocalDev
                 ? await gateway.resolveLocalDevelopmentGateway(
                     host: normalizedHost,
                     preferredPort: normalizedPort,
@@ -120,7 +118,12 @@ struct OnboardingView: View {
                     isHealthy: false
                 )
 
-            connection.port = resolution.port
+            if isLocalDev, connection.port != resolution.port {
+                connection.port = resolution.port
+            }
+            if isLocalDev, connection.host != resolution.host {
+                connection.host = resolution.host
+            }
 
             if let token = resolution.token, !token.isEmpty {
                 gateway.useMock = false

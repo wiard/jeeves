@@ -4,9 +4,6 @@ import Combine
 @MainActor
 final class ObservatoryViewModel: ObservableObject {
     private static let localDefaultPort = 19001
-    private static let localDiscoveryPorts: [Int] = [19001, 19002, 19003, 19004, 19005]
-    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
-
     enum Section: CaseIterable {
         case loop
         case fabric
@@ -245,7 +242,7 @@ final class ObservatoryViewModel: ObservableObject {
         let basePort = resolvePort(gateway: gateway, connection: connection)
         let baseToken = resolveToken(host: baseHost, port: basePort, gateway: gateway)
 
-        if Self.loopbackHosts.contains(baseHost.lowercased()) {
+        if GatewayManager.isLocalDevelopmentHost(baseHost) {
             let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
             let discovery = await gateway.resolveLocalDevelopmentGateway(
                 host: baseHost,
@@ -398,8 +395,8 @@ final class ObservatoryViewModel: ObservableObject {
         }
 
         let normalizedHost = host.lowercased()
-        if Self.loopbackHosts.contains(normalizedHost) {
-            for candidatePort in Self.localDiscoveryPorts {
+        if GatewayManager.isLocalDevelopmentHost(normalizedHost) {
+            for candidatePort in GatewayManager.localDiscoveryPorts {
                 if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
                     return candidate
                 }

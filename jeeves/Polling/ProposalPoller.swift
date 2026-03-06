@@ -29,6 +29,8 @@ final class ProposalPoller {
     var pendingCount: Int { pendingProposals.count }
     var seedToastMessage: String?
     var isSeeding = false
+    var hasLoadedOnce = false
+    var lastRefreshError: String?
 
     private var pollingTask: Task<Void, Never>?
     private var previousPendingIds: Set<String> = []
@@ -55,6 +57,8 @@ final class ProposalPoller {
     func refresh(gateway: GatewayManager) async {
         if gateway.useMock || gateway.host.lowercased() == "mock" {
             refreshDemoState()
+            hasLoadedOnce = true
+            lastRefreshError = nil
             return
         }
 
@@ -63,6 +67,8 @@ final class ProposalPoller {
             #if DEBUG
             print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
             #endif
+            lastRefreshError = "No token available for \(resolvedEndpoint.host):\(resolvedEndpoint.port)"
+            hasLoadedOnce = true
             return
         }
 
@@ -102,16 +108,31 @@ final class ProposalPoller {
             async let clustersTask = client.fetchRadarClusters()
             async let sourcesTask = client.fetchRadarSources()
 
-            if let stream = try? await streamTask {
+            do {
+                let stream = try await streamTask
                 streamEventsFromApi = stream.events
+            } catch {
+                #if DEBUG
+                print("[Jeeves][ProposalPoller] stream fetch failed: \(error)")
+                #endif
             }
-            if let runtime = try? await signalsRuntimeTask {
+            do {
+                let runtime = try await signalsRuntimeTask
                 let runtimeEvents = Self.runtimeStreamEvents(runtime)
                 streamEventsFromApi = Self.mergeStreamEvents(primary: streamEventsFromApi, secondary: runtimeEvents)
                 runtimeEmergenceClusters = Self.runtimeEmergenceToClusters(runtime.emergenceClusters)
+            } catch {
+                #if DEBUG
+                print("[Jeeves][ProposalPoller] signals runtime fetch failed: \(error)")
+                #endif
             }
-            if let status = try? await radarStatusTask {
+            do {
+                let status = try await radarStatusTask
                 radarStatus = status
+            } catch {
+                #if DEBUG
+                print("[Jeeves][ProposalPoller] radar status fetch failed: \(error)")
+                #endif
             }
             if let activations = try? await activationsTask {
                 radarActivations = Self.sortRadarActivations(activations)
@@ -131,6 +152,8 @@ final class ProposalPoller {
             }
         } catch {}
         streamEvents = Self.sortStreamEvents(streamEventsFromApi)
+        lastRefreshError = nil
+        hasLoadedOnce = true
         #if DEBUG
         print("[Jeeves][ProposalPoller] stream events=\(streamEvents.count) activations=\(radarActivations.count) collisions=\(radarCollisions.count) emergence=\(radarEmergence.count)")
         #endif
@@ -192,7 +215,7 @@ final class ProposalPoller {
         }
 
         let initialToken = resolveToken(host: host, port: port, gateway: gateway)
-        if host == "localhost" || host == "127.0.0.1" {
+        if GatewayManager.isLocalDevelopmentHost(host) {
             let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
             let discovery = await gateway.resolveLocalDevelopmentGateway(
                 host: host,
@@ -224,7 +247,7 @@ final class ProposalPoller {
            !stored.isEmpty {
             return stored
         }
-        if host == "localhost" || host == "127.0.0.1" {
+        if GatewayManager.isLocalDevelopmentHost(host) {
             for loopbackHost in ["localhost", "127.0.0.1"] {
                 for candidatePort in GatewayManager.localDiscoveryPorts {
                     if let candidate = KeychainHelper.load(for: "\(loopbackHost):\(candidatePort)"),

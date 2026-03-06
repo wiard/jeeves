@@ -142,11 +142,10 @@ struct ContentView: View {
             return
         }
 
-        let lowerHost = resolvedHost.lowercased()
-        let isLoopback = Self.loopbackHosts.contains(lowerHost)
+        let isLocalDev = GatewayManager.isLocalDevelopmentHost(resolvedHost)
         let hasRuntimePortOverride = (cfg.port != nil)
 
-        let resolution = isLoopback
+        let resolution = isLocalDev
             ? await gateway.resolveLocalDevelopmentGateway(
                 host: resolvedHost,
                 preferredPort: resolvedPort,
@@ -164,8 +163,11 @@ struct ContentView: View {
         print("[Jeeves][ContentView] gateway resolution configured=\(resolvedHost):\(resolvedPort) discovered=\(resolution.host):\(resolution.port) healthy=\(resolution.isHealthy) token=\((resolution.token?.isEmpty == false) ? "present" : "missing")")
         #endif
 
-        if !hasRuntimePortOverride, isLoopback, conn.port != resolution.port {
+        if !hasRuntimePortOverride, isLocalDev, conn.port != resolution.port {
             conn.port = resolution.port
+        }
+        if isLocalDev, conn.host != resolution.host {
+            conn.host = resolution.host
         }
 
         if let token = resolution.token, !token.isEmpty {

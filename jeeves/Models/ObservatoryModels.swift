@@ -514,7 +514,7 @@ struct ObservatoryStreamFeed: Decodable, Sendable {
     let events: [ObservatoryStreamEvent]
     let pendingCount: Int
 
-    private enum CodingKeys: String, CodingKey {
+    enum CodingKeys: String, CodingKey {
         case ok
         case events
         case items
@@ -531,11 +531,34 @@ struct ObservatoryStreamFeed: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         ok = try c.decodeIfPresent(Bool.self, forKey: .ok)
-        events = try c.decodeIfPresent([ObservatoryStreamEvent].self, forKey: .events)
-            ?? c.decodeIfPresent([ObservatoryStreamEvent].self, forKey: .items)
-            ?? c.decodeIfPresent([ObservatoryStreamEvent].self, forKey: .data)
+        // Try strict decode first, then lossy decode per-element to survive bad entries
+        events = (try? c.decodeIfPresent([ObservatoryStreamEvent].self, forKey: .events))
+            ?? (try? c.decodeIfPresent([ObservatoryStreamEvent].self, forKey: .items))
+            ?? (try? c.decodeIfPresent([ObservatoryStreamEvent].self, forKey: .data))
+            ?? Self.decodeLossyEvents(from: c, forKey: .events)
+            ?? Self.decodeLossyEvents(from: c, forKey: .items)
+            ?? Self.decodeLossyEvents(from: c, forKey: .data)
             ?? []
         pendingCount = try c.decodeIfPresent(Int.self, forKey: .pendingCount) ?? 0
+    }
+
+    /// Decode events lossily — skips individual elements that fail to decode.
+    private static func decodeLossyEvents(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) -> [ObservatoryStreamEvent]? {
+        guard var arrayContainer = try? container.nestedUnkeyedContainer(forKey: key) else {
+            return nil
+        }
+        var events: [ObservatoryStreamEvent] = []
+        while !arrayContainer.isAtEnd {
+            if let event = try? arrayContainer.decode(ObservatoryStreamEvent.self) {
+                events.append(event)
+            } else {
+                _ = try? arrayContainer.decode(LossyJSONScalarPublic.self)
+            }
+        }
+        return events.isEmpty ? nil : events
     }
 }
 
@@ -548,6 +571,10 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
     let proposalId: String?
     let agentId: String?
     let title: String?
+    let summary: String?
+    let signalId: String?
+    let sourceId: String?
+    let challengeId: String?
     let decision: String?
     let reason: String?
     let risk: String?
@@ -564,10 +591,26 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         case proposalId
         case agentId
         case title
+        case summary
+        case signalId
+        case sourceId
+        case challengeId
         case decision
         case reason
         case risk
         case peerId
+    }
+
+    /// The best display text for this event.
+    var displayTitle: String {
+        if let title, !title.isEmpty { return title }
+        if let summary, !summary.isEmpty { return summary }
+        if let proposalId, !proposalId.isEmpty { return proposalId }
+        if let clusterId, !clusterId.isEmpty { return clusterId }
+        if let challengeId, !challengeId.isEmpty { return challengeId }
+        if let signalId, !signalId.isEmpty { return signalId }
+        if let eventName = event, !eventName.isEmpty { return eventName }
+        return "event"
     }
 
     init(
@@ -579,6 +622,10 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         proposalId: String?,
         agentId: String?,
         title: String?,
+        summary: String? = nil,
+        signalId: String? = nil,
+        sourceId: String? = nil,
+        challengeId: String? = nil,
         decision: String?,
         reason: String?,
         risk: String?,
@@ -592,6 +639,10 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         self.proposalId = proposalId
         self.agentId = agentId
         self.title = title
+        self.summary = summary
+        self.signalId = signalId
+        self.sourceId = sourceId
+        self.challengeId = challengeId
         self.decision = decision
         self.reason = reason
         self.risk = risk
@@ -608,6 +659,10 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         proposalId = c.decodeLossyString(forKey: .proposalId)
         agentId = c.decodeLossyString(forKey: .agentId)
         title = c.decodeLossyString(forKey: .title)
+        summary = c.decodeLossyString(forKey: .summary)
+        signalId = c.decodeLossyString(forKey: .signalId)
+        sourceId = c.decodeLossyString(forKey: .sourceId)
+        challengeId = c.decodeLossyString(forKey: .challengeId)
         decision = c.decodeLossyString(forKey: .decision)
         reason = c.decodeLossyString(forKey: .reason)
         risk = c.decodeLossyString(forKey: .risk)
@@ -620,11 +675,28 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
                 timestampIso ?? "",
                 clusterId ?? "",
                 proposalId ?? "",
+                signalId ?? "",
+                challengeId ?? "",
                 event ?? "",
                 agentId ?? "",
                 decision ?? "",
                 reason ?? ""
             ].joined(separator: "|")
+    }
+
+}
+
+/// Public version of LossyJSONScalar for use in lossy array decoding.
+struct LossyJSONScalarPublic: Decodable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let _ = try? container.decode(String.self) { return }
+        if let _ = try? container.decode(Int.self) { return }
+        if let _ = try? container.decode(Double.self) { return }
+        if let _ = try? container.decode(Bool.self) { return }
+        if let _ = try? container.decode([String: LossyJSONScalarPublic].self) { return }
+        if let _ = try? container.decode([LossyJSONScalarPublic].self) { return }
+        // Accept anything
     }
 }
 
