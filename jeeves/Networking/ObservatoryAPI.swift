@@ -253,7 +253,8 @@ enum ObservatoryAPI {
         queryItems: [URLQueryItem] = []
     ) async throws -> Data {
         let url = try endpointURL(host: host, port: port, path: path, token: token, queryItems: queryItems)
-        let request = URLRequest(url: url)
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
         try ensureHTTP2xx(response)
         return data

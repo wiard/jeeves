@@ -473,6 +473,9 @@ final class GatewayManager {
         guard let url = components.url else { return .unavailable }
         var request = URLRequest(url: url)
         request.timeoutInterval = 1.2
+        if let token, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)

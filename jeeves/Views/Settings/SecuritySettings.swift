@@ -3,9 +3,12 @@ import SwiftData
 
 struct SecuritySettings: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(GatewayManager.self) private var gateway
     @Query private var connections: [GatewayConnection]
     @State private var showDeleteConfirmation = false
     @State private var showRefreshConfirmation = false
+    @State private var tokenInput = ""
+    @State private var tokenStatus: String?
 
     private var connection: GatewayConnection? { connections.first }
     private var hasToken: Bool {
@@ -24,7 +27,31 @@ struct SecuritySettings: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text("Geen token")
-                        .foregroundStyle(Color.consentRed)
+                    .foregroundStyle(Color.consentRed)
+                }
+            }
+
+            if connection != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Plak operator token", text: $tokenInput, axis: .vertical)
+                        .font(.jeevesMono)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+
+                    Button("Opslaan en verbinden") {
+                        saveTokenAndReconnect()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    if let tokenStatus, !tokenStatus.isEmpty {
+                        Text(tokenStatus)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -61,11 +88,53 @@ struct SecuritySettings: View {
     }
 
     private func refreshToken() {
-        // In real implementation: request new token from gateway
+        tokenStatus = "Token vernieuwen via gateway CLI en opnieuw opslaan."
     }
 
     private func deleteToken() {
         guard let conn = connection else { return }
         try? KeychainHelper.delete(for: "\(conn.host):\(conn.port)")
+        tokenStatus = "Token verwijderd"
+    }
+
+    private func saveTokenAndReconnect() {
+        guard let conn = connection else { return }
+        let normalizedToken = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedToken.isEmpty else { return }
+
+        var keys = Set<String>()
+        keys.insert("\(conn.host):\(conn.port)")
+
+        let normalizedHost = conn.host.lowercased()
+        if normalizedHost == "localhost" || normalizedHost == "127.0.0.1" {
+            for host in ["localhost", "127.0.0.1"] {
+                for port in GatewayManager.localDiscoveryPorts {
+                    keys.insert("\(host):\(port)")
+                }
+            }
+        }
+
+        if gateway.host.lowercased() != "mock", gateway.port > 0 {
+            keys.insert("\(gateway.host):\(gateway.port)")
+        }
+
+        do {
+            for key in keys.sorted() {
+                try KeychainHelper.save(token: normalizedToken, for: key)
+            }
+            gateway.useMock = false
+            let reconnectHost = gateway.host.lowercased() == "mock" ? conn.host : gateway.host
+            let reconnectPort = gateway.port > 0 ? gateway.port : conn.port
+            gateway.connect(
+                host: reconnectHost,
+                port: reconnectPort,
+                token: normalizedToken,
+                channelId: conn.channelId
+            )
+            tokenStatus = "Token opgeslagen en live verbinding gestart."
+            tokenInput = ""
+        } catch {
+            tokenStatus = "Token opslaan mislukt."
+        }
     }
 }
