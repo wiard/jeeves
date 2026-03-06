@@ -13,6 +13,13 @@ final class ProposalPoller {
     var proposals: [Proposal] = []
     var pendingProposals: [Proposal] = []
     var emergenceClusters: [EmergenceCluster] = []
+    var streamEvents: [ObservatoryStreamEvent] = []
+    var radarStatus: RadarStatusSnapshot?
+    var radarActivations: [RadarActivation] = []
+    var radarCollisions: [RadarCollision] = []
+    var radarEmergence: [RadarCollision] = []
+    var radarClusters: [RadarClusterSummary] = []
+    var radarSources: [RadarSourceStats] = []
 
     var observatorySnapshot: ObservatorySnapshot = .empty
     var activeEmergenceAlert: EmergenceAlert?
@@ -76,11 +83,45 @@ final class ProposalPoller {
             NotificationManager.shared.updateBadge(count: pending.count)
         } catch {}
 
+        var radarEmergenceClusters: [EmergenceCluster] = []
+        do {
+            async let streamTask = client.fetchObservatoryStream(limit: 60)
+            async let radarStatusTask = client.fetchRadarStatus()
+            async let activationsTask = client.fetchRadarActivations(limit: 40)
+            async let collisionsTask = client.fetchRadarCollisions()
+            async let emergenceTask = client.fetchRadarEmergence()
+            async let clustersTask = client.fetchRadarClusters()
+            async let sourcesTask = client.fetchRadarSources()
+
+            if let stream = try? await streamTask {
+                streamEvents = Self.sortStreamEvents(stream.events)
+            }
+            if let status = try? await radarStatusTask {
+                radarStatus = status
+            }
+            if let activations = try? await activationsTask {
+                radarActivations = Self.sortRadarActivations(activations)
+            }
+            if let collisions = try? await collisionsTask {
+                radarCollisions = Self.sortRadarCollisions(collisions)
+            }
+            if let emergence = try? await emergenceTask {
+                radarEmergence = Self.sortRadarCollisions(emergence)
+                radarEmergenceClusters = Self.radarEmergenceToClusters(radarEmergence)
+            }
+            if let clusters = try? await clustersTask {
+                radarClusters = Self.sortRadarClusters(clusters)
+            }
+            if let sources = try? await sourcesTask {
+                radarSources = Self.sortRadarSources(sources)
+            }
+        } catch {}
+
         do {
             let snapshot = try await client.fetchObservatorySnapshot(proposals: proposals)
             observatorySnapshot = snapshot
 
-            let escalatedClusters = snapshot.collisions
+            var escalatedClusters = snapshot.collisions
                 .filter(\.isEmergence)
                 .map { cluster in
                     EmergenceCluster(
@@ -92,13 +133,21 @@ final class ProposalPoller {
                     )
                 }
 
+            if escalatedClusters.isEmpty {
+                escalatedClusters = radarEmergenceClusters
+            }
+
             processEmergenceChanges(escalatedClusters)
         } catch {
-            do {
-                let clusters = try await client.fetchEmergence()
-                let escalated = clusters.filter(\.escalatesToIphone)
-                processEmergenceChanges(escalated)
-            } catch {}
+            if !radarEmergenceClusters.isEmpty {
+                processEmergenceChanges(radarEmergenceClusters)
+            } else {
+                do {
+                    let clusters = try await client.fetchEmergence()
+                    let escalated = clusters.filter(\.escalatesToIphone)
+                    processEmergenceChanges(escalated)
+                } catch {}
+            }
         }
     }
 
@@ -201,6 +250,13 @@ final class ProposalPoller {
 
         let snapshot = ObservatorySnapshot.demo(tick: demoTick)
         observatorySnapshot = snapshot
+        streamEvents = Self.demoStreamEvents(tick: demoTick)
+        radarStatus = Self.demoRadarStatus(tick: demoTick)
+        radarActivations = Self.demoRadarActivations(tick: demoTick)
+        radarCollisions = Self.demoRadarCollisions(tick: demoTick)
+        radarEmergence = radarCollisions.filter(\.isEmergence)
+        radarClusters = Self.demoRadarClusters(tick: demoTick)
+        radarSources = Self.demoRadarSources(tick: demoTick)
 
         proposals = demoProposals(tick: demoTick)
         pendingProposals = proposals.filter(\.isPending)
@@ -286,5 +342,204 @@ final class ProposalPoller {
             decisions: [newDecision] + observatorySnapshot.decisions,
             updatedAt: Date()
         )
+    }
+
+    private static func sortStreamEvents(_ events: [ObservatoryStreamEvent]) -> [ObservatoryStreamEvent] {
+        events.sorted { lhs, rhs in
+            let lDate = parseIso(lhs.timestampIso)
+            let rDate = parseIso(rhs.timestampIso)
+            if lDate != rDate {
+                return lDate > rDate
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private static func sortRadarActivations(_ activations: [RadarActivation]) -> [RadarActivation] {
+        activations.sorted { lhs, rhs in
+            let lDate = parseIso(lhs.timestampIso)
+            let rDate = parseIso(rhs.timestampIso)
+            if lDate != rDate {
+                return lDate > rDate
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private static func sortRadarCollisions(_ collisions: [RadarCollision]) -> [RadarCollision] {
+        collisions.sorted { lhs, rhs in
+            if lhs.density != rhs.density {
+                return lhs.density > rhs.density
+            }
+            let lDate = parseIso(lhs.detectedAtIso)
+            let rDate = parseIso(rhs.detectedAtIso)
+            if lDate != rDate {
+                return lDate > rDate
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private static func sortRadarClusters(_ clusters: [RadarClusterSummary]) -> [RadarClusterSummary] {
+        clusters.sorted { lhs, rhs in
+            if lhs.count != rhs.count {
+                return lhs.count > rhs.count
+            }
+            return lhs.cluster < rhs.cluster
+        }
+    }
+
+    private static func sortRadarSources(_ sources: [RadarSourceStats]) -> [RadarSourceStats] {
+        sources.sorted { lhs, rhs in
+            let lDate = parseIso(lhs.lastFetch)
+            let rDate = parseIso(rhs.lastFetch)
+            if lDate != rDate {
+                return lDate > rDate
+            }
+            return lhs.source < rhs.source
+        }
+    }
+
+    private static func radarEmergenceToClusters(_ collisions: [RadarCollision]) -> [EmergenceCluster] {
+        collisions
+            .filter(\.isEmergence)
+            .map { collision in
+                EmergenceCluster(
+                    clusterId: collision.id,
+                    dimensions: collision.sources,
+                    relevanceScore: collision.density,
+                    summary: collision.signalTitles.first ?? "Emergence detected",
+                    escalatesToIphone: true
+                )
+            }
+    }
+
+    private static func parseIso(_ value: String?) -> Date {
+        guard let value else { return .distantPast }
+        return ISO8601DateFormatter().date(from: value) ?? .distantPast
+    }
+
+    private static func demoStreamEvents(tick: Int) -> [ObservatoryStreamEvent] {
+        let now = Date()
+        return sortStreamEvents([
+            ObservatoryStreamEvent(
+                id: "demo-stream-pending-\(tick)",
+                type: "proposal_pending",
+                timestampIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-30)),
+                event: nil,
+                proposalId: "demo-orange-\(tick % 7)",
+                agentId: "observer.fabric",
+                title: "Inspect cross-domain anomaly",
+                decision: nil,
+                reason: nil,
+                risk: "orange",
+                peerId: nil
+            ),
+            ObservatoryStreamEvent(
+                id: "demo-stream-audit-\(tick)",
+                type: "audit",
+                timestampIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-120)),
+                event: "challenge.created",
+                proposalId: nil,
+                agentId: "signals",
+                title: nil,
+                decision: "allow",
+                reason: "signal_generated",
+                risk: nil,
+                peerId: "system"
+            )
+        ])
+    }
+
+    private static func demoRadarStatus(tick: Int) -> RadarStatusSnapshot {
+        RadarStatusSnapshot(
+            store: RadarStoreStatus(
+                activationCount: 10 + (tick % 4),
+                collisionCount: 2 + (tick % 3),
+                emergenceCount: 1 + (tick % 2),
+                lastFetchBySource: ["github": ISO8601DateFormatter().string(from: Date())],
+                hotClusters: [
+                    RadarHotCluster(cluster: "architecture", count: 4),
+                    RadarHotCluster(cluster: "surface", count: 3)
+                ],
+                topSignals: [
+                    RadarTopSignal(title: "consent relay drift", source: "github", residue: 0.82),
+                    RadarTopSignal(title: "cluster pressure", source: "arxiv", residue: 0.74)
+                ]
+            ),
+            collector: RadarCollectorStatus(isRunning: true, lastRun: ISO8601DateFormatter().string(from: Date()))
+        )
+    }
+
+    private static func demoRadarActivations(tick: Int) -> [RadarActivation] {
+        sortRadarActivations([
+            RadarActivation(
+                id: "demo-activation-\(tick)-1",
+                source: "github",
+                title: "consent relay drift",
+                summary: "Cross-source relay trend.",
+                residue: 0.82,
+                timestampIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-20)),
+                clusters: ["architecture", "surface"],
+                cellIds: ["surface|external|current"]
+            ),
+            RadarActivation(
+                id: "demo-activation-\(tick)-2",
+                source: "arxiv",
+                title: "agent governance update",
+                summary: "Research signal on approval constraints.",
+                residue: 0.71,
+                timestampIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-200)),
+                clusters: ["trust-model"],
+                cellIds: ["trust-model|engine|current"]
+            )
+        ])
+    }
+
+    private static func demoRadarCollisions(tick: Int) -> [RadarCollision] {
+        sortRadarCollisions([
+            RadarCollision(
+                id: "demo-collision-\(tick)-1",
+                sources: ["github", "arxiv"],
+                density: 0.79,
+                isEmergence: true,
+                detectedAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-40)),
+                cellIds: ["surface|external|current"],
+                signalTitles: ["consent relay drift"]
+            ),
+            RadarCollision(
+                id: "demo-collision-\(tick)-2",
+                sources: ["manual", "github"],
+                density: 0.54,
+                isEmergence: false,
+                detectedAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-320)),
+                cellIds: ["architecture|external|current"],
+                signalTitles: ["cluster pressure"]
+            )
+        ])
+    }
+
+    private static func demoRadarClusters(tick: Int) -> [RadarClusterSummary] {
+        sortRadarClusters([
+            RadarClusterSummary(cluster: "architecture", label: "Architecture", count: 4 + (tick % 2)),
+            RadarClusterSummary(cluster: "surface", label: "Surface", count: 3)
+        ])
+    }
+
+    private static func demoRadarSources(tick: Int) -> [RadarSourceStats] {
+        sortRadarSources([
+            RadarSourceStats(
+                source: "github",
+                signalCount: 6 + (tick % 2),
+                avgResidue: 0.43,
+                lastFetch: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-60))
+            ),
+            RadarSourceStats(
+                source: "arxiv",
+                signalCount: 4,
+                avgResidue: 0.38,
+                lastFetch: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-180))
+            )
+        ])
     }
 }

@@ -11,7 +11,7 @@ actor GatewayClient {
         components.scheme = "http"
         components.host = host
         components.port = port
-        self.baseURL = components.url ?? URL(string: "http://localhost:19001")!
+        self.baseURL = components.url ?? URL(string: "http://localhost:19002")!
         self.token = token
     }
 
@@ -77,6 +77,93 @@ actor GatewayClient {
 
     func fetchClock() async throws -> FabricClock {
         try await get("/api/fabric/clock")
+    }
+
+    func fetchObservatoryStream(limit: Int = 60) async throws -> ObservatoryStreamFeed {
+        _ = max(1, min(limit, 240))
+        let path = "/api/observatory/stream"
+
+        if let direct: ObservatoryStreamFeed = try? await get(path) {
+            return direct
+        }
+        if let wrapped: ObservatoryStreamEnvelope = try? await get(path) {
+            return ObservatoryStreamFeed(
+                ok: wrapped.ok,
+                events: wrapped.events ?? wrapped.items ?? wrapped.data ?? [],
+                pendingCount: wrapped.pendingCount ?? 0
+            )
+        }
+        if let directEvents: [ObservatoryStreamEvent] = try? await get(path) {
+            return ObservatoryStreamFeed(ok: true, events: directEvents, pendingCount: 0)
+        }
+
+        let raw = try await getRawJSON(path)
+        let events = parseStreamEvents(from: raw)
+        return ObservatoryStreamFeed(ok: true, events: events, pendingCount: countPendingEvents(events))
+    }
+
+    func fetchRadarStatus() async throws -> RadarStatusSnapshot {
+        if let direct: RadarStatusSnapshot = try? await get("/api/radar/status") {
+            return direct
+        }
+        if let wrapped: RadarStatusEnvelope = try? await get("/api/radar/status"),
+           let status = wrapped.status ?? wrapped.data {
+            return status
+        }
+        throw URLError(.cannotParseResponse)
+    }
+
+    func fetchRadarActivations(limit: Int = 40) async throws -> [RadarActivation] {
+        _ = max(1, min(limit, 200))
+        let path = "/api/radar/activations"
+
+        if let direct: [RadarActivation] = try? await get(path) {
+            return direct
+        }
+        if let wrapped: RadarActivationsEnvelope = try? await get(path) {
+            return wrapped.activations ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
+
+    func fetchRadarCollisions() async throws -> [RadarCollision] {
+        if let direct: [RadarCollision] = try? await get("/api/radar/collisions") {
+            return direct
+        }
+        if let wrapped: RadarCollisionsEnvelope = try? await get("/api/radar/collisions") {
+            return wrapped.collisions ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
+
+    func fetchRadarEmergence() async throws -> [RadarCollision] {
+        if let direct: [RadarCollision] = try? await get("/api/radar/emergence") {
+            return direct
+        }
+        if let wrapped: RadarEmergenceEnvelope = try? await get("/api/radar/emergence") {
+            return wrapped.emergence ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
+
+    func fetchRadarClusters() async throws -> [RadarClusterSummary] {
+        if let direct: [RadarClusterSummary] = try? await get("/api/radar/clusters") {
+            return direct
+        }
+        if let wrapped: RadarClustersEnvelope = try? await get("/api/radar/clusters") {
+            return wrapped.clusters ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
+
+    func fetchRadarSources() async throws -> [RadarSourceStats] {
+        if let direct: [RadarSourceStats] = try? await get("/api/radar/sources") {
+            return direct
+        }
+        if let wrapped: RadarSourcesEnvelope = try? await get("/api/radar/sources") {
+            return wrapped.sources ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
     }
 
     func healthCheck() async throws -> Bool {
@@ -227,6 +314,32 @@ actor GatewayClient {
         }
 
         return []
+    }
+
+    private func parseStreamEvents(from json: Any) -> [ObservatoryStreamEvent] {
+        let decoder = JSONDecoder()
+
+        if let arr = json as? [Any],
+           let data = try? JSONSerialization.data(withJSONObject: arr),
+           let parsed = try? decoder.decode([ObservatoryStreamEvent].self, from: data) {
+            return parsed
+        }
+
+        if let dict = json as? [String: Any] {
+            for key in ["events", "items", "data"] {
+                if let arr = dict[key] as? [Any],
+                   let data = try? JSONSerialization.data(withJSONObject: arr),
+                   let parsed = try? decoder.decode([ObservatoryStreamEvent].self, from: data) {
+                    return parsed
+                }
+            }
+        }
+
+        return []
+    }
+
+    private func countPendingEvents(_ events: [ObservatoryStreamEvent]) -> Int {
+        events.filter { $0.type == "proposal_pending" }.count
     }
 
     private func parseClusters(from json: Any?) -> [KnowledgeCollisionCluster] {
@@ -697,4 +810,47 @@ struct ChallengesEnvelope: Decodable {
     var resolved: [Challenge] {
         challenges ?? items ?? data ?? []
     }
+}
+
+private struct ObservatoryStreamEnvelope: Decodable {
+    let ok: Bool?
+    let events: [ObservatoryStreamEvent]?
+    let items: [ObservatoryStreamEvent]?
+    let data: [ObservatoryStreamEvent]?
+    let pendingCount: Int?
+}
+
+private struct RadarStatusEnvelope: Decodable {
+    let status: RadarStatusSnapshot?
+    let data: RadarStatusSnapshot?
+}
+
+private struct RadarActivationsEnvelope: Decodable {
+    let activations: [RadarActivation]?
+    let items: [RadarActivation]?
+    let data: [RadarActivation]?
+}
+
+private struct RadarCollisionsEnvelope: Decodable {
+    let collisions: [RadarCollision]?
+    let items: [RadarCollision]?
+    let data: [RadarCollision]?
+}
+
+private struct RadarEmergenceEnvelope: Decodable {
+    let emergence: [RadarCollision]?
+    let items: [RadarCollision]?
+    let data: [RadarCollision]?
+}
+
+private struct RadarClustersEnvelope: Decodable {
+    let clusters: [RadarClusterSummary]?
+    let items: [RadarClusterSummary]?
+    let data: [RadarClusterSummary]?
+}
+
+private struct RadarSourcesEnvelope: Decodable {
+    let sources: [RadarSourceStats]?
+    let items: [RadarSourceStats]?
+    let data: [RadarSourceStats]?
 }
