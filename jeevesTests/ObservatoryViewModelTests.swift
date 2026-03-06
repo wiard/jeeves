@@ -71,6 +71,72 @@ struct ObservatoryViewModelTests {
                 {"clusterId": "k-a", "score": 0.9}
               ]
             }
+            """),
+            "/api/observatory/stream": (200, """
+            {
+              "ok": true,
+              "pendingCount": 1,
+              "events": [
+                {"id": "ev-b", "type": "audit", "timestamp": "2026-03-04T10:00:00Z", "event": "challenge.created"},
+                {"id": "ev-a", "type": "audit", "timestamp": "2026-03-04T10:00:00Z", "event": "challenge.created"},
+                {"id": "ev-c", "type": "proposal_pending", "timestamp": "2026-03-04T11:00:00Z", "proposalId": "p-1"}
+              ]
+            }
+            """),
+            "/api/radar/status": (200, """
+            {
+              "store": {
+                "activationCount": 5,
+                "collisionCount": 2,
+                "emergenceCount": 1,
+                "lastFetchBySource": {"github": "2026-03-04T12:00:00Z"},
+                "hotClusters": [{"cluster": "architecture", "count": 2}],
+                "topSignals": [{"title": "s", "source": "github", "residue": 0.6}]
+              },
+              "collector": {"isRunning": true, "lastRun": "2026-03-04T12:00:00Z"}
+            }
+            """),
+            "/api/radar/activations": (200, """
+            {
+              "activations": [
+                {"activationId": "ra-b", "signal": {"source": "github", "title": "B"}, "timestamp": "2026-03-04T10:00:00Z"},
+                {"activationId": "ra-a", "signal": {"source": "github", "title": "A"}, "timestamp": "2026-03-04T10:00:00Z"},
+                {"activationId": "ra-c", "signal": {"source": "github", "title": "C"}, "timestamp": "2026-03-04T11:00:00Z"}
+              ]
+            }
+            """),
+            "/api/radar/collisions": (200, """
+            {
+              "collisions": [
+                {"collisionId": "rc-b", "density": 0.5, "detectedAtIso": "2026-03-04T10:00:00Z"},
+                {"collisionId": "rc-a", "density": 0.5, "detectedAtIso": "2026-03-04T10:00:00Z"},
+                {"collisionId": "rc-c", "density": 0.8, "detectedAtIso": "2026-03-04T11:00:00Z"}
+              ]
+            }
+            """),
+            "/api/radar/emergence": (200, """
+            {
+              "emergence": [
+                {"collisionId": "re-b", "density": 0.7, "detectedAtIso": "2026-03-04T10:00:00Z", "isEmergence": true},
+                {"collisionId": "re-a", "density": 0.7, "detectedAtIso": "2026-03-04T10:00:00Z", "isEmergence": true}
+              ]
+            }
+            """),
+            "/api/radar/clusters": (200, """
+            {
+              "clusters": [
+                {"cluster": "surface", "count": 2},
+                {"cluster": "architecture", "count": 4}
+              ]
+            }
+            """),
+            "/api/radar/sources": (200, """
+            {
+              "sources": [
+                {"source": "arxiv", "signalCount": 2, "avgResidue": 0.4, "lastFetch": "2026-03-04T10:00:00Z"},
+                {"source": "github", "signalCount": 3, "avgResidue": 0.6, "lastFetch": "2026-03-04T11:00:00Z"}
+              ]
+            }
             """)
         ]
 
@@ -91,14 +157,26 @@ struct ObservatoryViewModelTests {
         #expect(vm.status(for: .alerts) == .ok)
         #expect(vm.status(for: .knowledge) == .ok)
         #expect(vm.status(for: .signals) == .unavailable)
+        #expect(vm.status(for: .radar) == .ok)
+        #expect(vm.status(for: .discovery) == .ok)
 
         let alertIds = vm.snapshot?.alerts.map(\.id) ?? []
         let challengeIds = vm.snapshot?.lobbyOpenChallenges.map(\.id) ?? []
         let emergenceIds = vm.snapshot?.knowledgeEmergence?.clusters.map(\.id) ?? []
+        let streamIds = vm.snapshot?.stream?.events.map(\.id) ?? []
+        let radarActivationIds = vm.snapshot?.radarActivations.map(\.id) ?? []
+        let radarCollisionIds = vm.snapshot?.radarCollisions.map(\.id) ?? []
+        let radarClusterIds = vm.snapshot?.radarClusters.map(\.id) ?? []
+        let radarSourceIds = vm.snapshot?.radarSources.map(\.id) ?? []
 
         #expect(alertIds == ["a-c", "a-a", "a-b"])
         #expect(challengeIds == ["c-c", "c-a", "c-b"])
         #expect(emergenceIds == ["k-a", "k-b"])
+        #expect(streamIds == ["ev-c", "ev-a", "ev-b"])
+        #expect(radarActivationIds == ["ra-c", "ra-a", "ra-b"])
+        #expect(radarCollisionIds == ["rc-c", "rc-a", "rc-b"])
+        #expect(radarClusterIds == ["architecture", "surface"])
+        #expect(radarSourceIds == ["github", "arxiv"])
     }
 }
 

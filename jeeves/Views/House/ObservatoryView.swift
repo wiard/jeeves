@@ -15,6 +15,8 @@ struct ObservatoryView: View {
                 lobbySection
                 signalsSection
                 knowledgeSection
+                radarSection
+                discoverySection
                 alertsSection
             }
             .navigationTitle("Observatory")
@@ -143,6 +145,82 @@ struct ObservatoryView: View {
                     row("Top emergence count", "\(emergence.clusters.count)")
                 } else {
                     row("Top emergence count", "-")
+                }
+            }
+        }
+    }
+
+    private var radarSection: some View {
+        Section("Radar") {
+            if vm.status(for: .radar) == .unavailable {
+                unavailableRow
+            } else {
+                if let status = vm.snapshot?.radarStatus?.store {
+                    row("Activations", "\(status.activationCount)")
+                    row("Collisions", "\(status.collisionCount)")
+                    row("Emergence", "\(status.emergenceCount)")
+                } else {
+                    row("Activations", "-")
+                    row("Collisions", "-")
+                    row("Emergence", "-")
+                }
+
+                if let collector = vm.snapshot?.radarStatus?.collector {
+                    row("Collector", collector.isRunning ? "running" : "stopped")
+                    row("Last run", collector.lastRun ?? "-")
+                } else {
+                    row("Collector", "-")
+                    row("Last run", "-")
+                }
+
+                let clusters = vm.snapshot?.radarClusters ?? []
+                if clusters.isEmpty {
+                    row("Hot cluster", "-")
+                } else {
+                    ForEach(Array(clusters.prefix(3).enumerated()), id: \.element.id) { index, item in
+                        row("Hot cluster \(index + 1)", "\(item.label) · \(item.count)")
+                    }
+                }
+
+                let topSignals = vm.snapshot?.radarStatus?.store?.topSignals ?? []
+                if topSignals.isEmpty {
+                    row("Top signal", "-")
+                } else {
+                    ForEach(Array(topSignals.prefix(3).enumerated()), id: \.offset) { index, signal in
+                        row("Top signal \(index + 1)", "\(signal.source) · \(signal.title) · \(formatDouble(signal.residue))")
+                    }
+                }
+            }
+        }
+    }
+
+    private var discoverySection: some View {
+        Section("Discovery") {
+            if vm.status(for: .discovery) == .unavailable {
+                unavailableRow
+            } else {
+                let stream = vm.snapshot?.stream
+                row("Pending stream proposals", "\(stream?.pendingCount ?? 0)")
+                row("Radar emergence", "\(vm.snapshot?.radarEmergence.count ?? 0)")
+                row("Radar collisions", "\(vm.snapshot?.radarCollisions.count ?? 0)")
+
+                let activations = vm.snapshot?.radarActivations ?? []
+                if activations.isEmpty {
+                    row("Activation", "-")
+                } else {
+                    ForEach(Array(activations.prefix(3).enumerated()), id: \.element.id) { index, activation in
+                        row("Activation \(index + 1)", "\(activation.source) · \(activation.title) · \(formatDouble(activation.residue))")
+                    }
+                }
+
+                let events = stream?.events ?? []
+                if events.isEmpty {
+                    row("Event", "-")
+                } else {
+                    ForEach(Array(events.prefix(8).enumerated()), id: \.element.id) { index, event in
+                        let descriptor = event.event ?? event.proposalId ?? event.title ?? "-"
+                        row("Event \(index + 1)", "\(event.type) · \(descriptor) · \(event.timestampIso ?? "-")")
+                    }
                 }
             }
         }
