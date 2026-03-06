@@ -58,24 +58,17 @@ final class ProposalPoller {
             return
         }
 
-        guard gateway.isConnected else {
+        let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
+        guard let token = resolvedEndpoint.token, !token.isEmpty else {
             #if DEBUG
-            print("[Jeeves][ProposalPoller] refresh skipped: gateway not connected host=\(gateway.host) port=\(gateway.port)")
+            print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
             #endif
             return
         }
 
-        let token = resolveToken(gateway: gateway)
-        guard let token, !token.isEmpty else {
-            #if DEBUG
-            print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(gateway.host) port=\(gateway.port)")
-            #endif
-            return
-        }
-
-        let client = GatewayClient(host: gateway.host, port: gateway.port, token: token)
+        let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
         #if DEBUG
-        print("[Jeeves][ProposalPoller] refresh start host=\(gateway.host) port=\(gateway.port) auth=true")
+        print("[Jeeves][ProposalPoller] refresh start host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port) auth=true connected=\(gateway.isConnected)")
         #endif
 
         do {
@@ -181,18 +174,65 @@ final class ProposalPoller {
         }
     }
 
-    private func resolveToken(gateway: GatewayManager) -> String? {
+    private struct ResolvedEndpoint {
+        let host: String
+        let port: Int
+        let token: String?
+    }
+
+    private func resolveGatewayEndpoint(gateway: GatewayManager) async -> ResolvedEndpoint {
+        var host = gateway.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if host.isEmpty {
+            host = RuntimeConfig.shared.host?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "localhost"
+        }
+
+        var port = gateway.port > 0 ? gateway.port : 19001
+        if let runtimePort = RuntimeConfig.shared.port, runtimePort > 0 {
+            port = runtimePort
+        }
+
+        let initialToken = resolveToken(host: host, port: port, gateway: gateway)
+        if host == "localhost" || host == "127.0.0.1" {
+            let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
+            let discovery = await gateway.resolveLocalDevelopmentGateway(
+                host: host,
+                preferredPort: port,
+                preferredToken: initialToken,
+                allowPortFallback: !hasRuntimePortOverride
+            )
+            let discoveredToken = discovery.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ResolvedEndpoint(
+                host: discovery.host,
+                port: discovery.port,
+                token: (discoveredToken?.isEmpty == false) ? discoveredToken : initialToken
+            )
+        }
+
+        return ResolvedEndpoint(host: host, port: port, token: initialToken)
+    }
+
+    private func resolveToken(host: String, port: Int, gateway: GatewayManager) -> String? {
         if let runtimeToken = RuntimeConfig.shared.token?.trimmingCharacters(in: .whitespacesAndNewlines),
            !runtimeToken.isEmpty {
             return runtimeToken
         }
         if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !gatewayToken.isEmpty {
+            !gatewayToken.isEmpty {
             return gatewayToken
         }
-        if let stored = KeychainHelper.load(for: "\(gateway.host):\(gateway.port)"),
+        if let stored = KeychainHelper.load(for: "\(host):\(port)"),
            !stored.isEmpty {
             return stored
+        }
+        if host == "localhost" || host == "127.0.0.1" {
+            for loopbackHost in ["localhost", "127.0.0.1"] {
+                for candidatePort in GatewayManager.localDiscoveryPorts {
+                    if let candidate = KeychainHelper.load(for: "\(loopbackHost):\(candidatePort)"),
+                       !candidate.isEmpty {
+                        return candidate
+                    }
+                }
+            }
         }
         return nil
     }
@@ -203,9 +243,10 @@ final class ProposalPoller {
             return true
         }
 
-        guard let token = gateway.token else { return false }
+        let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
+        guard let token = resolvedEndpoint.token, !token.isEmpty else { return false }
 
-        let client = GatewayClient(host: gateway.host, port: gateway.port, token: token)
+        let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
 
         do {
             let response = try await client.decideProposal(proposalId: proposalId, decision: decision, reason: reason)
@@ -227,10 +268,15 @@ final class ProposalPoller {
             return
         }
 
-        guard let token = gateway.token else { return }
+        let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
+        guard let token = resolvedEndpoint.token, !token.isEmpty else { return }
 
         isSeeding = true
-        let didSeed = await DemoSeed.seedIfNeeded(host: gateway.host, port: gateway.port, token: token)
+        let didSeed = await DemoSeed.seedIfNeeded(
+            host: resolvedEndpoint.host,
+            port: resolvedEndpoint.port,
+            token: token
+        )
         isSeeding = false
 
         if didSeed {

@@ -57,9 +57,10 @@ final class ObservatoryViewModel: ObservableObject {
             return
         }
 
-        let resolvedHost = resolveHost(gateway: gateway, connection: connection)
-        let resolvedPort = resolvePort(gateway: gateway, connection: connection)
-        let resolvedToken = resolveToken(host: resolvedHost, port: resolvedPort, gateway: gateway)
+        let endpoint = await resolveGatewayEndpoint(gateway: gateway, connection: connection)
+        let resolvedHost = endpoint.host
+        let resolvedPort = endpoint.port
+        let resolvedToken = endpoint.token
 
         #if DEBUG
         print("[Jeeves][ObservatoryVM] refresh host=\(resolvedHost) port=\(resolvedPort) token=\((resolvedToken?.isEmpty == false) ? "present" : "missing")")
@@ -231,6 +232,36 @@ final class ObservatoryViewModel: ObservableObject {
         #endif
 
         isLoading = false
+    }
+
+    private struct ResolvedEndpoint {
+        let host: String
+        let port: Int
+        let token: String?
+    }
+
+    private func resolveGatewayEndpoint(gateway: GatewayManager, connection: GatewayConnection?) async -> ResolvedEndpoint {
+        let baseHost = resolveHost(gateway: gateway, connection: connection)
+        let basePort = resolvePort(gateway: gateway, connection: connection)
+        let baseToken = resolveToken(host: baseHost, port: basePort, gateway: gateway)
+
+        if Self.loopbackHosts.contains(baseHost.lowercased()) {
+            let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
+            let discovery = await gateway.resolveLocalDevelopmentGateway(
+                host: baseHost,
+                preferredPort: basePort,
+                preferredToken: baseToken,
+                allowPortFallback: !hasRuntimePortOverride
+            )
+            let discoveredToken = discovery.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ResolvedEndpoint(
+                host: discovery.host,
+                port: discovery.port,
+                token: (discoveredToken?.isEmpty == false) ? discoveredToken : baseToken
+            )
+        }
+
+        return ResolvedEndpoint(host: baseHost, port: basePort, token: baseToken)
     }
 
     nonisolated static func sortAlerts(_ alerts: [ObservatoryAlert]) -> [ObservatoryAlert] {
