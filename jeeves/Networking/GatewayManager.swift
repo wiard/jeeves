@@ -7,6 +7,7 @@ final class GatewayManager {
     private static let localDefaultPort = 19001
     static let localDiscoveryPorts: [Int] = [19001, 19002, 19003, 19004, 19005]
     private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
+    private static let localGatewayDiscoveryFile = ".openclashd/gateway.json"
 
     enum ConnectionState {
         case disconnected
@@ -42,6 +43,25 @@ final class GatewayManager {
         let port: Int
         let token: String?
         let isHealthy: Bool
+    }
+
+    private struct GatewayEndpoint: Hashable, Sendable {
+        let host: String
+        let port: Int
+    }
+
+    private struct LocalGatewayDiscoveryRecord: Decodable {
+        let baseURL: String?
+        let host: String?
+        let port: Int?
+        let healthPath: String?
+
+        enum CodingKeys: String, CodingKey {
+            case baseURL = "base_url"
+            case host
+            case port
+            case healthPath = "health_path"
+        }
     }
 
     func onMessage(_ handler: @escaping (IncomingMessage) -> Void) {
@@ -86,7 +106,8 @@ final class GatewayManager {
                     Self.loopbackHosts.contains(normalizedLowerHost)
                     ? Self.localDiscoveryPorts
                         .map { KeychainHelper.load(for: "\(resolvedHost):\($0)") }
-                        .first(where: { ($0 ?? "").isEmpty == false }) ?? nil
+                        .first(where: { ($0 ?? "").isEmpty == false })
+                        ?? loadDiscoveredGatewayToken()
                     : nil
                 )
             )
@@ -136,11 +157,19 @@ final class GatewayManager {
             )
         }
 
-        let ports: [Int] = {
-            var ordered: [Int] = [normalizedPreferredPort]
+        let endpoints: [GatewayEndpoint] = {
+            var ordered: [GatewayEndpoint] = [
+                GatewayEndpoint(host: normalizedHost, port: normalizedPreferredPort)
+            ]
+            if allowPortFallback, let discovered = loadLocalGatewayDiscoveryEndpoint(), !ordered.contains(discovered) {
+                ordered.append(discovered)
+            }
             if allowPortFallback {
-                for port in Self.localDiscoveryPorts where !ordered.contains(port) {
-                    ordered.append(port)
+                for port in Self.localDiscoveryPorts {
+                    let candidate = GatewayEndpoint(host: normalizedHost, port: port)
+                    if !ordered.contains(candidate) {
+                        ordered.append(candidate)
+                    }
                 }
             }
             return ordered
@@ -150,8 +179,8 @@ final class GatewayManager {
         if let normalizedPreferredToken, !normalizedPreferredToken.isEmpty {
             tokenCandidates.append(normalizedPreferredToken)
         }
-        for port in ports {
-            if let token = KeychainHelper.load(for: "\(normalizedHost):\(port)"),
+        for endpoint in endpoints {
+            if let token = KeychainHelper.load(for: "\(endpoint.host):\(endpoint.port)"),
                !token.isEmpty,
                !tokenCandidates.contains(token) {
                 tokenCandidates.append(token)
@@ -163,32 +192,33 @@ final class GatewayManager {
             tokenCandidates.append(activeToken)
         }
 
-        var firstHealthyWithoutTokenPort: Int?
+        var firstHealthyWithoutTokenEndpoint: GatewayEndpoint?
 
-        for port in ports {
+        for endpoint in endpoints {
             for candidateToken in tokenCandidates {
-                let status = await probeConductorHealth(host: normalizedHost, port: port, token: candidateToken)
+                let status = await probeConductorHealth(host: endpoint.host, port: endpoint.port, token: candidateToken)
                 if status == .healthy {
                     return LocalGatewayResolution(
-                        host: normalizedHost,
-                        port: port,
+                        host: endpoint.host,
+                        port: endpoint.port,
                         token: candidateToken,
                         isHealthy: true
                     )
                 }
             }
 
-            let unauthStatus = await probeConductorHealth(host: normalizedHost, port: port, token: nil)
+            let unauthStatus = await probeConductorHealth(host: endpoint.host, port: endpoint.port, token: nil)
             if unauthStatus == .unauthorized || unauthStatus == .healthy {
-                firstHealthyWithoutTokenPort = firstHealthyWithoutTokenPort ?? port
+                firstHealthyWithoutTokenEndpoint = firstHealthyWithoutTokenEndpoint ?? endpoint
             }
         }
 
+        let fallbackEndpoint = firstHealthyWithoutTokenEndpoint ?? endpoints.first ?? GatewayEndpoint(host: normalizedHost, port: normalizedPreferredPort)
         return LocalGatewayResolution(
-            host: normalizedHost,
-            port: firstHealthyWithoutTokenPort ?? normalizedPreferredPort,
+            host: fallbackEndpoint.host,
+            port: fallbackEndpoint.port,
             token: normalizedPreferredToken,
-            isHealthy: firstHealthyWithoutTokenPort != nil
+            isHealthy: firstHealthyWithoutTokenEndpoint != nil
         )
     }
 
@@ -415,6 +445,10 @@ final class GatewayManager {
                     return candidate
                 }
             }
+            if let discoveredToken = loadDiscoveredGatewayToken(), !discoveredToken.isEmpty {
+                self.token = discoveredToken
+                return discoveredToken
+            }
         }
 
         throw NSError(domain: "Gateway", code: 401, userInfo: [NSLocalizedDescriptionKey: "Missing token"])
@@ -456,6 +490,92 @@ final class GatewayManager {
         } catch {
             return .unavailable
         }
+    }
+
+    private func loadDiscoveredGatewayToken() -> String? {
+        guard let endpoint = loadLocalGatewayDiscoveryEndpoint() else { return nil }
+        let key = "\(endpoint.host):\(endpoint.port)"
+        guard let token = KeychainHelper.load(for: key), !token.isEmpty else { return nil }
+        return token
+    }
+
+    private func loadLocalGatewayDiscoveryEndpoint() -> GatewayEndpoint? {
+        let fm = FileManager.default
+        for path in localGatewayDiscoveryPaths() {
+            guard fm.fileExists(atPath: path) else { continue }
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { continue }
+            guard let record = try? JSONDecoder().decode(LocalGatewayDiscoveryRecord.self, from: data) else { continue }
+            if let endpoint = gatewayEndpoint(from: record) {
+                return endpoint
+            }
+        }
+        return nil
+    }
+
+    private func gatewayEndpoint(from record: LocalGatewayDiscoveryRecord) -> GatewayEndpoint? {
+        let baseURL = (record.baseURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !baseURL.isEmpty,
+           let components = URLComponents(string: baseURL),
+           let host = components.host,
+           let port = components.port,
+           port > 0 {
+            return GatewayEndpoint(host: host, port: port)
+        }
+
+        let fallbackHost = (record.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !fallbackHost.isEmpty, let fallbackPort = record.port, fallbackPort > 0 {
+            return GatewayEndpoint(host: fallbackHost, port: fallbackPort)
+        }
+        return nil
+    }
+
+    private func localGatewayDiscoveryPaths() -> [String] {
+        let env = ProcessInfo.processInfo.environment
+        var candidates: [String] = []
+
+        if let explicitPath = env["OPENCLASHD_GATEWAY_FILE"] {
+            let normalized = normalizeDiscoveryPath(explicitPath)
+            if !normalized.isEmpty {
+                candidates.append(normalized)
+            }
+        }
+
+        if let simulatorHostHome = env["SIMULATOR_HOST_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !simulatorHostHome.isEmpty {
+            let path = (simulatorHostHome as NSString).appendingPathComponent(Self.localGatewayDiscoveryFile)
+            candidates.append(path)
+        }
+
+        if let home = env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines), !home.isEmpty {
+            let path = (home as NSString).appendingPathComponent(Self.localGatewayDiscoveryFile)
+            candidates.append(path)
+        }
+
+        let tildePath = "~/" + Self.localGatewayDiscoveryFile
+        candidates.append((tildePath as NSString).expandingTildeInPath)
+
+        var unique: [String] = []
+        var seen = Set<String>()
+        for candidate in candidates {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || seen.contains(trimmed) {
+                continue
+            }
+            seen.insert(trimmed)
+            unique.append(trimmed)
+        }
+        return unique
+    }
+
+    private func normalizeDiscoveryPath(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return ""
+        }
+        if trimmed.hasPrefix("file://"), let url = URL(string: trimmed), url.isFileURL {
+            return url.path
+        }
+        return (trimmed as NSString).expandingTildeInPath
     }
 
     private func handleIncoming(_ message: IncomingMessage) {
