@@ -100,6 +100,8 @@ struct StreamView: View {
             && poller.radarActivations.isEmpty
             && poller.radarClusters.isEmpty
             && poller.radarSources.isEmpty
+            && poller.radarGravityHotspots.isEmpty
+            && poller.radarDiscoveryCandidates.isEmpty
             && radarCounts == 0
     }
 

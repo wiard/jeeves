@@ -88,6 +88,8 @@ final class ObservatoryViewModel: ObservableObject {
         var radarClusters: [RadarClusterSummary] = []
         var radarSources: [RadarSourceStats] = []
 
+        var radarGravity: [RadarGravityHotspot] = []
+        var radarDiscoveries: [RadarDiscoveryCandidate] = []
         var hasConductor = false
         var hasAlerts = false
         var hasFabric = false
@@ -179,6 +181,20 @@ final class ObservatoryViewModel: ObservableObject {
             radarSources = try await ObservatoryAPI.radarSources(host: resolvedHost, port: resolvedPort, token: token)
             hasRadar = true
         } catch {}
+        do {
+            radarGravity = try await ObservatoryAPI.radarGravity(host: resolvedHost, port: resolvedPort, token: token)
+            hasRadar = true
+            hasDiscovery = true
+        } catch {}
+
+        do {
+            radarDiscoveries = try await ObservatoryAPI.radarDiscoveries(host: resolvedHost, port: resolvedPort, token: token)
+            hasRadar = true
+            hasDiscovery = true
+        } catch {}
+
+        let sortedRadarGravity = Self.sortRadarGravity(radarGravity)
+        let sortedRadarDiscoveries = Self.sortRadarDiscoveries(radarDiscoveries)
 
         let sortedAlerts = Self.sortAlerts(alerts)
         let sortedChallenges = Self.sortChallenges(challenges)
@@ -208,6 +224,8 @@ final class ObservatoryViewModel: ObservableObject {
             radarEmergence: sortedRadarEmergence,
             radarClusters: sortedRadarClusters,
             radarSources: sortedRadarSources,
+            radarGravityHotspots: sortedRadarGravity,
+            radarDiscoveryCandidates: sortedRadarDiscoveries,
             fetchedAt: Date()
         )
 
@@ -225,7 +243,9 @@ final class ObservatoryViewModel: ObservableObject {
         let radarActivationCount = snapshot?.radarStatus?.store?.activationCount ?? snapshot?.radarActivations.count ?? 0
         let radarCollisionCount = snapshot?.radarStatus?.store?.collisionCount ?? snapshot?.radarCollisions.count ?? 0
         let runtimeSignals = snapshot?.signalsRuntime?.totalSignals ?? 0
-        print("[Jeeves][ObservatoryVM] refresh result stream=\(streamCount) radarActivations=\(radarActivationCount) radarCollisions=\(radarCollisionCount) runtimeSignals=\(runtimeSignals)")
+        let gravityCount = snapshot?.radarGravityHotspots.count ?? 0
+        let discoveryCount = snapshot?.radarDiscoveryCandidates.count ?? 0
+        print("[Jeeves][ObservatoryVM] refresh result stream=\(streamCount) radarActivations=\(radarActivationCount) radarCollisions=\(radarCollisionCount) gravity=\(gravityCount) discoveries=\(discoveryCount) runtimeSignals=\(runtimeSignals)")
         #endif
 
         isLoading = false
@@ -351,6 +371,30 @@ final class ObservatoryViewModel: ObservableObject {
             return lhs.source < rhs.source
         }
     }
+    nonisolated static func sortRadarGravity(_ hotspots: [RadarGravityHotspot]) -> [RadarGravityHotspot] {
+        hotspots.sorted { lhs, rhs in
+            if lhs.gravityScore != rhs.gravityScore {
+                return lhs.gravityScore > rhs.gravityScore
+            }
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    nonisolated static func sortRadarDiscoveries(_ candidates: [RadarDiscoveryCandidate]) -> [RadarDiscoveryCandidate] {
+        candidates.sorted { lhs, rhs in
+            if lhs.candidateScore != rhs.candidateScore {
+                return lhs.candidateScore > rhs.candidateScore
+            }
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
 
     private func resolveHost(gateway: GatewayManager, connection: GatewayConnection?) -> String {
         let runtimeHost = RuntimeConfig.shared.host?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -515,6 +559,28 @@ final class ObservatoryViewModel: ObservableObject {
                         summary: "runtime emergence pressure",
                         escalatesToIphone: true
                     )
+                ],
+                gravityHotspots: [
+                    RadarGravityHotspot(
+                        cell: 14,
+                        axes: RadarAxes(what: "architecture", whereValue: "engine", time: "current"),
+                        gravityScore: 7.40,
+                        band: "red",
+                        rank: 1,
+                        contributors: ["collision(2)", "external_research(1)"],
+                        explanation: "paper-derived hotspot in coordination core"
+                    )
+                ],
+                discoveryCandidates: [
+                    RadarDiscoveryCandidate(
+                        candidateId: "demo-disc-14",
+                        candidateType: "paper_signal_hotspot",
+                        candidateScore: 3.33,
+                        rank: 1,
+                        crossDomain: false,
+                        sources: ["external_research(1)"],
+                        explanation: "candidate from repeated paper signal pressure"
+                    )
                 ]
             ),
             stream: ObservatoryStreamFeed(
@@ -603,6 +669,28 @@ final class ObservatoryViewModel: ObservableObject {
                     signalCount: 6,
                     avgResidue: 0.44,
                     lastFetch: ISO8601DateFormatter().string(from: Date())
+                )
+            ],
+            radarGravityHotspots: [
+                RadarGravityHotspot(
+                    cell: 14,
+                    axes: RadarAxes(what: "architecture", whereValue: "engine", time: "current"),
+                    gravityScore: 7.40,
+                    band: "red",
+                    rank: 1,
+                    contributors: ["collision(2)", "external_research(1)"],
+                    explanation: "paper-derived hotspot in coordination core"
+                )
+            ],
+            radarDiscoveryCandidates: [
+                RadarDiscoveryCandidate(
+                    candidateId: "demo-disc-14",
+                    candidateType: "paper_signal_hotspot",
+                    candidateScore: 3.33,
+                    rank: 1,
+                    crossDomain: false,
+                    sources: ["external_research(1)"],
+                    explanation: "candidate from repeated paper signal pressure"
                 )
             ],
             fetchedAt: Date()

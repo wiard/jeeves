@@ -257,6 +257,24 @@ struct ObservatoryView: View {
                     }
                 }
 
+                let hotspots = vm.snapshot?.radarGravityHotspots ?? []
+                if hotspots.isEmpty {
+                    row("Gravity hotspot", "-")
+                } else {
+                    ForEach(Array(hotspots.prefix(3).enumerated()), id: \.element.id) { index, hotspot in
+                        row("Gravity hotspot \(index + 1)", "cell \(hotspot.cell) · \(formatDouble(hotspot.gravityScore)) · \(hotspot.band)")
+                    }
+                }
+
+                let candidates = vm.snapshot?.radarDiscoveryCandidates ?? []
+                if candidates.isEmpty {
+                    row("Discovery candidate", "-")
+                } else {
+                    ForEach(Array(candidates.prefix(3).enumerated()), id: \.element.id) { index, candidate in
+                        row("Discovery candidate \(index + 1)", "\(candidate.candidateType) · \(formatDouble(candidate.candidateScore)) · rank \(candidate.rank)")
+                    }
+                }
+
                 let events = stream?.events ?? []
                 if events.isEmpty {
                     row("Event", "-")

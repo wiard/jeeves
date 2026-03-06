@@ -263,6 +263,33 @@ enum ObservatoryAPI {
         return []
     }
 
+    static func radarGravity(host: String, port: Int, token: String) async throws -> [RadarGravityHotspot] {
+        let data = try await get(host: host, port: port, token: token, path: "/api/radar/gravity")
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode([RadarGravityHotspot].self, from: data) {
+            return direct
+        }
+        if let wrapped = try? decoder.decode(RadarGravityEnvelope.self, from: data) {
+            return wrapped.hotspots ?? wrapped.items ?? wrapped.data ?? []
+        }
+
+        return []
+    }
+
+    static func radarDiscoveries(host: String, port: Int, token: String) async throws -> [RadarDiscoveryCandidate] {
+        let data = try await get(host: host, port: port, token: token, path: "/api/radar/discoveries")
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode([RadarDiscoveryCandidate].self, from: data) {
+            return direct
+        }
+        if let wrapped = try? decoder.decode(RadarDiscoveriesEnvelope.self, from: data) {
+            return wrapped.candidates ?? wrapped.items ?? wrapped.data ?? []
+        }
+
+        return []
+    }
     private static func get(
         host: String,
         port: Int,
@@ -422,4 +449,16 @@ private struct RadarSourcesEnvelope: Decodable {
     let sources: [RadarSourceStats]?
     let items: [RadarSourceStats]?
     let data: [RadarSourceStats]?
+}
+
+private struct RadarGravityEnvelope: Decodable {
+    let hotspots: [RadarGravityHotspot]?
+    let items: [RadarGravityHotspot]?
+    let data: [RadarGravityHotspot]?
+}
+
+private struct RadarDiscoveriesEnvelope: Decodable {
+    let candidates: [RadarDiscoveryCandidate]?
+    let items: [RadarDiscoveryCandidate]?
+    let data: [RadarDiscoveryCandidate]?
 }

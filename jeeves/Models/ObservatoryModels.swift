@@ -88,6 +88,8 @@ struct ObservatoryDashboardSnapshot: Sendable {
     let radarEmergence: [RadarCollision]
     let radarClusters: [RadarClusterSummary]
     let radarSources: [RadarSourceStats]
+    let radarGravityHotspots: [RadarGravityHotspot]
+    let radarDiscoveryCandidates: [RadarDiscoveryCandidate]
     let fetchedAt: Date
 }
 
@@ -276,6 +278,8 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
     let lastSignals: [SignalsRuntimeSignal]
     let lastChallenges: [SignalsRuntimeChallenge]
     let emergenceClusters: [SignalsRuntimeEmergenceCluster]
+    let gravityHotspots: [RadarGravityHotspot]
+    let discoveryCandidates: [RadarDiscoveryCandidate]
 
     private enum CodingKeys: String, CodingKey {
         case started
@@ -288,6 +292,8 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         case lastSignals
         case lastChallenges
         case emergenceClusters
+        case gravityHotspots
+        case discoveryCandidates
     }
 
     init(
@@ -300,7 +306,9 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         lastError: String?,
         lastSignals: [SignalsRuntimeSignal],
         lastChallenges: [SignalsRuntimeChallenge],
-        emergenceClusters: [SignalsRuntimeEmergenceCluster]
+        emergenceClusters: [SignalsRuntimeEmergenceCluster],
+        gravityHotspots: [RadarGravityHotspot],
+        discoveryCandidates: [RadarDiscoveryCandidate]
     ) {
         self.started = started
         self.startedAtIso = startedAtIso
@@ -312,6 +320,8 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         self.lastSignals = lastSignals
         self.lastChallenges = lastChallenges
         self.emergenceClusters = emergenceClusters
+        self.gravityHotspots = gravityHotspots
+        self.discoveryCandidates = discoveryCandidates
     }
 
     init(from decoder: Decoder) throws {
@@ -326,6 +336,8 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         lastSignals = try c.decodeIfPresent([SignalsRuntimeSignal].self, forKey: .lastSignals) ?? []
         lastChallenges = try c.decodeIfPresent([SignalsRuntimeChallenge].self, forKey: .lastChallenges) ?? []
         emergenceClusters = try c.decodeIfPresent([SignalsRuntimeEmergenceCluster].self, forKey: .emergenceClusters) ?? []
+        gravityHotspots = try c.decodeIfPresent([RadarGravityHotspot].self, forKey: .gravityHotspots) ?? []
+        discoveryCandidates = try c.decodeIfPresent([RadarDiscoveryCandidate].self, forKey: .discoveryCandidates) ?? []
     }
 }
 
@@ -1126,6 +1138,126 @@ struct RadarSourceStats: Decodable, Sendable, Identifiable {
         signalCount = try c.decodeIfPresent(Int.self, forKey: .signalCount) ?? 0
         avgResidue = try c.decodeIfPresent(Double.self, forKey: .avgResidue) ?? 0
         lastFetch = try c.decodeIfPresent(String.self, forKey: .lastFetch)
+    }
+}
+
+struct RadarGravityHotspot: Decodable, Sendable, Identifiable {
+    let cell: Int
+    let axes: RadarAxes
+    let gravityScore: Double
+    let band: String
+    let rank: Int
+    let contributors: [String]
+    let explanation: String
+
+    var id: String { "\(cell)-\(rank)" }
+
+    private enum CodingKeys: String, CodingKey {
+        case cell
+        case axes
+        case gravityScore
+        case band
+        case rank
+        case contributors
+        case explanation
+    }
+
+    init(
+        cell: Int,
+        axes: RadarAxes,
+        gravityScore: Double,
+        band: String,
+        rank: Int,
+        contributors: [String],
+        explanation: String
+    ) {
+        self.cell = cell
+        self.axes = axes
+        self.gravityScore = gravityScore
+        self.band = band
+        self.rank = rank
+        self.contributors = contributors
+        self.explanation = explanation
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cell = try c.decodeIfPresent(Int.self, forKey: .cell) ?? 0
+        axes = try c.decodeIfPresent(RadarAxes.self, forKey: .axes) ?? RadarAxes(what: "trust-model", whereValue: "internal", time: "historical")
+        gravityScore = try c.decodeIfPresent(Double.self, forKey: .gravityScore) ?? 0
+        band = try c.decodeIfPresent(String.self, forKey: .band) ?? "blue"
+        rank = try c.decodeIfPresent(Int.self, forKey: .rank) ?? 0
+        contributors = try c.decodeIfPresent([String].self, forKey: .contributors) ?? []
+        explanation = try c.decodeIfPresent(String.self, forKey: .explanation) ?? ""
+    }
+}
+
+struct RadarDiscoveryCandidate: Decodable, Sendable, Identifiable {
+    let candidateId: String
+    let candidateType: String
+    let candidateScore: Double
+    let rank: Int
+    let crossDomain: Bool
+    let sources: [String]
+    let explanation: String
+
+    var id: String { candidateId }
+
+    private enum CodingKeys: String, CodingKey {
+        case candidateId
+        case candidateType
+        case candidateScore
+        case rank
+        case crossDomain
+        case sources
+        case explanation
+    }
+
+    init(
+        candidateId: String,
+        candidateType: String,
+        candidateScore: Double,
+        rank: Int,
+        crossDomain: Bool,
+        sources: [String],
+        explanation: String
+    ) {
+        self.candidateId = candidateId
+        self.candidateType = candidateType
+        self.candidateScore = candidateScore
+        self.rank = rank
+        self.crossDomain = crossDomain
+        self.sources = sources
+        self.explanation = explanation
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        candidateId = try c.decodeIfPresent(String.self, forKey: .candidateId) ?? UUID().uuidString
+        candidateType = try c.decodeIfPresent(String.self, forKey: .candidateType) ?? "unknown"
+        candidateScore = try c.decodeIfPresent(Double.self, forKey: .candidateScore) ?? 0
+        rank = try c.decodeIfPresent(Int.self, forKey: .rank) ?? 0
+        crossDomain = try c.decodeIfPresent(Bool.self, forKey: .crossDomain) ?? false
+        sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
+        explanation = try c.decodeIfPresent(String.self, forKey: .explanation) ?? ""
+    }
+}
+
+struct RadarAxes: Decodable, Sendable {
+    let what: String
+    let whereValue: String
+    let time: String
+
+    private enum CodingKeys: String, CodingKey {
+        case what
+        case whereValue = "where"
+        case time
+    }
+
+    init(what: String, whereValue: String, time: String) {
+        self.what = what
+        self.whereValue = whereValue
+        self.time = time
     }
 }
 

@@ -190,6 +190,26 @@ actor GatewayClient {
         return []
     }
 
+
+    func fetchRadarGravity() async throws -> [RadarGravityHotspot] {
+        if let direct: [RadarGravityHotspot] = try? await get("/api/radar/gravity") {
+            return direct
+        }
+        if let wrapped: RadarGravityEnvelope = try? await get("/api/radar/gravity") {
+            return wrapped.hotspots ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
+
+    func fetchRadarDiscoveries() async throws -> [RadarDiscoveryCandidate] {
+        if let direct: [RadarDiscoveryCandidate] = try? await get("/api/radar/discoveries") {
+            return direct
+        }
+        if let wrapped: RadarDiscoveriesEnvelope = try? await get("/api/radar/discoveries") {
+            return wrapped.candidates ?? wrapped.items ?? wrapped.data ?? []
+        }
+        return []
+    }
     func fetchSignalsRuntime() async throws -> SignalsRuntimeSnapshot {
         let path = "/api/signals/state"
         let (data, _) = try await request(path: path, method: "GET")
@@ -938,6 +958,18 @@ private struct RadarSourcesEnvelope: Decodable {
     let sources: [RadarSourceStats]?
     let items: [RadarSourceStats]?
     let data: [RadarSourceStats]?
+}
+
+private struct RadarGravityEnvelope: Decodable {
+    let hotspots: [RadarGravityHotspot]?
+    let items: [RadarGravityHotspot]?
+    let data: [RadarGravityHotspot]?
+}
+
+private struct RadarDiscoveriesEnvelope: Decodable {
+    let candidates: [RadarDiscoveryCandidate]?
+    let items: [RadarDiscoveryCandidate]?
+    let data: [RadarDiscoveryCandidate]?
 }
 
 private struct SignalsRuntimeEnvelope: Decodable {

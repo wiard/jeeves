@@ -20,6 +20,8 @@ final class ProposalPoller {
     var radarEmergence: [RadarCollision] = []
     var radarClusters: [RadarClusterSummary] = []
     var radarSources: [RadarSourceStats] = []
+    var radarGravityHotspots: [RadarGravityHotspot] = []
+    var radarDiscoveryCandidates: [RadarDiscoveryCandidate] = []
 
     var observatorySnapshot: ObservatorySnapshot = .empty
     var activeEmergenceAlert: EmergenceAlert?
@@ -107,6 +109,8 @@ final class ProposalPoller {
             async let emergenceTask = client.fetchRadarEmergence()
             async let clustersTask = client.fetchRadarClusters()
             async let sourcesTask = client.fetchRadarSources()
+            async let gravityTask = client.fetchRadarGravity()
+            async let discoveriesTask = client.fetchRadarDiscoveries()
 
             do {
                 let stream = try await streamTask
@@ -150,12 +154,26 @@ final class ProposalPoller {
             if let sources = try? await sourcesTask {
                 radarSources = Self.sortRadarSources(sources)
             }
+            if let hotspots = try? await gravityTask {
+                radarGravityHotspots = Self.sortRadarGravity(hotspots)
+            }
+            if let discoveries = try? await discoveriesTask {
+                radarDiscoveryCandidates = Self.sortRadarDiscoveries(discoveries)
+            }
         } catch {}
+        let derivedRadarEvents = Self.radarDerivedStreamEvents(
+            activations: radarActivations,
+            emergence: radarEmergence,
+            hotspots: radarGravityHotspots,
+            discoveries: radarDiscoveryCandidates,
+            runtimeSummary: radarStatus?.collector?.lastRun
+        )
+        streamEventsFromApi = Self.mergeStreamEvents(primary: streamEventsFromApi, secondary: derivedRadarEvents)
         streamEvents = Self.sortStreamEvents(streamEventsFromApi)
         lastRefreshError = nil
         hasLoadedOnce = true
         #if DEBUG
-        print("[Jeeves][ProposalPoller] stream events=\(streamEvents.count) activations=\(radarActivations.count) collisions=\(radarCollisions.count) emergence=\(radarEmergence.count)")
+        print("[Jeeves][ProposalPoller] stream events=\(streamEvents.count) activations=\(radarActivations.count) collisions=\(radarCollisions.count) emergence=\(radarEmergence.count) gravity=\(radarGravityHotspots.count) discoveries=\(radarDiscoveryCandidates.count)")
         #endif
 
         do {
@@ -372,6 +390,16 @@ final class ProposalPoller {
         radarEmergence = radarCollisions.filter(\.isEmergence)
         radarClusters = Self.demoRadarClusters(tick: demoTick)
         radarSources = Self.demoRadarSources(tick: demoTick)
+        radarGravityHotspots = Self.demoRadarGravityHotspots(tick: demoTick)
+        radarDiscoveryCandidates = Self.demoRadarDiscoveryCandidates(tick: demoTick)
+        let derivedEvents = Self.radarDerivedStreamEvents(
+            activations: radarActivations,
+            emergence: radarEmergence,
+            hotspots: radarGravityHotspots,
+            discoveries: radarDiscoveryCandidates,
+            runtimeSummary: ISO8601DateFormatter().string(from: Date())
+        )
+        streamEvents = Self.sortStreamEvents(Self.mergeStreamEvents(primary: streamEvents, secondary: derivedEvents))
 
         proposals = demoProposals(tick: demoTick)
         pendingProposals = proposals.filter(\.isPending)
@@ -515,6 +543,33 @@ final class ProposalPoller {
         }
     }
 
+    private static func sortRadarGravity(_ hotspots: [RadarGravityHotspot]) -> [RadarGravityHotspot] {
+        hotspots.sorted { lhs, rhs in
+            if lhs.gravityScore != rhs.gravityScore {
+                return lhs.gravityScore > rhs.gravityScore
+            }
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            if lhs.cell != rhs.cell {
+                return lhs.cell < rhs.cell
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    private static func sortRadarDiscoveries(_ discoveries: [RadarDiscoveryCandidate]) -> [RadarDiscoveryCandidate] {
+        discoveries.sorted { lhs, rhs in
+            if lhs.candidateScore != rhs.candidateScore {
+                return lhs.candidateScore > rhs.candidateScore
+            }
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.candidateId < rhs.candidateId
+        }
+    }
+
     private static func radarEmergenceToClusters(_ collisions: [RadarCollision]) -> [EmergenceCluster] {
         collisions
             .filter(\.isEmergence)
@@ -533,12 +588,15 @@ final class ProposalPoller {
         let signalEvents = runtime.lastSignals.map { signal in
             ObservatoryStreamEvent(
                 id: "runtime-signal-\(signal.signalId)",
-                type: "signal",
+                type: "signal_detected",
                 timestampIso: signal.detectedAtIso,
                 event: nil,
                 proposalId: nil,
                 agentId: signal.sourceId ?? "signals",
                 title: signal.summary ?? "signal",
+                summary: signal.summary,
+                signalId: signal.signalId,
+                sourceId: signal.sourceId,
                 decision: nil,
                 reason: nil,
                 risk: nil,
@@ -548,12 +606,17 @@ final class ProposalPoller {
         let challengeEvents = runtime.lastChallenges.map { challenge in
             ObservatoryStreamEvent(
                 id: "runtime-challenge-\(challenge.challengeId)",
-                type: "challenge",
+                type: "challenge_open",
                 timestampIso: challenge.createdAtIso,
                 event: challenge.status,
+                clusterId: nil,
                 proposalId: nil,
                 agentId: "signals",
                 title: challenge.title ?? "challenge",
+                summary: nil,
+                signalId: nil,
+                sourceId: nil,
+                challengeId: challenge.challengeId,
                 decision: nil,
                 reason: nil,
                 risk: nil,
@@ -563,9 +626,10 @@ final class ProposalPoller {
         let emergenceEvents = runtime.emergenceClusters.map { cluster in
             ObservatoryStreamEvent(
                 id: "runtime-emergence-\(cluster.clusterId)",
-                type: "emergence",
+                type: "emergence_cluster",
                 timestampIso: runtime.lastRunAtIso,
                 event: nil,
+                clusterId: cluster.clusterId,
                 proposalId: nil,
                 agentId: "signals",
                 title: cluster.summary ?? "emergence",
@@ -575,7 +639,109 @@ final class ProposalPoller {
                 peerId: "system"
             )
         }
-        return signalEvents + challengeEvents + emergenceEvents
+        let summaryEvent = ObservatoryStreamEvent(
+            id: "runtime-summary-\(runtime.lastRunAtIso ?? "none")",
+            type: "runtime_summary",
+            timestampIso: runtime.lastRunAtIso,
+            event: nil,
+            proposalId: nil,
+            agentId: "signals",
+            title: "Runtime cycle",
+            summary: "\(runtime.totalSignals) signals · \(runtime.lastChallenges.count) challenges",
+            decision: nil,
+            reason: runtime.lastError,
+            risk: nil,
+            peerId: "system"
+        )
+        return signalEvents + challengeEvents + emergenceEvents + [summaryEvent]
+    }
+
+    private static func radarDerivedStreamEvents(
+        activations: [RadarActivation],
+        emergence: [RadarCollision],
+        hotspots: [RadarGravityHotspot],
+        discoveries: [RadarDiscoveryCandidate],
+        runtimeSummary: String?
+    ) -> [ObservatoryStreamEvent] {
+        let fallbackTimestamp = runtimeSummary ?? ISO8601DateFormatter().string(from: Date())
+        let activationEvents = activations.map { activation in
+            ObservatoryStreamEvent(
+                id: "radar-activation-\(activation.id)",
+                type: "signal_detected",
+                timestampIso: activation.timestampIso ?? fallbackTimestamp,
+                event: nil,
+                proposalId: nil,
+                agentId: "radar",
+                title: activation.title,
+                summary: activation.summary,
+                signalId: activation.id,
+                sourceId: activation.source,
+                decision: nil,
+                reason: activation.clusters.isEmpty ? nil : activation.clusters.joined(separator: "/"),
+                risk: nil,
+                peerId: "radar"
+            )
+        }
+        let emergenceEvents = emergence.filter(\.isEmergence).map { collision in
+            ObservatoryStreamEvent(
+                id: "radar-emergence-\(collision.id)",
+                type: "emergence_cluster",
+                timestampIso: collision.detectedAtIso ?? fallbackTimestamp,
+                event: nil,
+                clusterId: collision.id,
+                proposalId: nil,
+                agentId: "radar",
+                title: collision.signalTitles.first ?? "Emergence cluster",
+                summary: collision.signalTitles.first,
+                decision: nil,
+                reason: collision.sources.joined(separator: "/"),
+                risk: nil,
+                peerId: "radar"
+            )
+        }
+        let hotspotEvents = hotspots.map { hotspot in
+            ObservatoryStreamEvent(
+                id: "radar-gravity-\(hotspot.cell)-\(hotspot.rank)",
+                type: "gravity_hotspot",
+                timestampIso: fallbackTimestamp,
+                event: nil,
+                proposalId: nil,
+                agentId: "radar",
+                title: "Gravity hotspot cell \(hotspot.cell)",
+                summary: hotspot.explanation,
+                decision: nil,
+                reason: nil,
+                risk: nil,
+                peerId: "radar",
+                explanation: hotspot.explanation,
+                gravityScore: hotspot.gravityScore,
+                band: hotspot.band,
+                rank: hotspot.rank
+            )
+        }
+        let discoveryEvents = discoveries.map { candidate in
+            ObservatoryStreamEvent(
+                id: "radar-discovery-\(candidate.candidateId)",
+                type: "discovery_candidate",
+                timestampIso: fallbackTimestamp,
+                event: nil,
+                proposalId: nil,
+                agentId: "radar",
+                title: candidate.candidateId,
+                summary: candidate.explanation,
+                decision: nil,
+                reason: candidate.sources.joined(separator: "/"),
+                risk: nil,
+                peerId: "radar",
+                explanation: candidate.explanation,
+                candidateScore: candidate.candidateScore,
+                candidateType: candidate.candidateType,
+                candidateId: candidate.candidateId,
+                crossDomain: candidate.crossDomain,
+                rank: candidate.rank
+            )
+        }
+        return activationEvents + emergenceEvents + hotspotEvents + discoveryEvents
     }
 
     private static func runtimeEmergenceToClusters(_ clusters: [SignalsRuntimeEmergenceCluster]) -> [EmergenceCluster] {
@@ -729,6 +895,52 @@ final class ProposalPoller {
                 signalCount: 4,
                 avgResidue: 0.38,
                 lastFetch: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-180))
+            )
+        ])
+    }
+
+    private static func demoRadarGravityHotspots(tick: Int) -> [RadarGravityHotspot] {
+        sortRadarGravity([
+            RadarGravityHotspot(
+                cell: 14,
+                axes: RadarAxes(what: "surface", whereValue: "external", time: "current"),
+                gravityScore: 24.0 + Double(tick % 5),
+                band: "red",
+                rank: 1,
+                contributors: ["openalex", "arxiv"],
+                explanation: "Paper pressure around cross-channel relay safety"
+            ),
+            RadarGravityHotspot(
+                cell: 23,
+                axes: RadarAxes(what: "architecture", whereValue: "external", time: "emerging"),
+                gravityScore: 18.4 + Double(tick % 3),
+                band: "yellow",
+                rank: 2,
+                contributors: ["github", "openalex"],
+                explanation: "Growing alignment on open research interoperability"
+            )
+        ])
+    }
+
+    private static func demoRadarDiscoveryCandidates(tick: Int) -> [RadarDiscoveryCandidate] {
+        sortRadarDiscoveries([
+            RadarDiscoveryCandidate(
+                candidateId: "disc-\(tick)-agents-consent",
+                candidateType: "research_hypothesis",
+                candidateScore: 0.89,
+                rank: 1,
+                crossDomain: true,
+                sources: ["openalex", "arxiv", "github"],
+                explanation: "Agent consent patterns converge with relay hardening proposals"
+            ),
+            RadarDiscoveryCandidate(
+                candidateId: "disc-\(tick)-utxo-audit",
+                candidateType: "knowledge_seed",
+                candidateScore: 0.76,
+                rank: 2,
+                crossDomain: false,
+                sources: ["arxiv", "openalex"],
+                explanation: "UTXO governance audit papers align with current signal drift"
             )
         ])
     }
