@@ -63,32 +63,40 @@ enum ObservatoryAPI {
     }
 
     static func signalsState(host: String, port: Int, token: String) async throws -> SignalsState {
+        let path = "/api/signals/state"
         let data = try await get(host: host, port: port, token: token, path: "/api/signals/state")
         let decoder = JSONDecoder()
 
         if let wrapped = try? decoder.decode(SignalsStateEnvelope.self, from: data),
            let value = wrapped.state ?? wrapped.signals ?? wrapped.data {
+            debugDecode(path: path, result: "wrapped state", itemCount: value.totalSignals ?? value.signalsToday)
             return value
         }
         if let direct = try? decoder.decode(SignalsState.self, from: data) {
+            debugDecode(path: path, result: "direct state", itemCount: direct.totalSignals ?? direct.signalsToday)
             return direct
         }
 
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
         throw URLError(.cannotParseResponse)
     }
 
     static func signalsRuntime(host: String, port: Int, token: String) async throws -> SignalsRuntimeSnapshot {
+        let path = "/api/signals/state"
         let data = try await get(host: host, port: port, token: token, path: "/api/signals/state")
         let decoder = JSONDecoder()
 
         if let wrapped = try? decoder.decode(SignalsRuntimeEnvelope.self, from: data),
            let value = wrapped.state ?? wrapped.signals ?? wrapped.data {
+            debugDecode(path: path, result: "wrapped runtime", itemCount: value.totalSignals)
             return value
         }
         if let direct = try? decoder.decode(SignalsRuntimeSnapshot.self, from: data) {
+            debugDecode(path: path, result: "direct runtime", itemCount: direct.totalSignals)
             return direct
         }
 
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
         throw URLError(.cannotParseResponse)
     }
 
@@ -127,6 +135,7 @@ enum ObservatoryAPI {
 
     static func observatoryStream(host: String, port: Int, token: String, limit: Int = 60) async throws -> ObservatoryStreamFeed {
         let boundedLimit = max(1, min(limit, 240))
+        let path = "/api/observatory/stream"
         let data = try await get(
             host: host,
             port: port,
@@ -137,34 +146,43 @@ enum ObservatoryAPI {
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(ObservatoryStreamFeed.self, from: data) {
+            debugDecode(path: path, result: "direct feed", itemCount: direct.events.count)
             return direct
         }
         if let wrapped = try? decoder.decode(ObservatoryStreamEnvelope.self, from: data) {
+            let events = wrapped.events ?? wrapped.items ?? wrapped.data ?? []
+            debugDecode(path: path, result: "wrapped feed", itemCount: events.count)
             return ObservatoryStreamFeed(
                 ok: wrapped.ok,
-                events: wrapped.events ?? wrapped.items ?? wrapped.data ?? [],
+                events: events,
                 pendingCount: wrapped.pendingCount ?? 0
             )
         }
         if let events = try? decoder.decode([ObservatoryStreamEvent].self, from: data) {
+            debugDecode(path: path, result: "direct events", itemCount: events.count)
             return ObservatoryStreamFeed(ok: true, events: events, pendingCount: 0)
         }
 
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
         throw URLError(.cannotParseResponse)
     }
 
     static func radarStatus(host: String, port: Int, token: String) async throws -> RadarStatusSnapshot {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/status")
+        let path = "/api/radar/status"
+        let data = try await get(host: host, port: port, token: token, path: path)
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(RadarStatusSnapshot.self, from: data) {
+            debugDecode(path: path, result: "direct status", itemCount: direct.store?.activationCount)
             return direct
         }
         if let wrapped = try? decoder.decode(RadarStatusEnvelope.self, from: data),
            let status = wrapped.status ?? wrapped.data {
+            debugDecode(path: path, result: "wrapped status", itemCount: status.store?.activationCount)
             return status
         }
 
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
         throw URLError(.cannotParseResponse)
     }
 
@@ -255,7 +273,11 @@ enum ObservatoryAPI {
         let url = try endpointURL(host: host, port: port, path: path, token: token, queryItems: queryItems)
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        debugRequest(path: path, url: url, hasAuthorization: request.value(forHTTPHeaderField: "Authorization") != nil)
         let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse {
+            debugResponse(path: path, status: http.statusCode, bytes: data.count)
+        }
         try ensureHTTP2xx(response)
         return data
     }
@@ -285,6 +307,34 @@ enum ObservatoryAPI {
               (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
+    }
+
+    private static func debugRequest(path: String, url: URL, hasAuthorization: Bool) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        print("[Jeeves][ObservatoryAPI] request path=\(path) url=\(url.absoluteString) auth=\(hasAuthorization)")
+        #endif
+    }
+
+    private static func debugResponse(path: String, status: Int, bytes: Int) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        print("[Jeeves][ObservatoryAPI] response path=\(path) status=\(status) bytes=\(bytes)")
+        #endif
+    }
+
+    private static func debugDecode(path: String, result: String, itemCount: Int?) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        let countLabel = itemCount.map(String.init) ?? "-"
+        print("[Jeeves][ObservatoryAPI] decode path=\(path) result=\(result) count=\(countLabel)")
+        #endif
+    }
+
+    private static func shouldLogDebug(for path: String) -> Bool {
+        path == "/api/observatory/stream"
+            || path == "/api/radar/status"
+            || path == "/api/signals/state"
     }
 }
 

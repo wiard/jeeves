@@ -1,5 +1,76 @@
 import Foundation
 
+private enum LossyJSONScalar: Decodable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case object([String: LossyJSONScalar])
+    case array([LossyJSONScalar])
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(String.self) {
+            self = .string(value)
+            return
+        }
+        if let value = try? container.decode(Int.self) {
+            self = .int(value)
+            return
+        }
+        if let value = try? container.decode(Double.self) {
+            self = .double(value)
+            return
+        }
+        if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+            return
+        }
+        if let value = try? container.decode([String: LossyJSONScalar].self) {
+            self = .object(value)
+            return
+        }
+        if let value = try? container.decode([LossyJSONScalar].self) {
+            self = .array(value)
+            return
+        }
+        throw DecodingError.typeMismatch(
+            LossyJSONScalar.self,
+            DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unsupported scalar")
+        )
+    }
+
+    var stringValue: String {
+        switch self {
+        case .string(let value):
+            return value
+        case .int(let value):
+            return String(value)
+        case .double(let value):
+            return String(value)
+        case .bool(let value):
+            return value ? "true" : "false"
+        case .object(let value):
+            let keys = value.keys.sorted().joined(separator: ",")
+            return "{\(keys)}"
+        case .array(let value):
+            return "[\(value.map(\.stringValue).joined(separator: ","))]"
+        }
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeLossyString(forKey key: Key) -> String? {
+        if let value = try? decodeIfPresent(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decodeIfPresent(LossyJSONScalar.self, forKey: key) {
+            return value.stringValue
+        }
+        return nil
+    }
+}
+
 struct ObservatoryDashboardSnapshot: Sendable {
     let conductor: ConductorState?
     let alerts: [ObservatoryAlert]
@@ -286,15 +357,15 @@ struct SignalsRuntimeSignal: Decodable, Sendable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        signalId = try c.decodeIfPresent(String.self, forKey: .signalId)
-            ?? c.decodeIfPresent(String.self, forKey: .id)
+        signalId = c.decodeLossyString(forKey: .signalId)
+            ?? c.decodeLossyString(forKey: .id)
             ?? UUID().uuidString
-        sourceId = try c.decodeIfPresent(String.self, forKey: .sourceId)
-            ?? c.decodeIfPresent(String.self, forKey: .source)
-        detectedAtIso = try c.decodeIfPresent(String.self, forKey: .detectedAtIso)
-            ?? c.decodeIfPresent(String.self, forKey: .timestamp)
-        summary = try c.decodeIfPresent(String.self, forKey: .summary)
-            ?? c.decodeIfPresent(String.self, forKey: .title)
+        sourceId = c.decodeLossyString(forKey: .sourceId)
+            ?? c.decodeLossyString(forKey: .source)
+        detectedAtIso = c.decodeLossyString(forKey: .detectedAtIso)
+            ?? c.decodeLossyString(forKey: .timestamp)
+        summary = c.decodeLossyString(forKey: .summary)
+            ?? c.decodeLossyString(forKey: .title)
     }
 }
 
@@ -324,13 +395,13 @@ struct SignalsRuntimeChallenge: Decodable, Sendable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        challengeId = try c.decodeIfPresent(String.self, forKey: .challengeId)
-            ?? c.decodeIfPresent(String.self, forKey: .id)
+        challengeId = c.decodeLossyString(forKey: .challengeId)
+            ?? c.decodeLossyString(forKey: .id)
             ?? UUID().uuidString
-        createdAtIso = try c.decodeIfPresent(String.self, forKey: .createdAtIso)
-            ?? c.decodeIfPresent(String.self, forKey: .timestamp)
-        title = try c.decodeIfPresent(String.self, forKey: .title)
-        status = try c.decodeIfPresent(String.self, forKey: .status)
+        createdAtIso = c.decodeLossyString(forKey: .createdAtIso)
+            ?? c.decodeLossyString(forKey: .timestamp)
+        title = c.decodeLossyString(forKey: .title)
+        status = c.decodeLossyString(forKey: .status)
     }
 }
 
@@ -372,8 +443,8 @@ struct SignalsRuntimeEmergenceCluster: Decodable, Sendable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        clusterId = try c.decodeIfPresent(String.self, forKey: .clusterId)
-            ?? c.decodeIfPresent(String.self, forKey: .id)
+        clusterId = c.decodeLossyString(forKey: .clusterId)
+            ?? c.decodeLossyString(forKey: .id)
             ?? UUID().uuidString
         dimensions = try c.decodeIfPresent([String].self, forKey: .dimensions)
             ?? c.decodeIfPresent([String].self, forKey: .sourceTypes)
@@ -473,6 +544,7 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
     let type: String
     let timestampIso: String?
     let event: String?
+    let clusterId: String?
     let proposalId: String?
     let agentId: String?
     let title: String?
@@ -488,6 +560,7 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         case timestampIso
         case timestamp
         case event
+        case clusterId
         case proposalId
         case agentId
         case title
@@ -502,6 +575,7 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         type: String,
         timestampIso: String?,
         event: String?,
+        clusterId: String? = nil,
         proposalId: String?,
         agentId: String?,
         title: String?,
@@ -514,6 +588,7 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         self.type = type
         self.timestampIso = timestampIso
         self.event = event
+        self.clusterId = clusterId
         self.proposalId = proposalId
         self.agentId = agentId
         self.title = title
@@ -525,23 +600,25 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        type = try c.decodeIfPresent(String.self, forKey: .type) ?? "event"
-        timestampIso = try c.decodeIfPresent(String.self, forKey: .timestampIso)
-            ?? c.decodeIfPresent(String.self, forKey: .timestamp)
-        event = try c.decodeIfPresent(String.self, forKey: .event)
-        proposalId = try c.decodeIfPresent(String.self, forKey: .proposalId)
-        agentId = try c.decodeIfPresent(String.self, forKey: .agentId)
-        title = try c.decodeIfPresent(String.self, forKey: .title)
-        decision = try c.decodeIfPresent(String.self, forKey: .decision)
-        reason = try c.decodeIfPresent(String.self, forKey: .reason)
-        risk = try c.decodeIfPresent(String.self, forKey: .risk)
-        peerId = try c.decodeIfPresent(String.self, forKey: .peerId)
+        type = c.decodeLossyString(forKey: .type) ?? "event"
+        timestampIso = c.decodeLossyString(forKey: .timestampIso)
+            ?? c.decodeLossyString(forKey: .timestamp)
+        event = c.decodeLossyString(forKey: .event)
+        clusterId = c.decodeLossyString(forKey: .clusterId)
+        proposalId = c.decodeLossyString(forKey: .proposalId)
+        agentId = c.decodeLossyString(forKey: .agentId)
+        title = c.decodeLossyString(forKey: .title)
+        decision = c.decodeLossyString(forKey: .decision)
+        reason = c.decodeLossyString(forKey: .reason)
+        risk = c.decodeLossyString(forKey: .risk)
+        peerId = c.decodeLossyString(forKey: .peerId)
 
-        id = try c.decodeIfPresent(String.self, forKey: .id)
-            ?? c.decodeIfPresent(String.self, forKey: .eventId)
+        id = c.decodeLossyString(forKey: .id)
+            ?? c.decodeLossyString(forKey: .eventId)
             ?? [
                 type,
                 timestampIso ?? "",
+                clusterId ?? "",
                 proposalId ?? "",
                 event ?? "",
                 agentId ?? "",

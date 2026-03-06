@@ -58,12 +58,25 @@ final class ProposalPoller {
             return
         }
 
-        guard gateway.isConnected,
-              let token = gateway.token else {
+        guard gateway.isConnected else {
+            #if DEBUG
+            print("[Jeeves][ProposalPoller] refresh skipped: gateway not connected host=\(gateway.host) port=\(gateway.port)")
+            #endif
+            return
+        }
+
+        let token = resolveToken(gateway: gateway)
+        guard let token, !token.isEmpty else {
+            #if DEBUG
+            print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(gateway.host) port=\(gateway.port)")
+            #endif
             return
         }
 
         let client = GatewayClient(host: gateway.host, port: gateway.port, token: token)
+        #if DEBUG
+        print("[Jeeves][ProposalPoller] refresh start host=\(gateway.host) port=\(gateway.port) auth=true")
+        #endif
 
         do {
             let fetched = try await client.fetchProposals()
@@ -125,6 +138,9 @@ final class ProposalPoller {
             }
         } catch {}
         streamEvents = Self.sortStreamEvents(streamEventsFromApi)
+        #if DEBUG
+        print("[Jeeves][ProposalPoller] stream events=\(streamEvents.count) activations=\(radarActivations.count) collisions=\(radarCollisions.count) emergence=\(radarEmergence.count)")
+        #endif
 
         do {
             let snapshot = try await client.fetchObservatorySnapshot(proposals: proposals)
@@ -163,6 +179,22 @@ final class ProposalPoller {
                 } catch {}
             }
         }
+    }
+
+    private func resolveToken(gateway: GatewayManager) -> String? {
+        if let runtimeToken = RuntimeConfig.shared.token?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !runtimeToken.isEmpty {
+            return runtimeToken
+        }
+        if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !gatewayToken.isEmpty {
+            return gatewayToken
+        }
+        if let stored = KeychainHelper.load(for: "\(gateway.host):\(gateway.port)"),
+           !stored.isEmpty {
+            return stored
+        }
+        return nil
     }
 
     func decide(proposalId: String, decision: String, reason: String? = nil, gateway: GatewayManager) async -> Bool {

@@ -80,47 +80,71 @@ actor GatewayClient {
     }
 
     func fetchObservatoryStream(limit: Int = 60) async throws -> ObservatoryStreamFeed {
-        _ = max(1, min(limit, 240))
+        let boundedLimit = max(1, min(limit, 240))
         let path = "/api/observatory/stream"
+        let (data, _) = try await request(
+            path: path,
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
 
-        if let direct: ObservatoryStreamFeed = try? await get(path) {
+        if let direct = try? decoder.decode(ObservatoryStreamFeed.self, from: data) {
+            debugDecode(path: path, result: "direct feed", itemCount: direct.events.count)
             return direct
         }
-        if let wrapped: ObservatoryStreamEnvelope = try? await get(path) {
+        if let wrapped = try? decoder.decode(ObservatoryStreamEnvelope.self, from: data) {
+            let events = wrapped.events ?? wrapped.items ?? wrapped.data ?? []
+            debugDecode(path: path, result: "wrapped feed", itemCount: events.count)
             return ObservatoryStreamFeed(
                 ok: wrapped.ok,
-                events: wrapped.events ?? wrapped.items ?? wrapped.data ?? [],
+                events: events,
                 pendingCount: wrapped.pendingCount ?? 0
             )
         }
-        if let directEvents: [ObservatoryStreamEvent] = try? await get(path) {
+        if let directEvents = try? decoder.decode([ObservatoryStreamEvent].self, from: data) {
+            debugDecode(path: path, result: "direct events", itemCount: directEvents.count)
             return ObservatoryStreamFeed(ok: true, events: directEvents, pendingCount: 0)
         }
 
-        let raw = try await getRawJSON(path)
+        let raw = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
         let events = parseStreamEvents(from: raw)
+        debugDecode(path: path, result: "raw parse", itemCount: events.count)
         return ObservatoryStreamFeed(ok: true, events: events, pendingCount: countPendingEvents(events))
     }
 
     func fetchRadarStatus() async throws -> RadarStatusSnapshot {
-        if let direct: RadarStatusSnapshot = try? await get("/api/radar/status") {
+        let path = "/api/radar/status"
+        let (data, _) = try await request(path: path, method: "GET")
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(RadarStatusSnapshot.self, from: data) {
+            debugDecode(path: path, result: "direct status", itemCount: direct.store?.activationCount)
             return direct
         }
-        if let wrapped: RadarStatusEnvelope = try? await get("/api/radar/status"),
+        if let wrapped = try? decoder.decode(RadarStatusEnvelope.self, from: data),
            let status = wrapped.status ?? wrapped.data {
+            debugDecode(path: path, result: "wrapped status", itemCount: status.store?.activationCount)
             return status
         }
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
         throw URLError(.cannotParseResponse)
     }
 
     func fetchRadarActivations(limit: Int = 40) async throws -> [RadarActivation] {
-        _ = max(1, min(limit, 200))
+        let boundedLimit = max(1, min(limit, 200))
         let path = "/api/radar/activations"
+        let (data, _) = try await request(
+            path: path,
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
 
-        if let direct: [RadarActivation] = try? await get(path) {
+        if let direct = try? decoder.decode([RadarActivation].self, from: data) {
             return direct
         }
-        if let wrapped: RadarActivationsEnvelope = try? await get(path) {
+        if let wrapped = try? decoder.decode(RadarActivationsEnvelope.self, from: data) {
             return wrapped.activations ?? wrapped.items ?? wrapped.data ?? []
         }
         return []
@@ -167,13 +191,20 @@ actor GatewayClient {
     }
 
     func fetchSignalsRuntime() async throws -> SignalsRuntimeSnapshot {
-        if let wrapped: SignalsRuntimeEnvelope = try? await get("/api/signals/state"),
+        let path = "/api/signals/state"
+        let (data, _) = try await request(path: path, method: "GET")
+        let decoder = JSONDecoder()
+
+        if let wrapped = try? decoder.decode(SignalsRuntimeEnvelope.self, from: data),
            let state = wrapped.state ?? wrapped.signals ?? wrapped.data {
+            debugDecode(path: path, result: "wrapped runtime", itemCount: state.totalSignals)
             return state
         }
-        if let direct: SignalsRuntimeSnapshot = try? await get("/api/signals/state") {
+        if let direct = try? decoder.decode(SignalsRuntimeSnapshot.self, from: data) {
+            debugDecode(path: path, result: "direct runtime", itemCount: direct.totalSignals)
             return direct
         }
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
         throw URLError(.cannotParseResponse)
     }
 
@@ -222,8 +253,13 @@ actor GatewayClient {
 
     // MARK: - Request Core
 
-    private func request(path: String, method: String, body: Data? = nil) async throws -> (Data, HTTPURLResponse) {
-        let url = try buildURL(path: path)
+    private func request(
+        path: String,
+        method: String,
+        body: Data? = nil,
+        queryItems: [URLQueryItem] = []
+    ) async throws -> (Data, HTTPURLResponse) {
+        let url = try buildURL(path: path, queryItems: queryItems)
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -239,11 +275,13 @@ actor GatewayClient {
 
         while attempt <= maxRetries {
             do {
+                debugRequest(path: path, url: url, hasAuthorization: request.value(forHTTPHeaderField: "Authorization") != nil)
                 let (data, response) = try await URLSession.shared.data(for: request)
 
                 guard let http = response as? HTTPURLResponse else {
                     throw URLError(.badServerResponse)
                 }
+                debugResponse(path: path, status: http.statusCode, bytes: data.count)
 
                 if (200...299).contains(http.statusCode) {
                     return (data, http)
@@ -257,6 +295,7 @@ actor GatewayClient {
 
                 throw GatewayClientError.httpStatus(http.statusCode)
             } catch {
+                debugFailure(path: path, error: error)
                 lastError = error
                 if shouldRetry(error: error), attempt < maxRetries {
                     attempt += 1
@@ -270,12 +309,12 @@ actor GatewayClient {
         throw lastError ?? GatewayClientError.unknown
     }
 
-    private func buildURL(path: String) throws -> URL {
+    private func buildURL(path: String, queryItems: [URLQueryItem] = []) throws -> URL {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw URLError(.badURL)
         }
         components.path = path
-        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        components.queryItems = [URLQueryItem(name: "token", value: token)] + queryItems
 
         guard let url = components.url else {
             throw URLError(.badURL)
@@ -805,6 +844,41 @@ actor GatewayClient {
         default:
             return nil
         }
+    }
+
+    private func debugRequest(path: String, url: URL, hasAuthorization: Bool) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        print("[Jeeves][GatewayClient] request path=\(path) url=\(url.absoluteString) auth=\(hasAuthorization)")
+        #endif
+    }
+
+    private func debugResponse(path: String, status: Int, bytes: Int) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        print("[Jeeves][GatewayClient] response path=\(path) status=\(status) bytes=\(bytes)")
+        #endif
+    }
+
+    private func debugDecode(path: String, result: String, itemCount: Int?) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        let countLabel = itemCount.map(String.init) ?? "-"
+        print("[Jeeves][GatewayClient] decode path=\(path) result=\(result) count=\(countLabel)")
+        #endif
+    }
+
+    private func debugFailure(path: String, error: Error) {
+        guard shouldLogDebug(for: path) else { return }
+        #if DEBUG
+        print("[Jeeves][GatewayClient] failure path=\(path) error=\(String(describing: error))")
+        #endif
+    }
+
+    private func shouldLogDebug(for path: String) -> Bool {
+        path == "/api/observatory/stream"
+            || path == "/api/radar/status"
+            || path == "/api/signals/state"
     }
 }
 

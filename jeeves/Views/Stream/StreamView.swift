@@ -7,11 +7,7 @@ struct StreamView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if poller.proposals.isEmpty
-                    && poller.emergenceClusters.isEmpty
-                    && poller.streamEvents.isEmpty
-                    && poller.radarCollisions.isEmpty
-                    && poller.radarActivations.isEmpty {
+                if hasNoRenderableContent {
                     ContentUnavailableView(
                         TextKeys.Stream.empty,
                         systemImage: "leaf",
@@ -73,6 +69,22 @@ struct StreamView: View {
         poller.proposals.sorted { a, b in
             (a.createdAt ?? .distantPast) > (b.createdAt ?? .distantPast)
         }
+    }
+
+    private var hasNoRenderableContent: Bool {
+        let radarCounts = (poller.radarStatus?.store?.activationCount ?? 0)
+            + (poller.radarStatus?.store?.collisionCount ?? 0)
+            + (poller.radarStatus?.store?.emergenceCount ?? 0)
+
+        return poller.proposals.isEmpty
+            && poller.emergenceClusters.isEmpty
+            && poller.streamEvents.isEmpty
+            && poller.radarCollisions.isEmpty
+            && poller.radarEmergence.isEmpty
+            && poller.radarActivations.isEmpty
+            && poller.radarClusters.isEmpty
+            && poller.radarSources.isEmpty
+            && radarCounts == 0
     }
 
     private var sortedStreamEvents: [ObservatoryStreamEvent] {
@@ -251,6 +263,9 @@ private struct StreamEventRow: View {
         }
         if let proposalId = event.proposalId, !proposalId.isEmpty {
             return proposalId
+        }
+        if let clusterId = event.clusterId, !clusterId.isEmpty {
+            return clusterId
         }
         if let eventName = event.event, !eventName.isEmpty {
             return eventName

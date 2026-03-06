@@ -61,6 +61,10 @@ final class ObservatoryViewModel: ObservableObject {
         let resolvedPort = resolvePort(gateway: gateway, connection: connection)
         let resolvedToken = resolveToken(host: resolvedHost, port: resolvedPort, gateway: gateway)
 
+        #if DEBUG
+        print("[Jeeves][ObservatoryVM] refresh host=\(resolvedHost) port=\(resolvedPort) token=\((resolvedToken?.isEmpty == false) ? "present" : "missing")")
+        #endif
+
         guard let token = resolvedToken, !token.isEmpty else {
             snapshot = nil
             markAllUnavailable()
@@ -217,6 +221,14 @@ final class ObservatoryViewModel: ObservableObject {
         sectionStatuses[.radar] = hasRadar ? .ok : .unavailable
         sectionStatuses[.discovery] = hasDiscovery ? .ok : .unavailable
         sectionStatuses[.alerts] = hasAlerts ? .ok : .unavailable
+
+        #if DEBUG
+        let streamCount = snapshot?.stream?.events.count ?? 0
+        let radarActivationCount = snapshot?.radarStatus?.store?.activationCount ?? snapshot?.radarActivations.count ?? 0
+        let radarCollisionCount = snapshot?.radarStatus?.store?.collisionCount ?? snapshot?.radarCollisions.count ?? 0
+        let runtimeSignals = snapshot?.signalsRuntime?.totalSignals ?? 0
+        print("[Jeeves][ObservatoryVM] refresh result stream=\(streamCount) radarActivations=\(radarActivationCount) radarCollisions=\(radarCollisionCount) runtimeSignals=\(runtimeSignals)")
+        #endif
 
         isLoading = false
     }

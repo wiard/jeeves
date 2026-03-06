@@ -28,7 +28,10 @@ struct ContentView: View {
                 return
             }
 
-            guard !gateway.isConnected else { return }
+            if gateway.isConnected {
+                poller.start(gateway: gateway)
+                return
+            }
             guard let conn = connections.first else { return }
             Task { @MainActor in
                 await bootstrapGatewayConnection(using: conn)
@@ -156,6 +159,10 @@ struct ContentView: View {
                 token: resolvedToken,
                 isHealthy: false
             )
+
+        #if DEBUG
+        print("[Jeeves][ContentView] gateway resolution configured=\(resolvedHost):\(resolvedPort) discovered=\(resolution.host):\(resolution.port) healthy=\(resolution.isHealthy) token=\((resolution.token?.isEmpty == false) ? "present" : "missing")")
+        #endif
 
         if !hasRuntimePortOverride, isLoopback, conn.port != resolution.port {
             conn.port = resolution.port
