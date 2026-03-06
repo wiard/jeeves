@@ -28,6 +28,13 @@ struct StreamView: View {
             .refreshable {
                 await poller.refresh(gateway: gateway)
             }
+            .task {
+                if poller.proposals.isEmpty
+                    && poller.streamEvents.isEmpty
+                    && poller.emergenceClusters.isEmpty {
+                    await poller.refresh(gateway: gateway)
+                }
+            }
         }
     }
 

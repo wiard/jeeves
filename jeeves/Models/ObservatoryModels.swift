@@ -9,6 +9,7 @@ struct ObservatoryDashboardSnapshot: Sendable {
     let signals: SignalsState?
     let knowledgeStatus: KnowledgeStatus?
     let knowledgeEmergence: KnowledgeEmergence?
+    let signalsRuntime: SignalsRuntimeSnapshot?
     let stream: ObservatoryStreamFeed?
     let radarStatus: RadarStatusSnapshot?
     let radarActivations: [RadarActivation]
@@ -131,6 +132,11 @@ struct SignalsState: Decodable, Sendable {
     let challengesToday: Int?
     let proposalsToday: Int?
     let executedActions: Int?
+    let runCount: Int?
+    let activeSourceCount: Int?
+    let totalSignals: Int?
+    let lastRunAtIso: String?
+    let lastError: String?
 
     private enum CodingKeys: String, CodingKey {
         case signalsToday
@@ -141,13 +147,33 @@ struct SignalsState: Decodable, Sendable {
         case challenges
         case proposals
         case executed
+        case runCount
+        case activeSourceCount
+        case totalSignals
+        case lastRunAtIso
+        case lastError
     }
 
-    init(signalsToday: Int?, challengesToday: Int?, proposalsToday: Int?, executedActions: Int?) {
+    init(
+        signalsToday: Int?,
+        challengesToday: Int?,
+        proposalsToday: Int?,
+        executedActions: Int?,
+        runCount: Int? = nil,
+        activeSourceCount: Int? = nil,
+        totalSignals: Int? = nil,
+        lastRunAtIso: String? = nil,
+        lastError: String? = nil
+    ) {
         self.signalsToday = signalsToday
         self.challengesToday = challengesToday
         self.proposalsToday = proposalsToday
         self.executedActions = executedActions
+        self.runCount = runCount
+        self.activeSourceCount = activeSourceCount
+        self.totalSignals = totalSignals
+        self.lastRunAtIso = lastRunAtIso
+        self.lastError = lastError
     }
 
     init(from decoder: Decoder) throws {
@@ -160,6 +186,206 @@ struct SignalsState: Decodable, Sendable {
             ?? c.decodeIfPresent(Int.self, forKey: .proposals)
         executedActions = try c.decodeIfPresent(Int.self, forKey: .executedActions)
             ?? c.decodeIfPresent(Int.self, forKey: .executed)
+        runCount = try c.decodeIfPresent(Int.self, forKey: .runCount)
+        activeSourceCount = try c.decodeIfPresent(Int.self, forKey: .activeSourceCount)
+        totalSignals = try c.decodeIfPresent(Int.self, forKey: .totalSignals)
+        lastRunAtIso = try c.decodeIfPresent(String.self, forKey: .lastRunAtIso)
+        lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
+    }
+}
+
+struct SignalsRuntimeSnapshot: Decodable, Sendable {
+    let started: Bool?
+    let startedAtIso: String?
+    let lastRunAtIso: String?
+    let runCount: Int
+    let totalSignals: Int
+    let activeSourceCount: Int
+    let lastError: String?
+    let lastSignals: [SignalsRuntimeSignal]
+    let lastChallenges: [SignalsRuntimeChallenge]
+    let emergenceClusters: [SignalsRuntimeEmergenceCluster]
+
+    private enum CodingKeys: String, CodingKey {
+        case started
+        case startedAtIso
+        case lastRunAtIso
+        case runCount
+        case totalSignals
+        case activeSourceCount
+        case lastError
+        case lastSignals
+        case lastChallenges
+        case emergenceClusters
+    }
+
+    init(
+        started: Bool?,
+        startedAtIso: String?,
+        lastRunAtIso: String?,
+        runCount: Int,
+        totalSignals: Int,
+        activeSourceCount: Int,
+        lastError: String?,
+        lastSignals: [SignalsRuntimeSignal],
+        lastChallenges: [SignalsRuntimeChallenge],
+        emergenceClusters: [SignalsRuntimeEmergenceCluster]
+    ) {
+        self.started = started
+        self.startedAtIso = startedAtIso
+        self.lastRunAtIso = lastRunAtIso
+        self.runCount = runCount
+        self.totalSignals = totalSignals
+        self.activeSourceCount = activeSourceCount
+        self.lastError = lastError
+        self.lastSignals = lastSignals
+        self.lastChallenges = lastChallenges
+        self.emergenceClusters = emergenceClusters
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        started = try c.decodeIfPresent(Bool.self, forKey: .started)
+        startedAtIso = try c.decodeIfPresent(String.self, forKey: .startedAtIso)
+        lastRunAtIso = try c.decodeIfPresent(String.self, forKey: .lastRunAtIso)
+        runCount = try c.decodeIfPresent(Int.self, forKey: .runCount) ?? 0
+        totalSignals = try c.decodeIfPresent(Int.self, forKey: .totalSignals) ?? 0
+        activeSourceCount = try c.decodeIfPresent(Int.self, forKey: .activeSourceCount) ?? 0
+        lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
+        lastSignals = try c.decodeIfPresent([SignalsRuntimeSignal].self, forKey: .lastSignals) ?? []
+        lastChallenges = try c.decodeIfPresent([SignalsRuntimeChallenge].self, forKey: .lastChallenges) ?? []
+        emergenceClusters = try c.decodeIfPresent([SignalsRuntimeEmergenceCluster].self, forKey: .emergenceClusters) ?? []
+    }
+}
+
+struct SignalsRuntimeSignal: Decodable, Sendable, Identifiable {
+    let signalId: String
+    let sourceId: String?
+    let detectedAtIso: String?
+    let summary: String?
+
+    var id: String { signalId }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalId
+        case id
+        case sourceId
+        case source
+        case detectedAtIso
+        case timestamp
+        case summary
+        case title
+    }
+
+    init(signalId: String, sourceId: String?, detectedAtIso: String?, summary: String?) {
+        self.signalId = signalId
+        self.sourceId = sourceId
+        self.detectedAtIso = detectedAtIso
+        self.summary = summary
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        signalId = try c.decodeIfPresent(String.self, forKey: .signalId)
+            ?? c.decodeIfPresent(String.self, forKey: .id)
+            ?? UUID().uuidString
+        sourceId = try c.decodeIfPresent(String.self, forKey: .sourceId)
+            ?? c.decodeIfPresent(String.self, forKey: .source)
+        detectedAtIso = try c.decodeIfPresent(String.self, forKey: .detectedAtIso)
+            ?? c.decodeIfPresent(String.self, forKey: .timestamp)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+            ?? c.decodeIfPresent(String.self, forKey: .title)
+    }
+}
+
+struct SignalsRuntimeChallenge: Decodable, Sendable, Identifiable {
+    let challengeId: String
+    let createdAtIso: String?
+    let title: String?
+    let status: String?
+
+    var id: String { challengeId }
+
+    private enum CodingKeys: String, CodingKey {
+        case challengeId
+        case id
+        case createdAtIso
+        case timestamp
+        case title
+        case status
+    }
+
+    init(challengeId: String, createdAtIso: String?, title: String?, status: String?) {
+        self.challengeId = challengeId
+        self.createdAtIso = createdAtIso
+        self.title = title
+        self.status = status
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        challengeId = try c.decodeIfPresent(String.self, forKey: .challengeId)
+            ?? c.decodeIfPresent(String.self, forKey: .id)
+            ?? UUID().uuidString
+        createdAtIso = try c.decodeIfPresent(String.self, forKey: .createdAtIso)
+            ?? c.decodeIfPresent(String.self, forKey: .timestamp)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+    }
+}
+
+struct SignalsRuntimeEmergenceCluster: Decodable, Sendable, Identifiable {
+    let clusterId: String
+    let dimensions: [String]
+    let relevanceScore: Double
+    let summary: String?
+    let escalatesToIphone: Bool
+
+    var id: String { clusterId }
+
+    private enum CodingKeys: String, CodingKey {
+        case clusterId
+        case id
+        case dimensions
+        case sourceTypes
+        case relevanceScore
+        case densityScore
+        case score
+        case summary
+        case escalatesToIphone
+        case isEmergence
+    }
+
+    init(
+        clusterId: String,
+        dimensions: [String],
+        relevanceScore: Double,
+        summary: String?,
+        escalatesToIphone: Bool
+    ) {
+        self.clusterId = clusterId
+        self.dimensions = dimensions
+        self.relevanceScore = relevanceScore
+        self.summary = summary
+        self.escalatesToIphone = escalatesToIphone
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        clusterId = try c.decodeIfPresent(String.self, forKey: .clusterId)
+            ?? c.decodeIfPresent(String.self, forKey: .id)
+            ?? UUID().uuidString
+        dimensions = try c.decodeIfPresent([String].self, forKey: .dimensions)
+            ?? c.decodeIfPresent([String].self, forKey: .sourceTypes)
+            ?? []
+        relevanceScore = try c.decodeIfPresent(Double.self, forKey: .relevanceScore)
+            ?? c.decodeIfPresent(Double.self, forKey: .densityScore)
+            ?? c.decodeIfPresent(Double.self, forKey: .score)
+            ?? 0
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        escalatesToIphone = try c.decodeIfPresent(Bool.self, forKey: .escalatesToIphone)
+            ?? c.decodeIfPresent(Bool.self, forKey: .isEmergence)
+            ?? (relevanceScore >= 0.7)
     }
 }
 

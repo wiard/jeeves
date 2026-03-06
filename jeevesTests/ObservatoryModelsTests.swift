@@ -84,6 +84,24 @@ struct ObservatoryModelsTests {
           "timestamp": "2026-03-04T12:00:00Z"
         }
         """.data(using: .utf8)!
+        let runtimeJSON = """
+        {
+          "started": true,
+          "lastRunAtIso": "2026-03-04T12:00:00Z",
+          "runCount": 3,
+          "totalSignals": 10,
+          "activeSourceCount": 4,
+          "lastSignals": [
+            {"signalId": "s-1", "sourceId": "github", "detectedAtIso": "2026-03-04T11:59:00Z", "summary": "relay"}
+          ],
+          "lastChallenges": [
+            {"challengeId": "ch-1", "createdAtIso": "2026-03-04T11:58:00Z", "title": "review", "status": "open"}
+          ],
+          "emergenceClusters": [
+            {"clusterId": "em-1", "dimensions": ["trust-model","external","emerging"], "relevanceScore": 0.8, "summary": "cluster", "escalatesToIphone": true}
+          ]
+        }
+        """.data(using: .utf8)!
 
         let alert = try JSONDecoder().decode(ObservatoryAlert.self, from: alertJSON)
         let emergence = try JSONDecoder().decode(FabricEmergence.self, from: emergenceJSON)
@@ -94,6 +112,7 @@ struct ObservatoryModelsTests {
         let radarStatus = try JSONDecoder().decode(RadarStatusSnapshot.self, from: radarStatusJSON)
         let radarCollision = try JSONDecoder().decode(RadarCollision.self, from: radarCollisionJSON)
         let radarActivation = try JSONDecoder().decode(RadarActivation.self, from: radarActivationJSON)
+        let runtime = try JSONDecoder().decode(SignalsRuntimeSnapshot.self, from: runtimeJSON)
 
         #expect(alert.id == "a-1")
         #expect(alert.summary == "m1")
@@ -113,6 +132,10 @@ struct ObservatoryModelsTests {
         #expect(radarCollision.cellIds == ["surface|external|current"])
         #expect(radarActivation.id == "act-1")
         #expect(radarActivation.source == "github")
+        #expect(runtime.runCount == 3)
+        #expect(runtime.lastSignals.count == 1)
+        #expect(runtime.lastChallenges.count == 1)
+        #expect(runtime.emergenceClusters.count == 1)
     }
 
     @Test

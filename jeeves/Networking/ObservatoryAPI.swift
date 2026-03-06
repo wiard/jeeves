@@ -66,12 +66,27 @@ enum ObservatoryAPI {
         let data = try await get(host: host, port: port, token: token, path: "/api/signals/state")
         let decoder = JSONDecoder()
 
-        if let direct = try? decoder.decode(SignalsState.self, from: data) {
-            return direct
-        }
         if let wrapped = try? decoder.decode(SignalsStateEnvelope.self, from: data),
            let value = wrapped.state ?? wrapped.signals ?? wrapped.data {
             return value
+        }
+        if let direct = try? decoder.decode(SignalsState.self, from: data) {
+            return direct
+        }
+
+        throw URLError(.cannotParseResponse)
+    }
+
+    static func signalsRuntime(host: String, port: Int, token: String) async throws -> SignalsRuntimeSnapshot {
+        let data = try await get(host: host, port: port, token: token, path: "/api/signals/state")
+        let decoder = JSONDecoder()
+
+        if let wrapped = try? decoder.decode(SignalsRuntimeEnvelope.self, from: data),
+           let value = wrapped.state ?? wrapped.signals ?? wrapped.data {
+            return value
+        }
+        if let direct = try? decoder.decode(SignalsRuntimeSnapshot.self, from: data) {
+            return direct
         }
 
         throw URLError(.cannotParseResponse)
@@ -297,6 +312,12 @@ private struct SignalsStateEnvelope: Decodable {
     let state: SignalsState?
     let signals: SignalsState?
     let data: SignalsState?
+}
+
+private struct SignalsRuntimeEnvelope: Decodable {
+    let state: SignalsRuntimeSnapshot?
+    let signals: SignalsRuntimeSnapshot?
+    let data: SignalsRuntimeSnapshot?
 }
 
 private struct KnowledgeStatusEnvelope: Decodable {

@@ -75,6 +75,7 @@ final class ObservatoryViewModel: ObservableObject {
         var fabricEmergence: FabricEmergence?
         var challenges: [LobbyChallenge] = []
         var signals: SignalsState?
+        var signalsRuntime: SignalsRuntimeSnapshot?
         var knowledgeStatus: KnowledgeStatus?
         var knowledgeEmergence: KnowledgeEmergence?
         var stream: ObservatoryStreamFeed?
@@ -122,6 +123,12 @@ final class ObservatoryViewModel: ObservableObject {
         do {
             signals = try await ObservatoryAPI.signalsState(host: resolvedHost, port: resolvedPort, token: token)
             hasSignals = true
+        } catch {}
+
+        do {
+            signalsRuntime = try await ObservatoryAPI.signalsRuntime(host: resolvedHost, port: resolvedPort, token: token)
+            hasSignals = true
+            hasDiscovery = true
         } catch {}
 
         do {
@@ -191,6 +198,7 @@ final class ObservatoryViewModel: ObservableObject {
             signals: signals,
             knowledgeStatus: knowledgeStatus,
             knowledgeEmergence: sortedEmergence,
+            signalsRuntime: signalsRuntime,
             stream: sortedStream,
             radarStatus: radarStatus,
             radarActivations: sortedActivations,
@@ -433,6 +441,40 @@ final class ObservatoryViewModel: ObservableObject {
                         id: "demo-knowledge",
                         summary: "Emergence cluster in shared consent surface.",
                         score: 0.86
+                    )
+                ]
+            ),
+            signalsRuntime: SignalsRuntimeSnapshot(
+                started: true,
+                startedAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600)),
+                lastRunAtIso: ISO8601DateFormatter().string(from: Date()),
+                runCount: 14,
+                totalSignals: 31,
+                activeSourceCount: 6,
+                lastError: nil,
+                lastSignals: [
+                    SignalsRuntimeSignal(
+                        signalId: "demo-signal-1",
+                        sourceId: "github",
+                        detectedAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-50)),
+                        summary: "consent relay drift"
+                    )
+                ],
+                lastChallenges: [
+                    SignalsRuntimeChallenge(
+                        challengeId: "demo-runtime-challenge",
+                        createdAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-120)),
+                        title: "Review architecture emergence",
+                        status: "open"
+                    )
+                ],
+                emergenceClusters: [
+                    SignalsRuntimeEmergenceCluster(
+                        clusterId: "demo-runtime-emergence",
+                        dimensions: ["trust-model", "external", "emerging"],
+                        relevanceScore: 0.77,
+                        summary: "runtime emergence pressure",
+                        escalatesToIphone: true
                     )
                 ]
             ),

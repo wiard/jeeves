@@ -10,6 +10,7 @@ struct ObservatoryView: View {
         NavigationStack {
             List {
                 oracleSection
+                missionControlSection
                 loopSection
                 fabricSection
                 lobbySection
@@ -54,6 +55,29 @@ struct ObservatoryView: View {
                 row("Budget hard stop", conductor.budget.hardStop ? "true" : "false")
                 row("Kill switch", conductor.killSwitch.active ? "active" : "armed")
                 row("Updated", conductor.updatedAtIso)
+            } else {
+                unavailableRow
+            }
+        }
+    }
+
+    private var missionControlSection: some View {
+        Section("Mission Control") {
+            if let snapshot = vm.snapshot {
+                let pendingFromStream = snapshot.stream?.pendingCount ?? 0
+                let pending = max(snapshot.conductor?.consentPending ?? 0, pendingFromStream)
+                let streamEvents = snapshot.stream?.events.count ?? 0
+                let collisions = snapshot.radarStatus?.store?.collisionCount ?? snapshot.radarCollisions.count
+                let emergence = snapshot.radarStatus?.store?.emergenceCount ?? snapshot.radarEmergence.count
+                let activations = snapshot.radarStatus?.store?.activationCount ?? snapshot.radarActivations.count
+                let collector = snapshot.radarStatus?.collector?.isRunning
+
+                row("Approvals required", "\(pending)")
+                row("Discovery events", "\(streamEvents)")
+                row("Radar activations", "\(activations)")
+                row("Radar collisions", "\(collisions)")
+                row("Emergence alerts", "\(emergence)")
+                row("Collector", collector == nil ? "-" : (collector == true ? "running" : "stopped"))
             } else {
                 unavailableRow
             }
@@ -122,8 +146,21 @@ struct ObservatoryView: View {
                 row("Challenges today", string(signals.challengesToday))
                 row("Proposals today", string(signals.proposalsToday))
                 row("Executed actions", string(signals.executedActions))
+                row("Run count", string(signals.runCount))
+                row("Active sources", string(signals.activeSourceCount))
+                row("Total signals", string(signals.totalSignals))
+                row("Last run", signals.lastRunAtIso ?? "-")
+                row("Last error", signals.lastError ?? "-")
             } else {
                 unavailableRow
+            }
+
+            if let runtime = vm.snapshot?.signalsRuntime {
+                row("Runtime run count", "\(runtime.runCount)")
+                row("Runtime active sources", "\(runtime.activeSourceCount)")
+                row("Runtime total signals", "\(runtime.totalSignals)")
+                row("Runtime last run", runtime.lastRunAtIso ?? "-")
+                row("Runtime last error", runtime.lastError ?? "-")
             }
         }
     }

@@ -166,6 +166,17 @@ actor GatewayClient {
         return []
     }
 
+    func fetchSignalsRuntime() async throws -> SignalsRuntimeSnapshot {
+        if let wrapped: SignalsRuntimeEnvelope = try? await get("/api/signals/state"),
+           let state = wrapped.state ?? wrapped.signals ?? wrapped.data {
+            return state
+        }
+        if let direct: SignalsRuntimeSnapshot = try? await get("/api/signals/state") {
+            return direct
+        }
+        throw URLError(.cannotParseResponse)
+    }
+
     func healthCheck() async throws -> Bool {
         let _: ConductorHealth = try await get("/health")
         return true
@@ -853,4 +864,10 @@ private struct RadarSourcesEnvelope: Decodable {
     let sources: [RadarSourceStats]?
     let items: [RadarSourceStats]?
     let data: [RadarSourceStats]?
+}
+
+private struct SignalsRuntimeEnvelope: Decodable {
+    let state: SignalsRuntimeSnapshot?
+    let signals: SignalsRuntimeSnapshot?
+    let data: SignalsRuntimeSnapshot?
 }

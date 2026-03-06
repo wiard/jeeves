@@ -83,9 +83,12 @@ final class ProposalPoller {
             NotificationManager.shared.updateBadge(count: pending.count)
         } catch {}
 
+        var runtimeEmergenceClusters: [EmergenceCluster] = []
         var radarEmergenceClusters: [EmergenceCluster] = []
+        var streamEventsFromApi: [ObservatoryStreamEvent] = []
         do {
             async let streamTask = client.fetchObservatoryStream(limit: 60)
+            async let signalsRuntimeTask = client.fetchSignalsRuntime()
             async let radarStatusTask = client.fetchRadarStatus()
             async let activationsTask = client.fetchRadarActivations(limit: 40)
             async let collisionsTask = client.fetchRadarCollisions()
@@ -94,7 +97,12 @@ final class ProposalPoller {
             async let sourcesTask = client.fetchRadarSources()
 
             if let stream = try? await streamTask {
-                streamEvents = Self.sortStreamEvents(stream.events)
+                streamEventsFromApi = stream.events
+            }
+            if let runtime = try? await signalsRuntimeTask {
+                let runtimeEvents = Self.runtimeStreamEvents(runtime)
+                streamEventsFromApi = Self.mergeStreamEvents(primary: streamEventsFromApi, secondary: runtimeEvents)
+                runtimeEmergenceClusters = Self.runtimeEmergenceToClusters(runtime.emergenceClusters)
             }
             if let status = try? await radarStatusTask {
                 radarStatus = status
@@ -116,6 +124,7 @@ final class ProposalPoller {
                 radarSources = Self.sortRadarSources(sources)
             }
         } catch {}
+        streamEvents = Self.sortStreamEvents(streamEventsFromApi)
 
         do {
             let snapshot = try await client.fetchObservatorySnapshot(proposals: proposals)
@@ -136,11 +145,16 @@ final class ProposalPoller {
             if escalatedClusters.isEmpty {
                 escalatedClusters = radarEmergenceClusters
             }
+            if escalatedClusters.isEmpty {
+                escalatedClusters = runtimeEmergenceClusters
+            }
 
             processEmergenceChanges(escalatedClusters)
         } catch {
             if !radarEmergenceClusters.isEmpty {
                 processEmergenceChanges(radarEmergenceClusters)
+            } else if !runtimeEmergenceClusters.isEmpty {
+                processEmergenceChanges(runtimeEmergenceClusters)
             } else {
                 do {
                     let clusters = try await client.fetchEmergence()
@@ -412,6 +426,81 @@ final class ProposalPoller {
                     escalatesToIphone: true
                 )
             }
+    }
+
+    private static func runtimeStreamEvents(_ runtime: SignalsRuntimeSnapshot) -> [ObservatoryStreamEvent] {
+        let signalEvents = runtime.lastSignals.map { signal in
+            ObservatoryStreamEvent(
+                id: "runtime-signal-\(signal.signalId)",
+                type: "signal",
+                timestampIso: signal.detectedAtIso,
+                event: nil,
+                proposalId: nil,
+                agentId: signal.sourceId ?? "signals",
+                title: signal.summary ?? "signal",
+                decision: nil,
+                reason: nil,
+                risk: nil,
+                peerId: "system"
+            )
+        }
+        let challengeEvents = runtime.lastChallenges.map { challenge in
+            ObservatoryStreamEvent(
+                id: "runtime-challenge-\(challenge.challengeId)",
+                type: "challenge",
+                timestampIso: challenge.createdAtIso,
+                event: challenge.status,
+                proposalId: nil,
+                agentId: "signals",
+                title: challenge.title ?? "challenge",
+                decision: nil,
+                reason: nil,
+                risk: nil,
+                peerId: "system"
+            )
+        }
+        let emergenceEvents = runtime.emergenceClusters.map { cluster in
+            ObservatoryStreamEvent(
+                id: "runtime-emergence-\(cluster.clusterId)",
+                type: "emergence",
+                timestampIso: runtime.lastRunAtIso,
+                event: nil,
+                proposalId: nil,
+                agentId: "signals",
+                title: cluster.summary ?? "emergence",
+                decision: nil,
+                reason: "runtime_cluster",
+                risk: nil,
+                peerId: "system"
+            )
+        }
+        return signalEvents + challengeEvents + emergenceEvents
+    }
+
+    private static func runtimeEmergenceToClusters(_ clusters: [SignalsRuntimeEmergenceCluster]) -> [EmergenceCluster] {
+        clusters.map { cluster in
+            EmergenceCluster(
+                clusterId: cluster.clusterId,
+                dimensions: cluster.dimensions,
+                relevanceScore: cluster.relevanceScore,
+                summary: cluster.summary ?? "Runtime emergence detected",
+                escalatesToIphone: cluster.escalatesToIphone
+            )
+        }
+    }
+
+    private static func mergeStreamEvents(
+        primary: [ObservatoryStreamEvent],
+        secondary: [ObservatoryStreamEvent]
+    ) -> [ObservatoryStreamEvent] {
+        var byId: [String: ObservatoryStreamEvent] = [:]
+        for event in primary {
+            byId[event.id] = event
+        }
+        for event in secondary where byId[event.id] == nil {
+            byId[event.id] = event
+        }
+        return Array(byId.values)
     }
 
     private static func parseIso(_ value: String?) -> Date {
