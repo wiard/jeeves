@@ -2,6 +2,10 @@ import Foundation
 
 @MainActor
 final class CubeOracleViewModel: ObservableObject {
+    private static let localDefaultPort = 19001
+    private static let localDiscoveryPorts: [Int] = [19001, 19002, 19003, 19004, 19005]
+    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
+
     @Published var cards: [CubeCard] = []
     @Published var currentCard: CubeCard?
     @Published var soundProfile: SoundProfile?
@@ -283,7 +287,7 @@ contentHash: \(card.ordinal.contentHash)
         if let p = connection?.port, p > 0 {
             return p
         }
-        return gateway.port > 0 ? gateway.port : 19001
+        return gateway.port > 0 ? gateway.port : Self.localDefaultPort
     }
 
     private func resolveToken(host: String, port: Int, gateway: GatewayManager) -> String? {
@@ -294,6 +298,15 @@ contentHash: \(card.ordinal.contentHash)
 
         if let stored = KeychainHelper.load(for: "\(host):\(port)"), !stored.isEmpty {
             return stored
+        }
+
+        let normalizedHost = host.lowercased()
+        if Self.loopbackHosts.contains(normalizedHost) {
+            for candidatePort in Self.localDiscoveryPorts {
+                if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
+                    return candidate
+                }
+            }
         }
 
         if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines), !gatewayToken.isEmpty {

@@ -2,6 +2,9 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    private static let localDefaultPort = 19001
+    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
+
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
     @Query private var connections: [GatewayConnection]
@@ -26,34 +29,10 @@ struct ContentView: View {
             }
 
             guard !gateway.isConnected else { return }
-
             guard let conn = connections.first else { return }
-
-            let cfg = RuntimeConfig.shared
-            gateway.useMock = cfg.useMock
-
-            let resolvedHost: String = {
-                let h = (cfg.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                return h.isEmpty ? conn.host : h
-            }()
-
-            let resolvedPort: Int = {
-                if let p = cfg.port, p > 0 { return p }
-                return conn.port
-            }()
-
-            let resolvedToken: String = {
-                let t = (cfg.token ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !t.isEmpty { return t }
-                return KeychainHelper.load(for: "\(conn.host):\(conn.port)") ?? "mock"
-            }()
-
-            gateway.connect(
-                host: resolvedHost,
-                port: resolvedPort,
-                token: resolvedToken,
-                channelId: conn.channelId
-            )
+            Task { @MainActor in
+                await bootstrapGatewayConnection(using: conn)
+            }
         }
         .onChange(of: gateway.isConnected) {
             if gateway.isConnected {
@@ -123,5 +102,81 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: poller.seedToastMessage)
         #endif
+    }
+
+    @MainActor
+    private func bootstrapGatewayConnection(using conn: GatewayConnection) async {
+        let cfg = RuntimeConfig.shared
+        gateway.useMock = cfg.useMock
+
+        let resolvedHost: String = {
+            let h = (cfg.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return h.isEmpty ? conn.host : h
+        }()
+
+        let resolvedPort: Int = {
+            if let p = cfg.port, p > 0 { return p }
+            return conn.port > 0 ? conn.port : Self.localDefaultPort
+        }()
+
+        let runtimeToken = (cfg.token ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedToken: String? = {
+            if !runtimeToken.isEmpty { return runtimeToken }
+            if let primary = KeychainHelper.load(for: "\(resolvedHost):\(resolvedPort)"), !primary.isEmpty {
+                return primary
+            }
+            return nil
+        }()
+
+        if cfg.useMock {
+            gateway.useMock = true
+            gateway.connect(
+                host: "mock",
+                port: Self.localDefaultPort,
+                token: "mock",
+                channelId: conn.channelId
+            )
+            return
+        }
+
+        let lowerHost = resolvedHost.lowercased()
+        let isLoopback = Self.loopbackHosts.contains(lowerHost)
+        let hasRuntimePortOverride = (cfg.port != nil)
+
+        let resolution = isLoopback
+            ? await gateway.resolveLocalDevelopmentGateway(
+                host: resolvedHost,
+                preferredPort: resolvedPort,
+                preferredToken: resolvedToken,
+                allowPortFallback: !hasRuntimePortOverride
+            )
+            : GatewayManager.LocalGatewayResolution(
+                host: resolvedHost,
+                port: resolvedPort,
+                token: resolvedToken,
+                isHealthy: false
+            )
+
+        if !hasRuntimePortOverride, isLoopback, conn.port != resolution.port {
+            conn.port = resolution.port
+        }
+
+        if let token = resolution.token, !token.isEmpty {
+            gateway.useMock = false
+            gateway.connect(
+                host: resolution.host,
+                port: resolution.port,
+                token: token,
+                channelId: conn.channelId
+            )
+        } else {
+            gateway.useMock = true
+            gateway.connect(
+                host: "mock",
+                port: Self.localDefaultPort,
+                token: "mock",
+                channelId: conn.channelId
+            )
+        }
     }
 }

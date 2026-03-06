@@ -3,8 +3,8 @@ import Combine
 
 @MainActor
 final class ObservatoryViewModel: ObservableObject {
-    private static let localDefaultPort = 19002
-    private static let legacyLocalPort = 19001
+    private static let localDefaultPort = 19001
+    private static let localDiscoveryPorts: [Int] = [19001, 19002, 19003, 19004, 19005]
     private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
 
     enum Section: CaseIterable {
@@ -336,10 +336,6 @@ final class ObservatoryViewModel: ObservableObject {
             return runtimePort
         }
         if let connectionPort = connection?.port, connectionPort > 0 {
-            let host = resolveHost(gateway: gateway, connection: connection).lowercased()
-            if Self.loopbackHosts.contains(host), connectionPort == Self.legacyLocalPort {
-                return Self.localDefaultPort
-            }
             return connectionPort
         }
         if gateway.port > 0 {
@@ -359,9 +355,12 @@ final class ObservatoryViewModel: ObservableObject {
         }
 
         let normalizedHost = host.lowercased()
-        if Self.loopbackHosts.contains(normalizedHost), port == Self.localDefaultPort,
-           let legacy = KeychainHelper.load(for: "\(host):\(Self.legacyLocalPort)"), !legacy.isEmpty {
-            return legacy
+        if Self.loopbackHosts.contains(normalizedHost) {
+            for candidatePort in Self.localDiscoveryPorts {
+                if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
+                    return candidate
+                }
+            }
         }
 
         if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines),

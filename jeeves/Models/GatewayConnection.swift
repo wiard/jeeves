@@ -8,7 +8,7 @@ final class GatewayConnection {
     var channelId: String
     var lastConnected: Date?
 
-    init(host: String = "192.168.1.42", port: Int = 19001, channelId: String = "ios-app") {
+    init(host: String = "localhost", port: Int = 19001, channelId: String = "ios-app") {
         self.host = host
         self.port = port
         self.channelId = channelId

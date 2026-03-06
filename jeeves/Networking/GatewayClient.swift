@@ -11,7 +11,7 @@ actor GatewayClient {
         components.scheme = "http"
         components.host = host
         components.port = port
-        self.baseURL = components.url ?? URL(string: "http://localhost:19002")!
+        self.baseURL = components.url ?? URL(string: "http://localhost:19001")!
         self.token = token
     }
 

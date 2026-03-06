@@ -2,6 +2,9 @@ import SwiftUI
 import SwiftData
 
 struct ChatView: View {
+    private static let localDefaultPort = 19001
+    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
+
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @Query(sort: \ChatMessage.timestamp) private var messages: [ChatMessage]
@@ -71,13 +74,8 @@ struct ChatView: View {
                 .padding()
             }
             .refreshable {
-                // Reconnect on pull-to-refresh
                 if !gateway.isConnected {
-                    gateway.connect(
-                        host: "mock",
-                        port: 19001,
-                        token: "mock"
-                    )
+                    reconnectGateway()
                 }
             }
             .onChange(of: messages.count) {
@@ -231,6 +229,39 @@ struct ChatView: View {
                 sender: .jeeves
             )
             modelContext.insert(welcome)
+        }
+    }
+
+    private func reconnectGateway() {
+        if gateway.useMock || gateway.host.lowercased() == "mock" {
+            gateway.useMock = true
+            gateway.connect(host: "mock", port: Self.localDefaultPort, token: "mock")
+            return
+        }
+
+        Task { @MainActor in
+            let preferredToken = gateway.token ?? KeychainHelper.load(for: "\(gateway.host):\(gateway.port)")
+            let resolution = Self.loopbackHosts.contains(gateway.host.lowercased())
+                ? await gateway.resolveLocalDevelopmentGateway(
+                    host: gateway.host,
+                    preferredPort: gateway.port,
+                    preferredToken: preferredToken,
+                    allowPortFallback: true
+                )
+                : GatewayManager.LocalGatewayResolution(
+                    host: gateway.host,
+                    port: gateway.port,
+                    token: preferredToken,
+                    isHealthy: false
+                )
+
+            if let token = resolution.token, !token.isEmpty {
+                gateway.useMock = false
+                gateway.connect(host: resolution.host, port: resolution.port, token: token)
+            } else {
+                gateway.useMock = true
+                gateway.connect(host: "mock", port: Self.localDefaultPort, token: "mock")
+            }
         }
     }
 }

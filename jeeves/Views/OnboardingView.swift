@@ -2,9 +2,12 @@ import SwiftUI
 import SwiftData
 
 struct OnboardingView: View {
+    private static let localDefaultPort = 19001
+    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
+
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
-    @State private var host = "192.168.1."
+    @State private var host = "localhost"
     @State private var port = "19001"
     @State private var isConnecting = false
     @State private var errorMessage: String?
@@ -91,26 +94,52 @@ struct OnboardingView: View {
             errorMessage = "Ongeldig poortnummer"
             return
         }
+        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isLoopback = Self.loopbackHosts.contains(normalizedHost.lowercased())
+        let normalizedPort = portNum
 
         isConnecting = true
         errorMessage = nil
 
-        let connection = GatewayConnection(host: host, port: portNum)
+        let connection = GatewayConnection(host: normalizedHost, port: normalizedPort)
         modelContext.insert(connection)
 
-        // For development: use mock mode since no gateway is running yet
-        gateway.useMock = true
-        gateway.connect(host: host, port: portNum, token: "mock", channelId: "ios-app")
-        isConnecting = false
-        onComplete()
+        Task { @MainActor in
+            let directToken = KeychainHelper.load(for: "\(normalizedHost):\(normalizedPort)")
+            let resolution = isLoopback
+                ? await gateway.resolveLocalDevelopmentGateway(
+                    host: normalizedHost,
+                    preferredPort: normalizedPort,
+                    preferredToken: directToken,
+                    allowPortFallback: true
+                )
+                : GatewayManager.LocalGatewayResolution(
+                    host: normalizedHost,
+                    port: normalizedPort,
+                    token: directToken,
+                    isHealthy: false
+                )
+
+            connection.port = resolution.port
+
+            if let token = resolution.token, !token.isEmpty {
+                gateway.useMock = false
+                gateway.connect(host: resolution.host, port: resolution.port, token: token, channelId: "ios-app")
+            } else {
+                gateway.useMock = true
+                gateway.connect(host: "mock", port: Self.localDefaultPort, token: "mock", channelId: "ios-app")
+            }
+            isConnecting = false
+            onComplete()
+        }
     }
 
     private func connectMock() {
-        let connection = GatewayConnection(host: "mock", port: 19001)
+        let connection = GatewayConnection(host: "mock", port: Self.localDefaultPort)
         modelContext.insert(connection)
 
         gateway.useMock = true
-        gateway.connect(host: "mock", port: 19001, token: "mock", channelId: "ios-app")
+        gateway.connect(host: "mock", port: Self.localDefaultPort, token: "mock", channelId: "ios-app")
         onComplete()
     }
 }

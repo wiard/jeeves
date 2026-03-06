@@ -4,6 +4,9 @@ import Observation
 @MainActor
 @Observable
 final class GatewayManager {
+    private static let localDefaultPort = 19001
+    static let localDiscoveryPorts: [Int] = [19001, 19002, 19003, 19004, 19005]
+    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
 
     enum ConnectionState {
         case disconnected
@@ -22,8 +25,8 @@ final class GatewayManager {
     var currentObservatoryBundle: ObservatoryGatewayBundle?
 
     var useMock: Bool = false
-    var host: String = "mock"
-    var port: Int = 19001
+    var host: String = "localhost"
+    var port: Int = GatewayManager.localDefaultPort
     var channelId: String = "ios-app"
     private(set) var token: String?
 
@@ -33,6 +36,13 @@ final class GatewayManager {
     private var connectivityTask: Task<Void, Never>?
     private var messageHandler: ((IncomingMessage) -> Void)?
     private let iso8601 = ISO8601DateFormatter()
+
+    struct LocalGatewayResolution: Sendable {
+        let host: String
+        let port: Int
+        let token: String?
+        let isHealthy: Bool
+    }
 
     func onMessage(_ handler: @escaping (IncomingMessage) -> Void) {
         messageHandler = handler
@@ -52,6 +62,7 @@ final class GatewayManager {
         let resolvedHost = normalizedHost.isEmpty ? self.host : normalizedHost
         let resolvedPort = port > 0 ? port : self.port
         let resolvedChannel = normalizedChannel.isEmpty ? self.channelId : normalizedChannel
+        let normalizedLowerHost = resolvedHost.lowercased()
 
         self.host = resolvedHost
         self.port = resolvedPort
@@ -68,7 +79,18 @@ final class GatewayManager {
 
         let key = "\(resolvedHost):\(resolvedPort)"
         let rawToken = (token ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedToken = rawToken.isEmpty ? KeychainHelper.load(for: key) : rawToken
+        let resolvedToken = rawToken.isEmpty
+            ? (
+                KeychainHelper.load(for: key)
+                ?? (
+                    Self.loopbackHosts.contains(normalizedLowerHost)
+                    ? Self.localDiscoveryPorts
+                        .map { KeychainHelper.load(for: "\(resolvedHost):\($0)") }
+                        .first(where: { ($0 ?? "").isEmpty == false }) ?? nil
+                    : nil
+                )
+            )
+            : rawToken
 
         guard let resolvedToken, !resolvedToken.isEmpty else {
             self.token = nil
@@ -92,6 +114,82 @@ final class GatewayManager {
             guard let self else { return }
             await self.refreshConnectivityAndStatus(host: resolvedHost, port: resolvedPort, token: resolvedToken)
         }
+    }
+
+    func resolveLocalDevelopmentGateway(
+        host: String,
+        preferredPort: Int,
+        preferredToken: String?,
+        allowPortFallback: Bool
+    ) async -> LocalGatewayResolution {
+        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLower = normalizedHost.lowercased()
+        let normalizedPreferredPort = preferredPort > 0 ? preferredPort : Self.localDefaultPort
+        let normalizedPreferredToken = preferredToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard Self.loopbackHosts.contains(normalizedLower) else {
+            return LocalGatewayResolution(
+                host: normalizedHost,
+                port: normalizedPreferredPort,
+                token: normalizedPreferredToken,
+                isHealthy: false
+            )
+        }
+
+        let ports: [Int] = {
+            var ordered: [Int] = [normalizedPreferredPort]
+            if allowPortFallback {
+                for port in Self.localDiscoveryPorts where !ordered.contains(port) {
+                    ordered.append(port)
+                }
+            }
+            return ordered
+        }()
+
+        var tokenCandidates: [String] = []
+        if let normalizedPreferredToken, !normalizedPreferredToken.isEmpty {
+            tokenCandidates.append(normalizedPreferredToken)
+        }
+        for port in ports {
+            if let token = KeychainHelper.load(for: "\(normalizedHost):\(port)"),
+               !token.isEmpty,
+               !tokenCandidates.contains(token) {
+                tokenCandidates.append(token)
+            }
+        }
+        if let activeToken = token?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !activeToken.isEmpty,
+           !tokenCandidates.contains(activeToken) {
+            tokenCandidates.append(activeToken)
+        }
+
+        var firstHealthyWithoutTokenPort: Int?
+
+        for port in ports {
+            for candidateToken in tokenCandidates {
+                let status = await probeConductorHealth(host: normalizedHost, port: port, token: candidateToken)
+                if status == .healthy {
+                    return LocalGatewayResolution(
+                        host: normalizedHost,
+                        port: port,
+                        token: candidateToken,
+                        isHealthy: true
+                    )
+                }
+            }
+
+            let unauthStatus = await probeConductorHealth(host: normalizedHost, port: port, token: nil)
+            if unauthStatus == .unauthorized || unauthStatus == .healthy {
+                firstHealthyWithoutTokenPort = firstHealthyWithoutTokenPort ?? port
+            }
+        }
+
+        return LocalGatewayResolution(
+            host: normalizedHost,
+            port: firstHealthyWithoutTokenPort ?? normalizedPreferredPort,
+            token: normalizedPreferredToken,
+            isHealthy: firstHealthyWithoutTokenPort != nil
+        )
     }
 
     func disconnect() {
@@ -309,7 +407,55 @@ final class GatewayManager {
             return stored
         }
 
+        let normalizedHost = host.lowercased()
+        if Self.loopbackHosts.contains(normalizedHost) {
+            for candidatePort in Self.localDiscoveryPorts {
+                if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
+                    self.token = candidate
+                    return candidate
+                }
+            }
+        }
+
         throw NSError(domain: "Gateway", code: 401, userInfo: [NSLocalizedDescriptionKey: "Missing token"])
+    }
+
+    private enum ConductorProbeStatus {
+        case healthy
+        case unauthorized
+        case unavailable
+    }
+
+    private func probeConductorHealth(host: String, port: Int, token: String?) async -> ConductorProbeStatus {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = host
+        components.port = port
+        components.path = "/api/conductor/health"
+        if let token, !token.isEmpty {
+            components.queryItems = [URLQueryItem(name: "token", value: token)]
+        }
+
+        guard let url = components.url else { return .unavailable }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 1.2
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return .unavailable }
+            if http.statusCode == 200 {
+                if let decoded = try? JSONDecoder().decode(ConductorHealth.self, from: data) {
+                    return decoded.ok ? .healthy : .unavailable
+                }
+                return .healthy
+            }
+            if http.statusCode == 401 {
+                return .unauthorized
+            }
+            return .unavailable
+        } catch {
+            return .unavailable
+        }
     }
 
     private func handleIncoming(_ message: IncomingMessage) {
