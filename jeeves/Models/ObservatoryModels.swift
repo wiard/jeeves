@@ -579,6 +579,14 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
     let reason: String?
     let risk: String?
     let peerId: String?
+    let explanation: String?
+    let gravityScore: Double?
+    let band: String?
+    let candidateScore: Double?
+    let candidateType: String?
+    let candidateId: String?
+    let crossDomain: Bool?
+    let rank: Int?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -599,10 +607,19 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         case reason
         case risk
         case peerId
+        case explanation
+        case gravityScore
+        case band
+        case candidateScore
+        case candidateType
+        case candidateId
+        case crossDomain
+        case rank
     }
 
     /// The best display text for this event.
     var displayTitle: String {
+        if let explanation, !explanation.isEmpty { return explanation }
         if let title, !title.isEmpty { return title }
         if let summary, !summary.isEmpty { return summary }
         if let proposalId, !proposalId.isEmpty { return proposalId }
@@ -612,6 +629,9 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         if let eventName = event, !eventName.isEmpty { return eventName }
         return "event"
     }
+
+    var isGravityHotspot: Bool { type == "gravity_hotspot" }
+    var isDiscoveryCandidate: Bool { type == "discovery_candidate" }
 
     init(
         id: String,
@@ -629,7 +649,15 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         decision: String?,
         reason: String?,
         risk: String?,
-        peerId: String?
+        peerId: String?,
+        explanation: String? = nil,
+        gravityScore: Double? = nil,
+        band: String? = nil,
+        candidateScore: Double? = nil,
+        candidateType: String? = nil,
+        candidateId: String? = nil,
+        crossDomain: Bool? = nil,
+        rank: Int? = nil
     ) {
         self.id = id
         self.type = type
@@ -647,6 +675,14 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         self.reason = reason
         self.risk = risk
         self.peerId = peerId
+        self.explanation = explanation
+        self.gravityScore = gravityScore
+        self.band = band
+        self.candidateScore = candidateScore
+        self.candidateType = candidateType
+        self.candidateId = candidateId
+        self.crossDomain = crossDomain
+        self.rank = rank
     }
 
     init(from decoder: Decoder) throws {
@@ -667,21 +703,35 @@ struct ObservatoryStreamEvent: Decodable, Sendable, Identifiable {
         reason = c.decodeLossyString(forKey: .reason)
         risk = c.decodeLossyString(forKey: .risk)
         peerId = c.decodeLossyString(forKey: .peerId)
+        explanation = c.decodeLossyString(forKey: .explanation)
+        gravityScore = try c.decodeIfPresent(Double.self, forKey: .gravityScore)
+        band = c.decodeLossyString(forKey: .band)
+        candidateScore = try c.decodeIfPresent(Double.self, forKey: .candidateScore)
+        candidateType = c.decodeLossyString(forKey: .candidateType)
+        candidateId = c.decodeLossyString(forKey: .candidateId)
+        crossDomain = try c.decodeIfPresent(Bool.self, forKey: .crossDomain)
+        rank = try c.decodeIfPresent(Int.self, forKey: .rank)
 
-        id = c.decodeLossyString(forKey: .id)
+        let decodedId: String? = c.decodeLossyString(forKey: .id)
             ?? c.decodeLossyString(forKey: .eventId)
-            ?? [
+        if let decodedId {
+            id = decodedId
+        } else {
+            let parts: [String] = [
                 type,
                 timestampIso ?? "",
                 clusterId ?? "",
                 proposalId ?? "",
                 signalId ?? "",
                 challengeId ?? "",
+                candidateId ?? "",
                 event ?? "",
                 agentId ?? "",
                 decision ?? "",
                 reason ?? ""
-            ].joined(separator: "|")
+            ]
+            id = parts.joined(separator: "|")
+        }
     }
 
 }

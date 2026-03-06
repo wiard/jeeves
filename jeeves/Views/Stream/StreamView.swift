@@ -64,7 +64,13 @@ struct StreamView: View {
                 }
 
                 ForEach(sortedStreamEvents) { event in
-                    StreamEventRow(event: event)
+                    if event.isGravityHotspot {
+                        GravityHotspotRow(event: event)
+                    } else if event.isDiscoveryCandidate {
+                        DiscoveryCandidateRow(event: event)
+                    } else {
+                        StreamEventRow(event: event)
+                    }
                 }
 
                 ForEach(sortedProposals) { proposal in
@@ -315,6 +321,137 @@ private struct StreamEventRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 12)
         .background(Color(.secondarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct GravityHotspotRow: View {
+    let event: ObservatoryStreamEvent
+
+    private var timeString: String {
+        guard let date = ISO8601DateFormatter().date(from: event.timestampIso ?? "") else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var bandColor: Color {
+        switch event.band ?? "" {
+        case "red": return .red
+        case "yellow": return .orange
+        case "green": return .green
+        default: return .blue
+        }
+    }
+
+    private var scoreText: String {
+        guard let score = event.gravityScore else { return "" }
+        return String(format: "%.1f", score)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(timeString)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            Circle()
+                .fill(bandColor)
+                .frame(width: 10, height: 10)
+                .padding(.top, 4)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.explanation ?? event.displayTitle)
+                    .font(.jeevesMono)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 8) {
+                    Text("gravity \(scoreText)")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    if let band = event.band {
+                        Text(band)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(bandColor)
+                    }
+                    if let rank = event.rank {
+                        Text("#\(rank)")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(bandColor.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct DiscoveryCandidateRow: View {
+    let event: ObservatoryStreamEvent
+
+    private var timeString: String {
+        guard let date = ISO8601DateFormatter().date(from: event.timestampIso ?? "") else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var scoreText: String {
+        guard let score = event.candidateScore else { return "" }
+        return String(format: "%.2f", score)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(timeString)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            Text("\u{1F52D}")
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.explanation ?? event.displayTitle)
+                    .font(.jeevesMono)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 8) {
+                    if let candidateType = event.candidateType {
+                        Text(candidateType.replacingOccurrences(of: "_", with: " "))
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !scoreText.isEmpty {
+                        Text("score \(scoreText)")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if event.crossDomain == true {
+                        Text("cross-domain")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.cyan)
+                    }
+                    if let rank = event.rank {
+                        Text("#\(rank)")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(Color.cyan.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
