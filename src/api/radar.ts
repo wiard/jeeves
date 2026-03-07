@@ -182,6 +182,13 @@ export type PaperSignal = {
   cellIndex: number | null
   cubeCell: [string, string, string] | null
   url: string | null
+  abstract: string | null
+  authors: string | null
+  citationCount: number | null
+  score: number | null
+  why: string[]
+  topics: string[]
+  publishedAtIso: string | null
 }
 
 export function createRadarClient(config: RadarConfig): RadarClient {
