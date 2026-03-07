@@ -521,3 +521,190 @@ textarea {
   font-family: var(--font-data);
   font-size: 11px;
 }
+
+/* Gravity Hotspot Card */
+
+.gravity-hotspot-card {
+  background: var(--bg-card);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+  margin-bottom: var(--space-sm);
+  display: flex;
+  overflow: hidden;
+}
+
+.gravity-hotspot-card .band-indicator {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.gravity-hotspot-card .content {
+  padding: var(--space-sm) var(--space-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.gravity-hotspot-card .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-xs);
+}
+
+.gravity-hotspot-card .cell-label {
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.gravity-hotspot-card .axes {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.gravity-hotspot-card .score {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.gravity-hotspot-card .explanation {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.gravity-hotspot-card .contributors {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Discovery Candidate Card */
+
+.discovery-candidate-card {
+  background: var(--bg-card);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.discovery-candidate-card .header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: baseline;
+  margin-bottom: var(--space-xs);
+}
+
+.discovery-candidate-card .type {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--amber);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.discovery-candidate-card .score {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.discovery-candidate-card .cross-domain {
+  font-family: var(--font-data);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--amber-dim);
+  color: var(--bg-primary);
+}
+
+.discovery-candidate-card .rank {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.discovery-candidate-card .explanation {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.discovery-candidate-card .sources {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Paper Signal Card */
+
+.paper-signal-card {
+  background: var(--bg-card);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.paper-signal-card .header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: baseline;
+  margin-bottom: var(--space-xs);
+}
+
+.paper-signal-card .source-badge {
+  font-family: var(--font-data);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--amber);
+}
+
+.paper-signal-card .topic-cluster {
+  font-family: var(--font-data);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--amber-dim);
+  color: var(--text-secondary);
+}
+
+.paper-signal-card .quality {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.paper-signal-card .title {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.paper-signal-card .title a {
+  color: var(--text-primary);
+  text-decoration: none;
+  border-bottom: 1px solid var(--amber-dim);
+}
+
+.paper-signal-card .title a:active {
+  color: var(--amber);
+}
+
+.paper-signal-card .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-muted);
+}

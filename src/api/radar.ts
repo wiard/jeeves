@@ -124,6 +124,20 @@ class RadarClient {
     return this.get('/api/radar/clusters')
   }
 
+  gravity(): Promise<{ hotspots: GravityHotspot[]; field: unknown }> {
+    return this.get('/api/radar/gravity')
+  }
+
+  discoveries(): Promise<{ candidates: DiscoveryCandidate[]; count: number }> {
+    return this.get('/api/radar/discoveries')
+  }
+
+  papers(opts?: { limit?: number }): Promise<{ papers: PaperSignal[]; count: number }> {
+    const params: Record<string, string> = {}
+    if (opts?.limit) params.limit = String(opts.limit)
+    return this.get('/api/radar/papers', params)
+  }
+
   injectSignal(signal: { title: string; summary?: string; source?: string }): Promise<Activation> {
     return this.post('/api/radar/signal', signal)
   }
@@ -131,6 +145,43 @@ class RadarClient {
   triggerFetch(sources?: string[]): Promise<{ fetched: number; matched: number; collisions: number; emergence: number }> {
     return this.post('/api/radar/fetch', sources ? { sources } : undefined)
   }
+}
+
+export type GravityHotspot = {
+  cell: number
+  axes: { what: string; where: string; time: string }
+  gravityScore: number
+  band: string
+  rank: number
+  contributors: string[]
+  explanation: string
+}
+
+export type DiscoveryCandidate = {
+  candidateId: string
+  candidateType: string
+  candidateScore: number
+  rank: number
+  crossDomain: boolean
+  sources: string[]
+  explanation: string
+}
+
+export type PaperSignal = {
+  signalId: string
+  sourceId: string
+  detectedAtIso: string
+  title: string
+  paperSource: string
+  topic: string
+  topicCluster: string
+  semanticCategory: string
+  ageBucket: string
+  qualityTier: string
+  confidence: string
+  cellIndex: number | null
+  cubeCell: [string, string, string] | null
+  url: string | null
 }
 
 export function createRadarClient(config: RadarConfig): RadarClient {

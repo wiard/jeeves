@@ -3,14 +3,20 @@ import {
   createRadarClient,
   type Activation,
   type Collision,
+  type DiscoveryCandidate,
+  type GravityHotspot,
   type HeatmapCell,
+  type PaperSignal,
   type RadarStatus,
   type SourceStats
 } from '../api/radar'
 import { ClusterTags } from '../components/ClusterTags'
 import { CubeHeatmap } from '../components/CubeHeatmap'
+import { DiscoveryCandidateCard } from '../components/DiscoveryCandidateCard'
 import { EmergenceCard } from '../components/EmergenceCard'
+import { GravityHotspotCard } from '../components/GravityHotspotCard'
 import { JeevesVoice } from '../components/JeevesVoice'
+import { PaperSignalCard } from '../components/PaperSignalCard'
 import { SignalCard } from '../components/SignalCard'
 import { SignalInject } from '../components/SignalInject'
 import { SourceBar } from '../components/SourceBar'
@@ -28,6 +34,9 @@ type ObservatoryState = {
   heatmap: HeatmapCell[]
   hotClusters: ClusterCount[]
   sourceStats: SourceStats[]
+  gravityHotspots: GravityHotspot[]
+  discoveryCandidates: DiscoveryCandidate[]
+  papers: PaperSignal[]
   lastRefresh: string | null
   isLoading: boolean
   isConnected: boolean
@@ -41,6 +50,9 @@ type DataPayload = {
   heatmap: HeatmapCell[]
   hotClusters: ClusterCount[]
   sourceStats: SourceStats[]
+  gravityHotspots: GravityHotspot[]
+  discoveryCandidates: DiscoveryCandidate[]
+  papers: PaperSignal[]
   lastRefresh: string | null
 }
 
@@ -60,6 +72,9 @@ const initialState: ObservatoryState = {
   heatmap: [],
   hotClusters: [],
   sourceStats: [],
+  gravityHotspots: [],
+  discoveryCandidates: [],
+  papers: [],
   lastRefresh: null,
   isLoading: true,
   isConnected: true,
@@ -215,16 +230,19 @@ export function Observatory({ token, baseUrl, onDisconnect }: ObservatoryProps) 
     const previous = stateRef.current
 
     try {
-      const [statusRes, emergenceRes, activationsRes, heatmapRes, sourcesRes, clustersRes] = await Promise.allSettled([
+      const [statusRes, emergenceRes, activationsRes, heatmapRes, sourcesRes, clustersRes, gravityRes, discoveriesRes, papersRes] = await Promise.allSettled([
         client.status(),
         client.emergence(),
         client.activations({ limit: 30 }),
         client.heatmap(),
         client.sources(),
-        client.clusters()
+        client.clusters(),
+        client.gravity(),
+        client.discoveries(),
+        client.papers({ limit: 30 })
       ])
 
-      const successCount = [statusRes, emergenceRes, activationsRes, heatmapRes, sourcesRes, clustersRes].filter(
+      const successCount = [statusRes, emergenceRes, activationsRes, heatmapRes, sourcesRes, clustersRes, gravityRes, discoveriesRes, papersRes].filter(
         (result) => result.status === 'fulfilled'
       ).length
 
@@ -238,6 +256,9 @@ export function Observatory({ token, baseUrl, onDisconnect }: ObservatoryProps) 
       const heatmap = heatmapRes.status === 'fulfilled' ? heatmapRes.value.heatmap : previous.heatmap
       const sourceStats = sourcesRes.status === 'fulfilled' ? [...sourcesRes.value].sort((a, b) => a.source.localeCompare(b.source)) : previous.sourceStats
       const clusterApi = clustersRes.status === 'fulfilled' ? clustersRes.value : null
+      const gravityHotspots = gravityRes.status === 'fulfilled' ? gravityRes.value.hotspots : previous.gravityHotspots
+      const discoveryCandidates = discoveriesRes.status === 'fulfilled' ? discoveriesRes.value.candidates : previous.discoveryCandidates
+      const papers = papersRes.status === 'fulfilled' ? papersRes.value.papers : previous.papers
 
       const payload: DataPayload = {
         status,
@@ -246,6 +267,9 @@ export function Observatory({ token, baseUrl, onDisconnect }: ObservatoryProps) 
         heatmap,
         sourceStats,
         hotClusters: deriveClusters(clusterApi, status),
+        gravityHotspots,
+        discoveryCandidates,
+        papers,
         lastRefresh: new Date().toISOString()
       }
 
@@ -387,6 +411,39 @@ export function Observatory({ token, baseUrl, onDisconnect }: ObservatoryProps) 
 
       <div className="section-header">Clusters</div>
       <ClusterTags clusters={state.hotClusters} />
+
+      <div className="section-header">Gravity Hotspots</div>
+      {state.gravityHotspots.length === 0 ? (
+        <div className="empty-state">
+          <div className="message">Geen gravity hotspots.</div>
+        </div>
+      ) : (
+        state.gravityHotspots.slice(0, 10).map((hotspot) => (
+          <GravityHotspotCard key={`g-${hotspot.cell}-${hotspot.rank}`} hotspot={hotspot} />
+        ))
+      )}
+
+      <div className="section-header">Discovery Candidates</div>
+      {state.discoveryCandidates.length === 0 ? (
+        <div className="empty-state">
+          <div className="message">Geen discovery candidates.</div>
+        </div>
+      ) : (
+        state.discoveryCandidates.slice(0, 10).map((candidate) => (
+          <DiscoveryCandidateCard key={candidate.candidateId} candidate={candidate} />
+        ))
+      )}
+
+      <div className="section-header">Papers</div>
+      {state.papers.length === 0 ? (
+        <div className="empty-state">
+          <div className="message">Geen papers.</div>
+        </div>
+      ) : (
+        state.papers.slice(0, 20).map((paper) => (
+          <PaperSignalCard key={paper.signalId} paper={paper} />
+        ))
+      )}
 
       <div className="section-header">Signals</div>
       {state.activations.length === 0 ? (
