@@ -68,6 +68,8 @@ struct StreamView: View {
                         GravityHotspotRow(event: event)
                     } else if event.isDiscoveryCandidate {
                         DiscoveryCandidateRow(event: event)
+                    } else if event.type == "signal_detected" {
+                        PaperSignalRow(event: event)
                     } else {
                         StreamEventRow(event: event)
                     }
@@ -327,6 +329,69 @@ private struct StreamEventRow: View {
     }
 }
 
+private struct PaperSignalRow: View {
+    let event: ObservatoryStreamEvent
+
+    private var timeString: String {
+        guard let date = ISO8601DateFormatter().date(from: event.timestampIso ?? "") else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var sourceBadges: [String] {
+        mergeSources(primary: [event.sourceId], secondary: event.reason)
+    }
+
+    private var whyMatters: String {
+        readableWhyMatters(
+            type: event.type,
+            explanation: event.explanation,
+            summary: event.summary,
+            reason: event.reason
+        )
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(timeString)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            Text("\u{25C8}")
+                .foregroundStyle(.indigo)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(event.title ?? event.displayTitle)
+                    .font(.jeevesMono)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+
+                if !sourceBadges.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(sourceBadges, id: \.self) { source in
+                            SourceBadge(source: source)
+                        }
+                    }
+                }
+
+                Text("Why this matters: \(whyMatters)")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.indigo.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 private struct GravityHotspotRow: View {
     let event: ObservatoryStreamEvent
 
@@ -349,6 +414,19 @@ private struct GravityHotspotRow: View {
     private var scoreText: String {
         guard let score = event.gravityScore else { return "" }
         return String(format: "%.1f", score)
+    }
+
+    private var sourceBadges: [String] {
+        mergeSources(primary: [event.sourceId], secondary: event.reason)
+    }
+
+    private var whyMatters: String {
+        readableWhyMatters(
+            type: event.type,
+            explanation: event.explanation,
+            summary: event.summary,
+            reason: event.reason
+        )
     }
 
     var body: some View {
@@ -384,6 +462,19 @@ private struct GravityHotspotRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                if !sourceBadges.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(sourceBadges, id: \.self) { source in
+                            SourceBadge(source: source)
+                        }
+                    }
+                }
+
+                Text("Why this matters: \(whyMatters)")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
             }
 
             Spacer()
@@ -408,6 +499,19 @@ private struct DiscoveryCandidateRow: View {
     private var scoreText: String {
         guard let score = event.candidateScore else { return "" }
         return String(format: "%.2f", score)
+    }
+
+    private var sourceBadges: [String] {
+        mergeSources(primary: [event.sourceId], secondary: event.reason)
+    }
+
+    private var whyMatters: String {
+        readableWhyMatters(
+            type: event.type,
+            explanation: event.explanation,
+            summary: event.summary,
+            reason: event.reason
+        )
     }
 
     var body: some View {
@@ -447,6 +551,19 @@ private struct DiscoveryCandidateRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                if !sourceBadges.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(sourceBadges, id: \.self) { source in
+                            SourceBadge(source: source)
+                        }
+                    }
+                }
+
+                Text("Why this matters: \(whyMatters)")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
             }
 
             Spacer()
@@ -504,5 +621,119 @@ private struct RadarCollisionRow: View {
         .padding(.horizontal, 12)
         .background(Color.purple.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct SourceBadge: View {
+    let source: String
+
+    private var label: String {
+        switch source {
+        case "openalex":
+            return "OpenAlex"
+        case "arxiv":
+            return "arXiv"
+        case "github":
+            return "GitHub"
+        case "manual":
+            return "Manual"
+        default:
+            return source.capitalized
+        }
+    }
+
+    private var tint: Color {
+        switch source {
+        case "openalex":
+            return .indigo
+        case "arxiv":
+            return .orange
+        case "github":
+            return .green
+        case "manual":
+            return .gray
+        default:
+            return .secondary
+        }
+    }
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.15))
+            .foregroundStyle(tint)
+            .clipShape(Capsule())
+    }
+}
+
+private func mergeSources(primary: [String?], secondary: String?) -> [String] {
+    var collected: [String] = []
+
+    for item in primary {
+        if let normalized = normalizeSource(item), !collected.contains(normalized) {
+            collected.append(normalized)
+        }
+    }
+
+    for raw in splitSourceTokens(secondary) {
+        if let normalized = normalizeSource(raw), !collected.contains(normalized) {
+            collected.append(normalized)
+        }
+    }
+
+    return collected
+}
+
+private func splitSourceTokens(_ raw: String?) -> [String] {
+    guard let raw, !raw.isEmpty else { return [] }
+    return raw
+        .replacingOccurrences(of: "|", with: "/")
+        .replacingOccurrences(of: ",", with: "/")
+        .split(separator: "/")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+}
+
+private func normalizeSource(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    let value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if value.isEmpty { return nil }
+    switch value {
+    case "openalex", "knowledge_openalex":
+        return "openalex"
+    case "arxiv", "knowledge_arxiv":
+        return "arxiv"
+    case "github", "knowledge_github":
+        return "github"
+    case "manual":
+        return "manual"
+    default:
+        return nil
+    }
+}
+
+private func readableWhyMatters(type: String, explanation: String?, summary: String?, reason: String?) -> String {
+    let preferred = [explanation, summary, reason]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .first { !$0.isEmpty }
+
+    if let preferred {
+        let cleaned = preferred
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+        return cleaned
+    }
+
+    switch type {
+    case "signal_detected":
+        return "A new paper signal aligns with active observatory pressure."
+    case "gravity_hotspot":
+        return "This cell is attracting sustained attention and can reshape upcoming collisions."
+    case "discovery_candidate":
+        return "This candidate combines multiple signals into a concrete research direction."
+    default:
+        return "This event changes the current discovery context."
     }
 }

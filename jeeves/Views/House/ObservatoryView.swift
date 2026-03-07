@@ -253,7 +253,10 @@ struct ObservatoryView: View {
                     row("Activation", "-")
                 } else {
                     ForEach(Array(activations.prefix(3).enumerated()), id: \.element.id) { index, activation in
-                        row("Activation \(index + 1)", "\(activation.source) · \(activation.title) · \(formatDouble(activation.residue))")
+                        row(
+                            "Activation \(index + 1)",
+                            "\(friendlySource(activation.source)) · \(activation.title) · \(formatDouble(activation.residue))"
+                        )
                     }
                 }
 
@@ -262,7 +265,10 @@ struct ObservatoryView: View {
                     row("Gravity hotspot", "-")
                 } else {
                     ForEach(Array(hotspots.prefix(3).enumerated()), id: \.element.id) { index, hotspot in
-                        row("Gravity hotspot \(index + 1)", "cell \(hotspot.cell) · \(formatDouble(hotspot.gravityScore)) · \(hotspot.band)")
+                        row(
+                            "Gravity hotspot \(index + 1)",
+                            "cell \(hotspot.cell) · \(formatDouble(hotspot.gravityScore)) · \(hotspot.band) · \(compactWhy(hotspot.explanation))"
+                        )
                     }
                 }
 
@@ -271,7 +277,11 @@ struct ObservatoryView: View {
                     row("Discovery candidate", "-")
                 } else {
                     ForEach(Array(candidates.prefix(3).enumerated()), id: \.element.id) { index, candidate in
-                        row("Discovery candidate \(index + 1)", "\(candidate.candidateType) · \(formatDouble(candidate.candidateScore)) · rank \(candidate.rank)")
+                        let sourceLabel = candidate.sources.map(friendlySource).joined(separator: "/")
+                        row(
+                            "Discovery candidate \(index + 1)",
+                            "\(candidate.candidateType) · \(formatDouble(candidate.candidateScore)) · rank \(candidate.rank) · \(sourceLabel) · \(compactWhy(candidate.explanation))"
+                        )
                     }
                 }
 
@@ -332,5 +342,29 @@ struct ObservatoryView: View {
 
     private func formatDouble(_ value: Double) -> String {
         String(format: "%.2f", value)
+    }
+
+    private func friendlySource(_ source: String) -> String {
+        let normalized = source.lowercased()
+        if normalized == "openalex" || normalized == "knowledge_openalex" {
+            return "OpenAlex"
+        }
+        if normalized == "arxiv" || normalized == "knowledge_arxiv" {
+            return "arXiv"
+        }
+        if normalized == "github" || normalized == "knowledge_github" {
+            return "GitHub"
+        }
+        return source
+    }
+
+    private func compactWhy(_ raw: String) -> String {
+        let cleaned = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: " ")
+        if cleaned.isEmpty {
+            return "why pending"
+        }
+        return String(cleaned.prefix(64))
     }
 }
