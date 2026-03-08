@@ -18,6 +18,7 @@ final class ProposalPoller {
     var proposals: [Proposal] = []
     var pendingProposals: [Proposal] = []
     var extensionProposals: [ExtensionProposal] = []
+    var incomingTools: [IncomingToolSummary] = []
     var extensionUsesDemoFallback = false
     var decidedProposals: [DecidedProposal] = []
     var recentKnowledgeObjects: [KnowledgeObject] = []
@@ -104,6 +105,15 @@ final class ProposalPoller {
         } catch {
             extensionProposals = demoExtensionProposals()
             extensionUsesDemoFallback = true
+        }
+
+        do {
+            incomingTools = try await client.fetchIncomingTools()
+            observedSuccessfulResponse = true
+        } catch {
+            if extensionUsesDemoFallback {
+                incomingTools = demoIncomingTools()
+            }
         }
 
         do {
@@ -569,6 +579,7 @@ final class ProposalPoller {
         proposals = demoProposals(tick: demoTick)
         pendingProposals = proposals.filter(\.isPending)
         extensionProposals = demoExtensionProposals()
+        incomingTools = demoIncomingTools()
         extensionUsesDemoFallback = true
         decidedProposals = demoDecidedProposals(tick: demoTick)
         NotificationManager.shared.updateBadge(count: pendingProposals.count)
@@ -674,6 +685,65 @@ final class ProposalPoller {
                 reasoningTrace: "Stabiele residue drift met lage risico-score; geschikt voor bounded summarization."
             ),
         ]
+    }
+
+    private func demoIncomingTools() -> [IncomingToolSummary] {
+        demoExtensionProposals().map { proposal in
+            let suggested = proposal.title.lowercased().contains("fabric")
+                ? "Focused anomaly triage assistant"
+                : "Bounded discovery summarizer"
+
+            let actions = IncomingToolActionSet(
+                reject: IncomingToolActionState(available: true, endpoint: "/api/extensions/\(proposal.extensionId)/deny"),
+                sandbox: IncomingToolActionState(available: false, endpoint: "/api/extensions/\(proposal.extensionId)/load"),
+                refine: IncomingToolActionState(available: true, endpoint: nil, hint: "Create a narrower variant before promotion."),
+                promote: IncomingToolActionState(available: true, endpoint: "/api/extensions/\(proposal.extensionId)/approve"),
+                approveProposal: IncomingToolActionState(available: true, endpoint: "/api/extensions/\(proposal.extensionId)/approve")
+            )
+
+            let history = [
+                IncomingToolActionHistoryItem(
+                    action: "discovered",
+                    atIso: ISO8601DateFormatter().string(from: Date()),
+                    state: "proposed"
+                )
+            ]
+
+            return IncomingToolSummary(
+                extensionId: proposal.extensionId,
+                proposalId: nil,
+                status: proposal.status,
+                discoveredAtIso: ISO8601DateFormatter().string(from: Date()),
+                objectId: proposal.extensionId,
+                title: proposal.title,
+                source: proposal.sourceType ?? "CLASHD27",
+                intentSummary: proposal.purpose,
+                capabilitySummary: proposal.capabilities.map(\.title).joined(separator: ", "),
+                capabilities: proposal.capabilities.map(\.title),
+                risk: proposal.risk,
+                suggestedRefinement: suggested,
+                suggestedRefinedTool: suggested,
+                refinementSuggestions: [suggested],
+                linkedCells: proposal.linkedCells,
+                explanation: proposal.reasoningTrace ?? proposal.purpose,
+                discoveryOrigin: "Mock discovery feed",
+                weakPoints: "Demo fallback artifact",
+                weakPointsList: ["Demo fallback artifact"],
+                evidenceRefs: [
+                    IncomingToolEvidenceRef(
+                        label: "Evidence",
+                        value: "Demo intake trace for \(proposal.extensionId)"
+                    )
+                ],
+                forensicsReportId: nil,
+                actionHistory: history,
+                actions: actions,
+                promotionReady: true,
+                refinementState: "suggested",
+                sandboxState: "blocked",
+                lineageHint: "Discovery -> Forensics -> Proposal"
+            )
+        }
     }
 
     private func demoDecidedProposals(tick: Int) -> [DecidedProposal] {

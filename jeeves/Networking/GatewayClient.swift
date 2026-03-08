@@ -53,6 +53,30 @@ actor GatewayClient {
         return pending.isEmpty ? extensions : pending
     }
 
+    func fetchIncomingTools() async throws -> [IncomingToolSummary] {
+        let raw = try await getRawJSON("/api/extensions/incoming-tools")
+        return parseIncomingTools(from: raw)
+    }
+
+    func deployCertifiedConfiguration(
+        deployment: DeployConfigurationRequest
+    ) async throws -> DeployConfigurationResponse {
+        let body = try JSONEncoder().encode(deployment)
+        let (data, _) = try await request(path: "/api/configurations/deploy", method: "POST", body: body)
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(DeployConfigurationResponse.self, from: data) {
+            return direct
+        }
+
+        if let envelope = try? decoder.decode(DeployConfigurationEnvelope.self, from: data),
+           let response = envelope.resolved {
+            return response
+        }
+
+        throw URLError(.cannotParseResponse)
+    }
+
     func fetchExtension(id: String) async throws -> ExtensionManifest {
         if let direct: ExtensionManifest = try? await get("/api/extensions/\(id)") {
             return direct
@@ -74,6 +98,47 @@ actor GatewayClient {
 
     func loadExtension(id: String) async throws -> ExtensionDecision {
         try await postExtensionDecision(path: "/api/extensions/\(id)/load")
+    }
+
+    func performIncomingToolAction(endpoint: String, reason: String? = nil) async throws -> ExtensionDecision? {
+        let body = try JSONEncoder().encode(IncomingToolActionBody(reason: reason))
+        let (data, _) = try await request(path: endpoint, method: "POST", body: body)
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(ExtensionDecision.self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(ExtensionDecisionEnvelope.self, from: data) {
+            if let decision = envelope.decision ?? envelope.data {
+                if decision.receipt != nil {
+                    return decision
+                }
+                return ExtensionDecision(
+                    extensionId: decision.extensionId,
+                    status: decision.status,
+                    approvedAtIso: decision.approvedAtIso ?? envelope.approvedAtIso,
+                    loadedAtIso: decision.loadedAtIso ?? envelope.loadedAtIso,
+                    decisionAtIso: decision.decisionAtIso,
+                    reason: decision.reason,
+                    actor: decision.actor,
+                    receipt: envelope.receipt ?? decision.receipt
+                )
+            }
+
+            if let extensionId = envelope.extensionId {
+                return ExtensionDecision(
+                    extensionId: extensionId,
+                    status: envelope.status ?? "ok",
+                    approvedAtIso: envelope.approvedAtIso,
+                    loadedAtIso: envelope.loadedAtIso,
+                    decisionAtIso: ISO8601DateFormatter().string(from: Date()),
+                    reason: nil,
+                    actor: nil,
+                    receipt: envelope.receipt
+                )
+            }
+        }
+        return nil
     }
 
     func fetchExtensionGraph(id: String) async throws -> KnowledgeGraphResponse {
@@ -447,6 +512,98 @@ actor GatewayClient {
     }
 
     private struct EmptyPostBody: Encodable {}
+    private struct DeployConfigurationEnvelope: Decodable {
+        let ok: Bool?
+        let proposal: DeployConfigurationResponse?
+        let deployment: DeployConfigurationResponse?
+        let result: DeployConfigurationResponse?
+        let data: DeployConfigurationResponse?
+        let response: DeployConfigurationResponse?
+        let proposalId: String?
+        let status: String?
+        let summary: String?
+        let nextStep: String?
+        let configId: String?
+        let intentionId: String?
+        let reason: String?
+        let requestId: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case ok
+            case proposal
+            case deployment
+            case result
+            case data
+            case response
+            case proposalId
+            case proposal_id
+            case status
+            case summary
+            case message
+            case nextStep
+            case next_step
+            case configId
+            case config_id
+            case intentionId
+            case intention_id
+            case reason
+            case requestId
+            case request_id
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            ok = try? c.decodeIfPresent(Bool.self, forKey: .ok)
+            proposal = try? c.decodeIfPresent(DeployConfigurationResponse.self, forKey: .proposal)
+            deployment = try? c.decodeIfPresent(DeployConfigurationResponse.self, forKey: .deployment)
+            result = try? c.decodeIfPresent(DeployConfigurationResponse.self, forKey: .result)
+            data = try? c.decodeIfPresent(DeployConfigurationResponse.self, forKey: .data)
+            response = try? c.decodeIfPresent(DeployConfigurationResponse.self, forKey: .response)
+            proposalId = (try? c.decodeIfPresent(String.self, forKey: .proposalId))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .proposal_id))
+            status = try? c.decodeIfPresent(String.self, forKey: .status)
+            summary = (try? c.decodeIfPresent(String.self, forKey: .summary))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .message))
+            nextStep = (try? c.decodeIfPresent(String.self, forKey: .nextStep))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .next_step))
+            configId = (try? c.decodeIfPresent(String.self, forKey: .configId))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .config_id))
+            intentionId = (try? c.decodeIfPresent(String.self, forKey: .intentionId))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .intention_id))
+            reason = try? c.decodeIfPresent(String.self, forKey: .reason)
+            requestId = (try? c.decodeIfPresent(String.self, forKey: .requestId))
+                ?? (try? c.decodeIfPresent(String.self, forKey: .request_id))
+        }
+
+        var resolved: DeployConfigurationResponse? {
+            proposal ?? deployment ?? result ?? data ?? response
+                ?? DeployConfigurationResponse(
+                    ok: ok,
+                    proposalId: proposalId,
+                    status: status,
+                    summary: summary,
+                    nextStep: nextStep,
+                    configId: configId,
+                    intentionId: intentionId,
+                    reason: reason,
+                    requestId: requestId
+                )
+        }
+    }
+    private struct IncomingToolActionBody: Encodable {
+        let reason: String?
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            if let reason, !reason.isEmpty {
+                try container.encode(reason, forKey: .reason)
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case reason
+        }
+    }
 
     private func postExtensionDecision(path: String) async throws -> ExtensionDecision {
         let (data, _) = try await request(path: path, method: "POST", body: try JSONEncoder().encode(EmptyPostBody()))
@@ -488,6 +645,243 @@ actor GatewayClient {
         }
 
         throw URLError(.cannotParseResponse)
+    }
+
+    private func parseIncomingTools(from json: Any) -> [IncomingToolSummary] {
+        let rows: [[String: Any]]
+        if let array = json as? [[String: Any]] {
+            rows = array
+        } else if let envelope = json as? [String: Any] {
+            if let tools = envelope["tools"] as? [[String: Any]] {
+                rows = tools
+            } else if let items = envelope["items"] as? [[String: Any]] {
+                rows = items
+            } else if let data = envelope["data"] as? [[String: Any]] {
+                rows = data
+            } else {
+                rows = []
+            }
+        } else {
+            rows = []
+        }
+
+        return rows.compactMap { row in
+            let extensionId = parseString(row, keys: ["extensionId", "toolId", "id"])
+            guard let extensionId, !extensionId.isEmpty else { return nil }
+
+            let title = parseString(row, keys: ["title", "name", "toolName"]) ?? extensionId
+            let source = parseString(row, keys: ["origin", "source", "sourceType"]) ?? "clashd27"
+            let status = parseString(row, keys: ["status"]) ?? "proposed"
+            let risk = parseString(row, keys: ["risk", "riskLevel"]) ?? "unknown"
+            let intentSummary = parseString(row, keys: ["intentSummary", "purpose", "summary"]) ?? "Unknown intent"
+            let proposalId = parseString(row, keys: ["proposalId"])
+            let discoveredAtIso = parseString(row, keys: ["discoveredAtIso", "createdAtIso", "updatedAtIso"])
+            let forensicsReportId = parseString(row, keys: ["forensicsReportId"])
+            let suggestedRefinedTool = parseString(row, keys: ["suggestedRefinedTool", "suggested_refined_tool"])
+            let refinementSuggestions = parseMixedStringArray(row, keys: ["refinementSuggestions", "suggestions"])
+            let suggestedRefinement = suggestedRefinedTool
+                ?? refinementSuggestions.first
+                ?? "Scope this tool to one governed task before promotion."
+            let weakPointsList = parseMixedStringArray(row, keys: ["weakPoints", "limitations"])
+            let weakPoints = weakPointsList.isEmpty ? "Not yet documented." : weakPointsList.prefix(2).joined(separator: "; ")
+            let linkedCells = parseMixedStringArray(row, keys: ["linkedCells", "primaryCells", "cells"])
+            let capabilities = parseIncomingCapabilities(row["capabilities"])
+            let capabilitySummary = capabilities.isEmpty
+                ? "No explicit capabilities captured."
+                : capabilities.prefix(4).joined(separator: ", ")
+            let explanation = parseString(row, keys: ["reasoningTraceShort", "explanation", "intentSummary"]) ?? intentSummary
+            let discoveryOrigin = source
+            let evidenceRefs = parseIncomingEvidenceRefs(row)
+            let lineageHint = parseIncomingLineageHint(row, fallbackForensics: forensicsReportId)
+            let actionHistory = parseIncomingActionHistory(row["actionHistory"])
+            let actions = parseIncomingActions(row["actions"])
+            let promotionReady = parseBool(row["promotionReady"]) ?? false
+            let refinementState = parseString(row, keys: ["refinementState"])
+            let sandboxState = parseString(row, keys: ["sandboxState"])
+
+            return IncomingToolSummary(
+                extensionId: extensionId,
+                proposalId: proposalId,
+                status: status,
+                discoveredAtIso: discoveredAtIso,
+                objectId: forensicsReportId ?? extensionId,
+                title: title,
+                source: source,
+                intentSummary: intentSummary,
+                capabilitySummary: capabilitySummary,
+                capabilities: capabilities,
+                risk: risk,
+                suggestedRefinement: suggestedRefinement,
+                suggestedRefinedTool: suggestedRefinedTool,
+                refinementSuggestions: refinementSuggestions,
+                linkedCells: linkedCells,
+                explanation: explanation,
+                discoveryOrigin: discoveryOrigin,
+                weakPoints: weakPoints,
+                weakPointsList: weakPointsList,
+                evidenceRefs: evidenceRefs,
+                forensicsReportId: forensicsReportId,
+                actionHistory: actionHistory,
+                actions: actions,
+                promotionReady: promotionReady,
+                refinementState: refinementState,
+                sandboxState: sandboxState,
+                lineageHint: lineageHint
+            )
+        }
+    }
+
+    private func parseIncomingCapabilities(_ raw: Any?) -> [String] {
+        guard let array = raw as? [Any] else { return [] }
+        var values: [String] = []
+        for item in array {
+            if let value = item as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { values.append(trimmed) }
+                continue
+            }
+            if let dict = item as? [String: Any] {
+                if let value = parseString(dict, keys: ["title", "capability", "key", "name"]) {
+                    values.append(value)
+                }
+                continue
+            }
+            if let number = parseDouble(item) {
+                values.append(String(format: "%.0f", number))
+            }
+        }
+        return dedupeOrdered(values)
+    }
+
+    private func parseMixedStringArray(_ dict: [String: Any], keys: [String]) -> [String] {
+        for key in keys {
+            guard let raw = dict[key] else { continue }
+            if let array = raw as? [String] {
+                return dedupeOrdered(array.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+            }
+            if let array = raw as? [Any] {
+                let values = array.compactMap { item -> String? in
+                    if let value = item as? String {
+                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                    if let value = parseInt(item) {
+                        return "\(value)"
+                    }
+                    if let value = parseDouble(item) {
+                        return String(format: "%.0f", value)
+                    }
+                    if let row = item as? [String: Any] {
+                        return parseString(row, keys: ["cell", "id", "value", "sourceId", "label"])
+                    }
+                    return nil
+                }
+                if !values.isEmpty {
+                    return dedupeOrdered(values)
+                }
+            }
+            if let value = raw as? String {
+                let chunks = value
+                    .replacingOccurrences(of: "|", with: ",")
+                    .replacingOccurrences(of: "/", with: ",")
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if !chunks.isEmpty {
+                    return dedupeOrdered(chunks)
+                }
+            }
+        }
+        return []
+    }
+
+    private func parseIncomingEvidenceRefs(_ row: [String: Any]) -> [IncomingToolEvidenceRef] {
+        var refs: [IncomingToolEvidenceRef] = []
+
+        for key in ["evidenceReferences", "evidence", "sources"] {
+            guard let list = row[key] as? [Any] else { continue }
+            for (index, item) in list.enumerated() {
+                if let dict = item as? [String: Any] {
+                    let label = parseString(dict, keys: ["label", "sourceType", "type"]) ?? "Evidence"
+                    let value = parseString(dict, keys: ["sourceId", "value", "title", "id"]) ?? "reference-\(index)"
+                    let url = parseString(dict, keys: ["url", "link"])
+                    refs.append(IncomingToolEvidenceRef(label: label, value: value, url: url))
+                } else if let value = item as? String {
+                    refs.append(IncomingToolEvidenceRef(label: "Evidence", value: value))
+                }
+            }
+        }
+
+        if refs.isEmpty, let reportId = parseString(row, keys: ["forensicsReportId"]) {
+            refs.append(IncomingToolEvidenceRef(label: "Forensics", value: reportId))
+        }
+
+        if refs.isEmpty {
+            refs.append(IncomingToolEvidenceRef(label: "Evidence", value: "No explicit references provided."))
+        }
+        return refs
+    }
+
+    private func parseIncomingLineageHint(_ row: [String: Any], fallbackForensics: String?) -> String {
+        if let reportId = fallbackForensics, !reportId.isEmpty {
+            return "Discovery -> Forensics (\(reportId)) -> Proposal"
+        }
+        if let proposalId = parseString(row, keys: ["proposalId"]) {
+            return "Discovery -> Forensics -> Proposal (\(proposalId))"
+        }
+        return "Discovery -> Forensics -> Proposal"
+    }
+
+    private func parseIncomingActionHistory(_ raw: Any?) -> [IncomingToolActionHistoryItem] {
+        guard let list = raw as? [Any] else { return [] }
+        let rows = list.compactMap { item -> IncomingToolActionHistoryItem? in
+            guard let row = item as? [String: Any] else { return nil }
+            guard let action = parseString(row, keys: ["action"]), let atIso = parseString(row, keys: ["atIso", "timestamp"]) else {
+                return nil
+            }
+            let state = parseString(row, keys: ["state", "status"])
+            return IncomingToolActionHistoryItem(action: action, atIso: atIso, state: state)
+        }
+        return rows.sorted { lhs, rhs in
+            if lhs.atIso != rhs.atIso {
+                return lhs.atIso > rhs.atIso
+            }
+            return lhs.action < rhs.action
+        }
+    }
+
+    private func parseIncomingActions(_ raw: Any?) -> IncomingToolActionSet {
+        guard let dict = raw as? [String: Any] else { return IncomingToolActionSet() }
+        return IncomingToolActionSet(
+            reject: parseIncomingActionState(dict["reject"]),
+            sandbox: parseIncomingActionState(dict["sandbox"]),
+            refine: parseIncomingActionState(dict["refine"], defaultAvailable: true),
+            promote: parseIncomingActionState(dict["promote"]),
+            approveProposal: parseIncomingActionState(dict["approveProposal"])
+        )
+    }
+
+    private func parseIncomingActionState(_ raw: Any?, defaultAvailable: Bool = false) -> IncomingToolActionState {
+        guard let dict = raw as? [String: Any] else {
+            return IncomingToolActionState(available: defaultAvailable, endpoint: nil, hint: nil)
+        }
+        let available = parseBool(dict["available"]) ?? defaultAvailable
+        let endpoint = parseString(dict, keys: ["endpoint", "path"])
+        let hint = parseString(dict, keys: ["hint", "description"])
+        return IncomingToolActionState(available: available, endpoint: endpoint, hint: hint)
+    }
+
+    private func dedupeOrdered(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var unique: [String] = []
+        for value in values {
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { continue }
+            if seen.insert(normalized).inserted {
+                unique.append(normalized)
+            }
+        }
+        return unique
     }
 
     // MARK: - Observatory Parsing
@@ -989,6 +1383,22 @@ actor GatewayClient {
             return value.intValue
         case let value as String:
             return Int(value)
+        default:
+            return nil
+        }
+    }
+
+    private func parseBool(_ raw: Any?) -> Bool? {
+        switch raw {
+        case let value as Bool:
+            return value
+        case let value as NSNumber:
+            return value.boolValue
+        case let value as String:
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if ["true", "1", "yes"].contains(normalized) { return true }
+            if ["false", "0", "no"].contains(normalized) { return false }
+            return nil
         default:
             return nil
         }

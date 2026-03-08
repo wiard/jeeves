@@ -324,8 +324,76 @@ struct IncomingToolEvidenceRef: Identifiable, Hashable {
     }
 }
 
+enum IncomingToolActionKind: String, CaseIterable, Hashable {
+    case reject
+    case sandbox
+    case refine
+    case promote
+}
+
+struct IncomingToolActionState: Hashable {
+    let available: Bool
+    let endpoint: String?
+    let hint: String?
+
+    init(available: Bool = false, endpoint: String? = nil, hint: String? = nil) {
+        self.available = available
+        self.endpoint = endpoint
+        self.hint = hint
+    }
+}
+
+struct IncomingToolActionSet: Hashable {
+    let reject: IncomingToolActionState
+    let sandbox: IncomingToolActionState
+    let refine: IncomingToolActionState
+    let promote: IncomingToolActionState
+    let approveProposal: IncomingToolActionState
+
+    init(
+        reject: IncomingToolActionState = .init(),
+        sandbox: IncomingToolActionState = .init(),
+        refine: IncomingToolActionState = .init(available: true),
+        promote: IncomingToolActionState = .init(),
+        approveProposal: IncomingToolActionState = .init()
+    ) {
+        self.reject = reject
+        self.sandbox = sandbox
+        self.refine = refine
+        self.promote = promote
+        self.approveProposal = approveProposal
+    }
+
+    func state(for kind: IncomingToolActionKind) -> IncomingToolActionState {
+        switch kind {
+        case .reject:
+            return reject
+        case .sandbox:
+            return sandbox
+        case .refine:
+            return refine
+        case .promote:
+            return promote
+        }
+    }
+}
+
+struct IncomingToolActionHistoryItem: Identifiable, Hashable {
+    let action: String
+    let atIso: String
+    let state: String?
+
+    var id: String {
+        "\(action)-\(atIso)-\(state ?? "unknown")"
+    }
+}
+
 struct IncomingToolSummary: Identifiable, Hashable {
     let id: String
+    let extensionId: String
+    let proposalId: String?
+    let status: String
+    let discoveredAtIso: String?
     let objectId: String
     let title: String
     let source: String
@@ -334,12 +402,81 @@ struct IncomingToolSummary: Identifiable, Hashable {
     let capabilities: [String]
     let risk: String
     let suggestedRefinement: String
+    let suggestedRefinedTool: String?
+    let refinementSuggestions: [String]
     let linkedCells: [String]
     let explanation: String
     let discoveryOrigin: String
     let weakPoints: String
+    let weakPointsList: [String]
     let evidenceRefs: [IncomingToolEvidenceRef]
+    let forensicsReportId: String?
+    let actionHistory: [IncomingToolActionHistoryItem]
+    let actions: IncomingToolActionSet
+    let promotionReady: Bool
+    let refinementState: String?
+    let sandboxState: String?
     let lineageHint: String
+
+    init(
+        id: String? = nil,
+        extensionId: String,
+        proposalId: String? = nil,
+        status: String = "proposed",
+        discoveredAtIso: String? = nil,
+        objectId: String? = nil,
+        title: String,
+        source: String,
+        intentSummary: String,
+        capabilitySummary: String,
+        capabilities: [String],
+        risk: String,
+        suggestedRefinement: String,
+        suggestedRefinedTool: String? = nil,
+        refinementSuggestions: [String] = [],
+        linkedCells: [String],
+        explanation: String,
+        discoveryOrigin: String,
+        weakPoints: String,
+        weakPointsList: [String] = [],
+        evidenceRefs: [IncomingToolEvidenceRef],
+        forensicsReportId: String? = nil,
+        actionHistory: [IncomingToolActionHistoryItem] = [],
+        actions: IncomingToolActionSet = IncomingToolActionSet(),
+        promotionReady: Bool = false,
+        refinementState: String? = nil,
+        sandboxState: String? = nil,
+        lineageHint: String
+    ) {
+        self.extensionId = extensionId
+        self.proposalId = proposalId
+        self.status = status
+        self.discoveredAtIso = discoveredAtIso
+        self.objectId = objectId ?? extensionId
+        self.id = id ?? extensionId
+        self.title = title
+        self.source = source
+        self.intentSummary = intentSummary
+        self.capabilitySummary = capabilitySummary
+        self.capabilities = capabilities
+        self.risk = risk
+        self.suggestedRefinement = suggestedRefinement
+        self.suggestedRefinedTool = suggestedRefinedTool
+        self.refinementSuggestions = refinementSuggestions
+        self.linkedCells = linkedCells
+        self.explanation = explanation
+        self.discoveryOrigin = discoveryOrigin
+        self.weakPoints = weakPoints
+        self.weakPointsList = weakPointsList
+        self.evidenceRefs = evidenceRefs
+        self.forensicsReportId = forensicsReportId
+        self.actionHistory = actionHistory
+        self.actions = actions
+        self.promotionReady = promotionReady
+        self.refinementState = refinementState
+        self.sandboxState = sandboxState
+        self.lineageHint = lineageHint
+    }
 }
 
 indirect enum AnyCodableValue: Codable {
