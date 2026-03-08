@@ -5,6 +5,7 @@ struct LobbyView: View {
         case system
         case radar
         case incomingTools
+        case aiBrowser
         case decisions
         case knowledge
 
@@ -13,6 +14,7 @@ struct LobbyView: View {
             case .system: return "SYSTEM"
             case .radar: return "RADAR"
             case .incomingTools: return "INCOMING TOOLS"
+            case .aiBrowser: return "AI BROWSER"
             case .decisions: return "DECISIONS"
             case .knowledge: return "KNOWLEDGE"
             }
@@ -23,6 +25,7 @@ struct LobbyView: View {
             case .system: return "Terminal telemetry"
             case .radar: return "Radar — Emerging Signals"
             case .incomingTools: return "Forensic intake workbench"
+            case .aiBrowser: return "Intention catalog — certified + emerging"
             case .decisions: return "Governed approvals"
             case .knowledge: return "Resulting knowledge"
             }
@@ -33,6 +36,7 @@ struct LobbyView: View {
             case .system: return .blue
             case .radar: return .cyan
             case .incomingTools: return .cyan
+            case .aiBrowser: return .blue
             case .decisions: return .jeevesGold
             case .knowledge: return .consentGreen
             }
@@ -43,8 +47,20 @@ struct LobbyView: View {
             case .system: return "terminal"
             case .radar: return "dot.radiowaves.left.and.right"
             case .incomingTools: return "shippingbox"
+            case .aiBrowser: return "magnifyingglass.circle"
             case .decisions: return "checkmark.shield"
             case .knowledge: return "book.closed"
+            }
+        }
+
+        var anchorId: String {
+            switch self {
+            case .system: return "zone-system"
+            case .radar: return "zone-radar"
+            case .incomingTools: return "zone-incoming-tools"
+            case .aiBrowser: return "zone-ai-browser"
+            case .decisions: return "zone-decisions"
+            case .knowledge: return "zone-knowledge"
             }
         }
     }
@@ -83,6 +99,69 @@ struct LobbyView: View {
         }
     }
 
+    private enum BrowserCategory: String, CaseIterable, Identifiable {
+        case financial
+        case legal
+        case research
+        case education
+        case operations
+        case security
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .financial: return "Financial"
+            case .legal: return "Legal"
+            case .research: return "Research"
+            case .education: return "Education"
+            case .operations: return "Operations"
+            case .security: return "Security"
+            }
+        }
+
+        var domain: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .financial: return "chart.line.uptrend.xyaxis"
+            case .legal: return "scroll"
+            case .research: return "atom"
+            case .education: return "graduationcap"
+            case .operations: return "gearshape.2"
+            case .security: return "lock.shield"
+            }
+        }
+
+        var defaultRisk: String {
+            switch self {
+            case .financial, .legal, .education:
+                return "low"
+            case .research, .operations:
+                return "medium"
+            case .security:
+                return "high"
+            }
+        }
+
+        var subdomains: [String] {
+            switch self {
+            case .financial:
+                return ["investing", "payments", "treasury"]
+            case .legal:
+                return ["contracts", "compliance", "policy"]
+            case .research:
+                return ["literature", "benchmarking", "hypothesis"]
+            case .education:
+                return ["tutoring", "curriculum", "assessment"]
+            case .operations:
+                return ["workflow", "automation", "planning"]
+            case .security:
+                return ["threat-detection", "identity", "incident-response"]
+            }
+        }
+    }
+
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
     @State private var showOrangeConfirm = false
@@ -98,6 +177,35 @@ struct LobbyView: View {
     @State private var loadingKnowledgeGraph = false
     @State private var selectedRadarSignal: RadarSignalSummary?
     @State private var selectedIncomingTool: IncomingToolSummary?
+    @State private var incomingToolActionInFlightId: String?
+    @State private var incomingToolActionErrorMessage: String?
+    @State private var showIncomingToolActionError = false
+    @State private var incomingToolStatusMessage: String?
+    @State private var browserDomain = "financial"
+    @State private var browserSubdomain = "investing"
+    @State private var browserRiskProfile = "low"
+    @State private var selectedBrowserCategory: BrowserCategory = .financial
+    @State private var selectedBrowserSubdomain = "investing"
+    @State private var showBrowserAdvancedFilters = false
+    @State private var browserConstraintsRaw = ""
+    @State private var browserFeed: SafeClashBrowserFeed?
+    @State private var selectedFeedCategoryId: String?
+    @State private var browserResults: [IntentionProfile] = []
+    @State private var browserLoading = false
+    @State private var browserHasExecutedQuery = false
+    @State private var browserHasPrimedEmergingFeed = false
+    @State private var browserErrorMessage: String?
+    @State private var browserStatusMessage: String?
+    @State private var selectedBrowserCard: BrowserCard?
+    @State private var selectedEmergingIntention: EmergingIntentionProfile?
+    @State private var browserEmergingRemote: [EmergingIntentionProfile] = []
+    @State private var browserConfigurationCache: [String: AIConfigurationAtom] = [:]
+    @State private var browserConfigurationLoadingId: String?
+    @State private var browserDeployingConfigId: String?
+    @State private var pendingBrowserDeployment: DeployConfigurationRequest?
+    @State private var browserLastCreatedProposalId: String?
+    @State private var browserActionErrorMessage: String?
+    @State private var showBrowserActionError = false
     @State private var decidingExtensionId: String?
     @State private var loadingManifestExtensionId: String?
     @State private var extensionActionErrorMessage: String?
@@ -105,6 +213,7 @@ struct LobbyView: View {
     @State private var selectedExtensionManifest: ExtensionManifest?
     @State private var extensionDecisions: [String: ExtensionDecision] = [:]
     @State private var expandedClusterIDs: Set<String> = []
+    @State private var shouldScrollToDecisions = false
 
     private struct TriageReviewItem: Identifiable {
         enum Kind {
@@ -135,22 +244,43 @@ struct LobbyView: View {
         let dominantRisk: String
     }
 
+    private enum BrowserDeployActionOrigin {
+        case card
+        case detail
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 ControlRoomBackdrop()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 20) {
-                        systemZoneSection
-                        radarZoneSection
-                        incomingToolsZoneSection
-                        decisionsZoneSection
-                        knowledgeZoneSection
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 20) {
+                            systemZoneSection
+                                .id(MissionZone.system.anchorId)
+                            radarZoneSection
+                                .id(MissionZone.radar.anchorId)
+                            incomingToolsZoneSection
+                                .id(MissionZone.incomingTools.anchorId)
+                            aiBrowserZoneSection
+                                .id(MissionZone.aiBrowser.anchorId)
+                            decisionsZoneSection
+                                .id(MissionZone.decisions.anchorId)
+                            knowledgeZoneSection
+                                .id(MissionZone.knowledge.anchorId)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 28)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 28)
+                    .onChange(of: shouldScrollToDecisions) { _, requested in
+                        guard requested else { return }
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(MissionZone.decisions.anchorId, anchor: .top)
+                        }
+                        shouldScrollToDecisions = false
+                    }
                 }
             }
             .navigationTitle("Mission Control")
@@ -176,6 +306,16 @@ struct LobbyView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(extensionActionErrorMessage ?? "Onbekende fout.")
+            }
+            .alert("Incoming Tool actie niet uitgevoerd", isPresented: $showIncomingToolActionError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(incomingToolActionErrorMessage ?? "Onbekende fout.")
+            }
+            .alert("AI Browser actie niet uitgevoerd", isPresented: $showBrowserActionError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(browserActionErrorMessage ?? "Onbekende fout.")
             }
             .sheet(isPresented: $showActionReceipt) {
                 if let action = poller.lastActionReceipt {
@@ -222,9 +362,54 @@ struct LobbyView: View {
                 IncomingToolDetailSheet(
                     tool: tool,
                     relatedProposals: relatedExtensionProposals(for: tool),
+                    isActionInFlight: incomingToolActionInFlightId == tool.id,
+                    onAction: { kind in
+                        handleIncomingToolAction(kind, tool: tool)
+                    },
                     onOpenApprovalCard: { proposal in
                         selectedIncomingTool = nil
                         inspectExtensionManifest(proposal)
+                    }
+                )
+            }
+            .sheet(item: $selectedBrowserCard) { card in
+                AIBrowserDetailSheet(
+                    card: card,
+                    configuration: browserConfigurationCache[card.bestConfiguration.configId] ?? card.bestConfiguration,
+                    isLoadingConfiguration: browserConfigurationLoadingId == card.bestConfiguration.configId,
+                    isDeploying: browserDeployingConfigId == card.bestConfiguration.configId,
+                    onRefreshConfiguration: {
+                        fetchBrowserConfiguration(configId: card.bestConfiguration.configId)
+                    },
+                    onDeploy: {
+                        requestBrowserDeployment(for: card, origin: .detail)
+                    }
+                )
+            }
+            .sheet(item: $pendingBrowserDeployment) { request in
+                BrowserDeployConfirmationSheet(
+                    request: request,
+                    benchmarkSummary: benchmarkSummary(for: request),
+                    constraintsSummary: constraintsSummary(for: request),
+                    isCreatingProposal: browserDeployingConfigId == request.configId,
+                    onCreateProposal: {
+                        pendingBrowserDeployment = nil
+                        createGovernedBrowserDeploymentProposal(request: request)
+                    }
+                )
+            }
+            .sheet(item: $selectedEmergingIntention) { intention in
+                EmergingIntentionDetailSheet(
+                    intention: intention,
+                    relatedTools: relatedIncomingTools(for: intention),
+                    certifiedMatch: certifiedMatch(for: intention),
+                    onOpenTool: { tool in
+                        selectedEmergingIntention = nil
+                        selectedIncomingTool = tool
+                    },
+                    onOpenCertified: { card in
+                        selectedEmergingIntention = nil
+                        openBrowserCard(card)
                     }
                 )
             }
@@ -284,6 +469,20 @@ struct LobbyView: View {
         VStack(alignment: .leading, spacing: 12) {
             zoneHeader(.incomingTools)
             incomingToolsSection
+        }
+    }
+
+    private var aiBrowserZoneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            zoneHeader(.aiBrowser)
+            aiBrowserSection
+        }
+        .onAppear {
+            syncBrowserCategorySelection()
+            primeEmergingIntentionsFeedIfNeeded()
+            if !browserHasExecutedQuery {
+                runSafeClashSearch()
+            }
         }
     }
 
@@ -1235,14 +1434,25 @@ struct LobbyView: View {
                 tint: .cyan
             )
 
+            if let status = incomingToolStatusMessage, !status.isEmpty {
+                Text(status)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+
             if incomingTools.isEmpty {
                 incomingToolsEmptyCard
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(incomingTools) { tool in
-                        IncomingToolCard(tool: tool) {
-                            selectedIncomingTool = tool
-                        }
+                        IncomingToolCard(
+                            tool: tool,
+                            isActionInFlight: incomingToolActionInFlightId == tool.id,
+                            onOpen: { selectedIncomingTool = tool },
+                            onAction: { kind in
+                                handleIncomingToolAction(kind, tool: tool)
+                            }
+                        )
                     }
                 }
             }
@@ -1250,6 +1460,18 @@ struct LobbyView: View {
     }
 
     private var incomingTools: [IncomingToolSummary] {
+        if !poller.incomingTools.isEmpty {
+            return poller.incomingTools.sorted { lhs, rhs in
+                let lDate = parseISODate(lhs.discoveredAtIso ?? "") ?? .distantPast
+                let rDate = parseISODate(rhs.discoveredAtIso ?? "") ?? .distantPast
+                if lDate != rDate { return lDate > rDate }
+                if incomingRiskRank(lhs.risk) != incomingRiskRank(rhs.risk) {
+                    return incomingRiskRank(lhs.risk) > incomingRiskRank(rhs.risk)
+                }
+                return lhs.title < rhs.title
+            }
+        }
+
         let derived = poller.recentKnowledgeObjects
             .filter(isIncomingToolKnowledgeObject(_:))
             .map(incomingToolSummary(from:))
@@ -1268,6 +1490,9 @@ struct LobbyView: View {
             return pendingExtensionProposals.prefix(3).map { proposal in
                 IncomingToolSummary(
                     id: "mock-tool-\(proposal.extensionId)",
+                    extensionId: proposal.extensionId,
+                    status: proposal.status,
+                    discoveredAtIso: ISO8601DateFormatter().string(from: Date()),
                     objectId: proposal.extensionId,
                     title: proposal.title,
                     source: triageExtensionSourceLabel(sourceType: proposal.sourceType),
@@ -1276,11 +1501,17 @@ struct LobbyView: View {
                     capabilities: proposal.capabilities.map(\.title),
                     risk: normalizeIncomingRisk(proposal.risk),
                     suggestedRefinement: "Constrain to a narrow scoped workflow before promotion.",
+                    suggestedRefinedTool: nil,
+                    refinementSuggestions: [],
                     linkedCells: proposal.linkedCells,
                     explanation: proposal.reasoningTrace ?? proposal.purpose,
                     discoveryOrigin: "Mock discovery feed",
                     weakPoints: "Demo fallback artifact",
-                    evidenceRefs: [],
+                    weakPointsList: ["Demo fallback artifact"],
+                    evidenceRefs: [IncomingToolEvidenceRef(label: "Evidence", value: "Demo fallback artifact")],
+                    actionHistory: [],
+                    actions: IncomingToolActionSet(),
+                    promotionReady: false,
                     lineageHint: "Discovery -> Forensics -> Proposal"
                 )
             }
@@ -1348,6 +1579,11 @@ struct LobbyView: View {
     }
 
     private func incomingToolSummary(from object: KnowledgeObject) -> IncomingToolSummary {
+        let extensionId = metadataString(
+            for: object,
+            keys: ["extension_id", "extensionId", "tool_id", "toolId"]
+        ) ?? object.objectId
+
         let title = metadataString(
             for: object,
             keys: ["tool_name", "detected_tool", "name", "title"]
@@ -1419,6 +1655,10 @@ struct LobbyView: View {
 
         return IncomingToolSummary(
             id: object.objectId,
+            extensionId: extensionId,
+            proposalId: metadataString(for: object, keys: ["proposal_id", "proposalId"]),
+            status: metadataString(for: object, keys: ["status"]) ?? "proposed",
+            discoveredAtIso: object.createdAtIso,
             objectId: object.objectId,
             title: title,
             source: source,
@@ -1427,11 +1667,18 @@ struct LobbyView: View {
             capabilities: capabilities,
             risk: risk,
             suggestedRefinement: suggestedRefinement,
+            suggestedRefinedTool: nil,
+            refinementSuggestions: [],
             linkedCells: linkedCells,
             explanation: explanation,
             discoveryOrigin: discoveryOrigin,
             weakPoints: weakPoints,
+            weakPointsList: [],
             evidenceRefs: evidenceRefs,
+            forensicsReportId: metadataString(for: object, keys: ["forensics_report_id", "forensicsReportId"]),
+            actionHistory: [],
+            actions: IncomingToolActionSet(),
+            promotionReady: false,
             lineageHint: lineageHint
         )
     }
@@ -1604,6 +1851,1233 @@ struct LobbyView: View {
             .map(\.proposal)
             .prefix(3)
             .map { $0 }
+    }
+
+    private func handleIncomingToolAction(_ kind: IncomingToolActionKind, tool: IncomingToolSummary) {
+        if kind == .refine {
+            incomingToolStatusMessage = "Refinement brief prepared: \(tool.suggestedRefinement)"
+            selectedIncomingTool = tool
+            return
+        }
+        performIncomingToolBackendAction(kind, tool: tool)
+    }
+
+    private func performIncomingToolBackendAction(_ kind: IncomingToolActionKind, tool: IncomingToolSummary) {
+        guard incomingToolActionInFlightId == nil else { return }
+        let action = tool.actions.state(for: kind)
+        guard action.available else {
+            incomingToolActionErrorMessage = "\(kind.rawValue.capitalized) is currently unavailable for this tool."
+            showIncomingToolActionError = true
+            return
+        }
+        guard let endpoint = action.endpoint, !endpoint.isEmpty else {
+            incomingToolActionErrorMessage = "No backend endpoint is available for this action."
+            showIncomingToolActionError = true
+            return
+        }
+
+        incomingToolActionInFlightId = tool.id
+
+        Task {
+            let resolved = await resolveEndpoint()
+            guard let token = resolved.token, !token.isEmpty else {
+                await MainActor.run {
+                    incomingToolActionInFlightId = nil
+                    incomingToolActionErrorMessage = "Geen token beschikbaar. Voeg een token toe in Instellingen."
+                    showIncomingToolActionError = true
+                }
+                return
+            }
+
+            let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
+
+            do {
+                _ = try await client.performIncomingToolAction(
+                    endpoint: endpoint,
+                    reason: incomingToolActionReason(for: kind)
+                )
+                await poller.refresh(gateway: gateway)
+                await MainActor.run {
+                    incomingToolActionInFlightId = nil
+                    incomingToolStatusMessage = incomingToolActionSuccessMessage(for: kind, extensionId: tool.extensionId)
+                    selectedIncomingTool = incomingTools.first(where: { $0.id == tool.id })
+                }
+            } catch {
+                await MainActor.run {
+                    incomingToolActionInFlightId = nil
+                    incomingToolActionErrorMessage = describeIncomingToolActionFailure(
+                        error,
+                        host: resolved.host,
+                        port: resolved.port
+                    )
+                    showIncomingToolActionError = true
+                }
+            }
+        }
+    }
+
+    private func incomingToolActionReason(for kind: IncomingToolActionKind) -> String? {
+        switch kind {
+        case .reject:
+            return "incoming_tool_rejected"
+        case .promote:
+            return "incoming_tool_promoted"
+        case .sandbox, .refine:
+            return nil
+        }
+    }
+
+    private func incomingToolActionSuccessMessage(for kind: IncomingToolActionKind, extensionId: String) -> String {
+        switch kind {
+        case .reject:
+            return "Incoming tool rejected: \(extensionId)"
+        case .sandbox:
+            return "Extension sandbox loaded: \(extensionId)"
+        case .promote:
+            return "Tool promoted into proposal flow: \(extensionId)"
+        case .refine:
+            return "Refinement brief prepared: \(extensionId)"
+        }
+    }
+
+    private func describeIncomingToolActionFailure(_ error: Error, host: String, port: Int) -> String {
+        if case GatewayClientError.httpStatus(let status) = error {
+            switch status {
+            case 401:
+                return "Token ongeldig of verlopen voor \(host):\(port)."
+            case 404:
+                return "Incoming Tool endpoint niet gevonden op \(host):\(port)."
+            default:
+                return "Backend fout (\(status)) op \(host):\(port)."
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cannotFindHost, .cannotConnectToHost, .timedOut, .networkConnectionLost:
+                return "Backend onbereikbaar op \(host):\(port)."
+            default:
+                break
+            }
+        }
+        return "Incoming Tool actie mislukt."
+    }
+
+    // MARK: - AI Browser
+
+    private var aiBrowserSection: some View {
+        let certifiedCards = certifiedCatalogCards
+        let featuredCards = featuredCertifiedCards
+        let emergingCards = filteredEmergingIntentions
+        let hasCertified = !certifiedCards.isEmpty
+        let hasEmerging = !emergingCards.isEmpty
+
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionHeader(
+                    title: "FEATURED / RECOMMENDED",
+                    icon: "star.fill",
+                    count: featuredCards.count,
+                    tint: .cyan
+                )
+
+                if featuredCards.isEmpty {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sparkles.rectangle.stack")
+                            .foregroundStyle(.secondary)
+                        Text("Featured recommendations appear after category search results are loaded.")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .controlRoomPanel(padding: 12)
+                } else {
+                    LazyVStack(spacing: 10) {
+                        ForEach(featuredCards) { card in
+                            FeaturedAICard(
+                                card: card,
+                                isDeploying: browserDeployingConfigId == card.bestConfiguration.configId,
+                                onInspect: { openBrowserCard(card) },
+                                onDeploy: { requestBrowserDeployment(for: card, origin: .card) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            aiBrowserQueryPanel
+
+            HStack(spacing: 8) {
+                Image(systemName: browserFeed == nil ? "rectangle.3.offgrid.bubble.left" : "rectangle.3.group.bubble.left.fill")
+                    .foregroundStyle(browserFeed == nil ? Color.secondary : Color.cyan)
+                Text(browserFeed == nil ? "Source: SafeClash search fallback" : "Source: SafeClash browser feed")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .controlRoomPanel(padding: 10)
+
+            if isMockMode {
+                Text("Mock mode active: AI Browser may include simulated discovery signals.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let proposalId = browserLastCreatedProposalId, !proposalId.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(Color.consentGreen)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Proposal created")
+                            .font(.jeevesCaption.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Text("Proposal \(proposalId) is pending approval in DECISIONS.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Button("Open Decisions") {
+                            shouldScrollToDecisions = true
+                        }
+                        .buttonStyle(.bordered)
+                        Button("View Proposal") {
+                            shouldScrollToDecisions = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .controlRoomPanel(padding: 10)
+            }
+
+            if let status = browserStatusMessage, !status.isEmpty {
+                Text(status)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if browserLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("SafeClash search uitvoeren...")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .controlRoomPanel(padding: 12)
+            }
+
+            if let browserErrorMessage, !browserErrorMessage.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SafeClash query mislukt")
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.white)
+                    Text(browserErrorMessage)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Button("Retry search") {
+                        runSafeClashSearch()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .controlRoomPanel(padding: 12)
+            }
+
+            if !browserLoading, !hasCertified, !hasEmerging {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Living intention catalog is waiting for data.")
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.white)
+                    Text("SafeClash browser feed and certified search are currently empty. Emerging intentions still include CLASHD27 discovery fallback.")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text("No certified or emerging intentions available right now.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .controlRoomPanel(padding: 12)
+            }
+
+            if hasCertified {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader(
+                        title: "CERTIFIED",
+                        icon: "checkmark.seal.fill",
+                        count: certifiedCards.count,
+                        tint: .consentGreen
+                    )
+
+                    LazyVStack(spacing: 10) {
+                        ForEach(certifiedCards.prefix(8)) { card in
+                            AIBrowserResultCard(
+                                card: card,
+                                emergingMomentumCount: emergingSiblingCount(for: card),
+                                isDeploying: browserDeployingConfigId == card.bestConfiguration.configId,
+                                onOpen: {
+                                    openBrowserCard(card)
+                                },
+                                onDeploy: {
+                                    requestBrowserDeployment(for: card, origin: .card)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if hasEmerging {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionHeader(
+                        title: "EMERGING",
+                        icon: "sparkles",
+                        count: emergingCards.count,
+                        tint: .consentOrange
+                    )
+
+                    LazyVStack(spacing: 10) {
+                        ForEach(emergingCards.prefix(8)) { intention in
+                            EmergingIntentionCard(
+                                intention: intention,
+                                relatedToolsCount: relatedIncomingTools(for: intention).count,
+                                hasCertifiedConfiguration: hasCertifiedConfiguration(for: intention)
+                            ) {
+                                selectedEmergingIntention = intention
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var aiBrowserQueryPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Browse by Category")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            if !browserFeedCategories.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(browserFeedCategories) { category in
+                            Button {
+                                applyFeedCategory(category)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square.grid.2x2")
+                                        .font(.caption)
+                                    Text(category.title)
+                                        .font(.jeevesCaption.weight(.medium))
+                                    if let count = category.certifiedCount {
+                                        Text("\(count)")
+                                            .font(.caption2.weight(.semibold))
+                                    }
+                                }
+                                .foregroundStyle(selectedFeedCategoryId == category.id ? .white : .secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(selectedFeedCategoryId == category.id ? Color.cyan.opacity(0.28) : Color.white.opacity(0.04))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(selectedFeedCategoryId == category.id ? Color.cyan.opacity(0.7) : Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(BrowserCategory.allCases) { category in
+                        Button {
+                            applyBrowserCategory(category)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: category.icon)
+                                    .font(.caption)
+                                Text(category.title)
+                                    .font(.jeevesCaption.weight(.medium))
+                            }
+                            .foregroundStyle(selectedBrowserCategory == category ? .white : .secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedBrowserCategory == category ? Color.cyan.opacity(0.28) : Color.white.opacity(0.04))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(selectedBrowserCategory == category ? Color.cyan.opacity(0.7) : Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(activeBrowserSubdomainOptions, id: \.self) { subdomain in
+                        Button {
+                            selectedBrowserSubdomain = subdomain
+                            browserSubdomain = subdomain
+                        } label: {
+                            Text(readableSubdomain(subdomain))
+                                .font(.jeevesCaption.weight(.medium))
+                                .foregroundStyle(selectedBrowserSubdomain == subdomain ? .white : .secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(selectedBrowserSubdomain == subdomain ? Color.blue.opacity(0.24) : Color.white.opacity(0.04))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(selectedBrowserSubdomain == subdomain ? Color.blue.opacity(0.6) : Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text("\(readableSubdomain(browserDomain)) / \(readableSubdomain(browserSubdomain))")
+                    .font(.jeevesMono)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Spacer()
+                Text(browserRiskProfile.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.cyan)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.cyan.opacity(0.16))
+                    .clipShape(Capsule())
+            }
+
+            Picker("Risk", selection: $browserRiskProfile) {
+                Text("Low").tag("low")
+                Text("Medium").tag("medium")
+                Text("High").tag("high")
+            }
+            .pickerStyle(.segmented)
+
+            HStack {
+                Button("Explore Category") {
+                    runSafeClashSearch()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .disabled(browserLoading)
+
+                Spacer()
+                Button(showBrowserAdvancedFilters ? "Hide advanced" : "Advanced filters") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showBrowserAdvancedFilters.toggle()
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if showBrowserAdvancedFilters {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("constraints (k=v,comma-separated)", text: $browserConstraintsRaw)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .font(.jeevesMono)
+                        .padding(8)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    Text("/api/browser/feed?domain=\(browserDomain)&subdomain=\(browserSubdomain)&risk=\(browserRiskProfile)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .controlRoomPanel(padding: 12)
+    }
+
+    private var browserFeedCategories: [SafeClashBrowserCategory] {
+        (browserFeed?.categories ?? [])
+            .sorted { lhs, rhs in
+                let lhsCount = lhs.certifiedCount ?? 0
+                let rhsCount = rhs.certifiedCount ?? 0
+                if lhsCount != rhsCount { return lhsCount > rhsCount }
+                return lhs.title < rhs.title
+            }
+    }
+
+    private var activeBrowserSubdomainOptions: [String] {
+        if let selectedFeedCategory,
+           !selectedFeedCategory.subdomains.isEmpty {
+            return selectedFeedCategory.subdomains
+        }
+        return selectedBrowserCategory.subdomains
+    }
+
+    private var selectedFeedCategory: SafeClashBrowserCategory? {
+        guard let selectedFeedCategoryId else { return nil }
+        return browserFeedCategories.first(where: { $0.id == selectedFeedCategoryId })
+    }
+
+    private var aiBrowserCards: [BrowserCard] {
+        if let feed = browserFeed, !feed.certified.isEmpty {
+            return feed.certified.map { BrowserCard(certified: $0) }
+        }
+        return browserResults.map { BrowserCard(profile: $0) }
+    }
+
+    private var feedFeaturedCards: [BrowserCard] {
+        guard let feed = browserFeed else { return [] }
+        return feed.featured.map { BrowserCard(certified: $0) }
+    }
+
+    private var certifiedCatalogCards: [BrowserCard] {
+        let domainToken = normalizedCatalogToken(browserDomain)
+        let subdomainToken = normalizedCatalogToken(browserSubdomain)
+        let riskToken = normalizedBrowserRisk(browserRiskProfile)
+
+        return aiBrowserCards
+            .filter { card in
+                let cardDomain = normalizedCatalogToken(card.domain)
+                let cardSubdomain = normalizedCatalogToken(card.subdomain)
+                let cardRisk = normalizedBrowserRisk(card.riskProfile)
+
+                let domainMatch = domainToken.isEmpty || cardDomain.contains(domainToken) || domainToken.contains(cardDomain)
+                let subdomainMatch = subdomainToken.isEmpty || cardSubdomain.contains(subdomainToken) || subdomainToken.contains(cardSubdomain)
+                let riskMatch = riskToken.isEmpty || cardRisk == riskToken
+                return domainMatch && subdomainMatch && riskMatch
+            }
+            .sorted { lhs, rhs in
+                if lhs.rankingScore != rhs.rankingScore { return lhs.rankingScore > rhs.rankingScore }
+                return lhs.title < rhs.title
+            }
+    }
+
+    private var featuredCertifiedCards: [BrowserCard] {
+        let featuredSource = !feedFeaturedCards.isEmpty ? feedFeaturedCards : certifiedCatalogCards
+        return featuredSource
+            .filter { card in
+                let cardDomain = normalizedCatalogToken(card.domain)
+                let cardSubdomain = normalizedCatalogToken(card.subdomain)
+                let cardRisk = normalizedBrowserRisk(card.riskProfile)
+                let domainToken = normalizedCatalogToken(browserDomain)
+                let subdomainToken = normalizedCatalogToken(browserSubdomain)
+                let riskToken = normalizedBrowserRisk(browserRiskProfile)
+                let domainMatch = domainToken.isEmpty || cardDomain.contains(domainToken) || domainToken.contains(cardDomain)
+                let subdomainMatch = subdomainToken.isEmpty || cardSubdomain.contains(subdomainToken) || subdomainToken.contains(cardSubdomain)
+                let riskMatch = riskToken.isEmpty || cardRisk == riskToken
+                return domainMatch && subdomainMatch && riskMatch
+            }
+            .sorted { lhs, rhs in
+                let lhsTrust = certificationRank(lhs.bestConfiguration.certificationLevel)
+                let rhsTrust = certificationRank(rhs.bestConfiguration.certificationLevel)
+                if lhsTrust != rhsTrust { return lhsTrust > rhsTrust }
+                if lhs.rankingScore != rhs.rankingScore { return lhs.rankingScore > rhs.rankingScore }
+                return lhs.bestConfiguration.benchmarkScore > rhs.bestConfiguration.benchmarkScore
+            }
+            .prefix(3)
+            .map { $0 }
+    }
+
+    private var emergingIntentions: [EmergingIntentionProfile] {
+        let feedEmerging = (browserFeed?.emerging ?? []).map(\.profile)
+        let remoteMerged = mergeEmergingIntentions(
+            primary: browserEmergingRemote,
+            secondary: emergingIntentionsFromRadar
+        )
+        let merged = mergeEmergingIntentions(
+            primary: feedEmerging,
+            secondary: remoteMerged
+        )
+        return merged.sorted { lhs, rhs in
+            if catalogStateRank(lhs.state) != catalogStateRank(rhs.state) {
+                return catalogStateRank(lhs.state) > catalogStateRank(rhs.state)
+            }
+            if lhs.confidenceScore != rhs.confidenceScore {
+                return lhs.confidenceScore > rhs.confidenceScore
+            }
+            return "\(lhs.domain)/\(lhs.subdomain)" < "\(rhs.domain)/\(rhs.subdomain)"
+        }
+    }
+
+    private var filteredEmergingIntentions: [EmergingIntentionProfile] {
+        guard browserHasExecutedQuery else {
+            return emergingIntentions
+        }
+
+        let domainToken = normalizedCatalogToken(browserDomain)
+        let subdomainToken = normalizedCatalogToken(browserSubdomain)
+        let riskToken = normalizedBrowserRisk(browserRiskProfile)
+
+        return emergingIntentions.filter { intention in
+            intentionMatchesQuery(
+                intention: intention,
+                domainToken: domainToken,
+                subdomainToken: subdomainToken,
+                riskToken: riskToken
+            )
+        }
+    }
+
+    private var emergingIntentionsFromRadar: [EmergingIntentionProfile] {
+        radarSignals.compactMap { signal in
+            let confidence = normalizedConfidence(signal.score)
+            guard confidence >= 0.45 else { return nil }
+
+            let sourceCandidate = poller.radarDiscoveryCandidates.first { candidate in
+                candidate.candidateId == signal.id
+            }
+
+            let sourceClusters = sourceCandidate?.sources ?? [
+                "clashd27.\(signal.what)",
+                "radar.\(signal.whereValue)"
+            ]
+            let discoveredAtIso = signal.timestampIso ?? poller.streamEvents.first(where: { event in
+                event.candidateId == signal.id || event.id == signal.id
+            })?.timestampIso
+
+            return EmergingIntentionProfile(
+                intentionId: signal.id,
+                domain: signal.what,
+                subdomain: signal.whereValue,
+                description: signal.explanation,
+                confidenceScore: confidence,
+                sourceClusters: Array(uniqueStrings(sourceClusters).prefix(3)),
+                linkedCells: signal.linkedCells,
+                clashdSignalSummary: signal.explanation,
+                state: inferredCatalogState(for: signal),
+                discoveredAtIso: discoveredAtIso,
+                hasCertifiedConfiguration: nil,
+                candidateConfigurationAvailable: nil
+            )
+        }
+    }
+
+    private func mergeEmergingIntentions(
+        primary: [EmergingIntentionProfile],
+        secondary: [EmergingIntentionProfile]
+    ) -> [EmergingIntentionProfile] {
+        var byKey: [String: EmergingIntentionProfile] = [:]
+
+        for profile in secondary {
+            byKey[catalogKey(for: profile)] = profile
+        }
+        for profile in primary {
+            let key = catalogKey(for: profile)
+            if let existing = byKey[key] {
+                byKey[key] = mergedProfile(existing: existing, incoming: profile)
+            } else {
+                byKey[key] = profile
+            }
+        }
+        return Array(byKey.values)
+    }
+
+    private func mergedProfile(
+        existing: EmergingIntentionProfile,
+        incoming: EmergingIntentionProfile
+    ) -> EmergingIntentionProfile {
+        EmergingIntentionProfile(
+            intentionId: incoming.intentionId,
+            domain: incoming.domain,
+            subdomain: incoming.subdomain,
+            description: incoming.description.isEmpty ? existing.description : incoming.description,
+            riskProfile: incoming.riskProfile ?? existing.riskProfile,
+            confidenceScore: max(existing.confidenceScore, incoming.confidenceScore),
+            sourceClusters: uniqueStrings(incoming.sourceClusters + existing.sourceClusters),
+            linkedCells: uniqueStrings(incoming.linkedCells + existing.linkedCells),
+            clashdSignalSummary: incoming.clashdSignalSummary.isEmpty ? existing.clashdSignalSummary : incoming.clashdSignalSummary,
+            state: catalogStateRank(incoming.state) >= catalogStateRank(existing.state) ? incoming.state : existing.state,
+            discoveredAtIso: incoming.discoveredAtIso ?? existing.discoveredAtIso,
+            hasCertifiedConfiguration: incoming.hasCertifiedConfiguration ?? existing.hasCertifiedConfiguration,
+            candidateConfigurationAvailable: incoming.candidateConfigurationAvailable ?? existing.candidateConfigurationAvailable,
+            relatedIncomingToolCount: incoming.relatedIncomingToolCount ?? existing.relatedIncomingToolCount
+        )
+    }
+
+    private func catalogKey(for profile: EmergingIntentionProfile) -> String {
+        let domain = normalizedCatalogToken(profile.domain)
+        let subdomain = normalizedCatalogToken(profile.subdomain)
+        if !domain.isEmpty || !subdomain.isEmpty {
+            return "domain:\(domain)|subdomain:\(subdomain)"
+        }
+        return "id:\(normalizedCatalogToken(profile.intentionId))"
+    }
+
+    private func intentionMatchesQuery(
+        intention: EmergingIntentionProfile,
+        domainToken: String,
+        subdomainToken: String,
+        riskToken: String
+    ) -> Bool {
+        let intentionDomain = normalizedCatalogToken(intention.domain)
+        let intentionSubdomain = normalizedCatalogToken(intention.subdomain)
+
+        if !domainToken.isEmpty,
+           !intentionDomain.contains(domainToken),
+           !domainToken.contains(intentionDomain) {
+            return false
+        }
+
+        if !subdomainToken.isEmpty,
+           !intentionSubdomain.contains(subdomainToken),
+           !subdomainToken.contains(intentionSubdomain) {
+            return false
+        }
+
+        if !riskToken.isEmpty,
+           let risk = intention.riskProfile {
+            let intentionRisk = normalizedBrowserRisk(risk)
+            if !intentionRisk.isEmpty, intentionRisk != riskToken {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private func catalogStateRank(_ state: IntentionCatalogState) -> Int {
+        switch state {
+        case .promoted: return 3
+        case .certified: return 2
+        case .emerging: return 1
+        }
+    }
+
+    private func inferredCatalogState(for signal: RadarSignalSummary) -> IntentionCatalogState {
+        let linked = signal.linkedProposalLabel?.lowercased() ?? ""
+        if linked.contains("approved") {
+            return .promoted
+        }
+        if linked.contains("pending") || linked.contains("linked proposal") {
+            return .certified
+        }
+        return .emerging
+    }
+
+    private func normalizedConfidence(_ rawScore: Double) -> Double {
+        var score = rawScore
+        if score > 1 {
+            if score <= 10 {
+                score /= 10
+            } else {
+                score /= 100
+            }
+        }
+        return min(max(score, 0), 1)
+    }
+
+    private func normalizedCatalogToken(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: " ", with: "-")
+    }
+
+    private func normalizedBrowserRisk(_ value: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.contains("low") || normalized.contains("green") {
+            return "low"
+        }
+        if normalized.contains("medium") || normalized.contains("orange") || normalized.contains("amber") {
+            return "medium"
+        }
+        if normalized.contains("high") || normalized.contains("red") {
+            return "high"
+        }
+        return normalized
+    }
+
+    private func certificationRank(_ certificationLevel: String) -> Int {
+        switch certificationLevel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "gold":
+            return 3
+        case "silver":
+            return 2
+        case "bronze":
+            return 1
+        default:
+            return 0
+        }
+    }
+
+    private func syncBrowserCategorySelection() {
+        let domainToken = normalizedCatalogToken(browserDomain)
+        if let matched = BrowserCategory.allCases.first(where: { normalizedCatalogToken($0.domain) == domainToken }) {
+            selectedBrowserCategory = matched
+        }
+
+        if selectedBrowserCategory.subdomains.contains(browserSubdomain) {
+            selectedBrowserSubdomain = browserSubdomain
+        } else if let first = selectedBrowserCategory.subdomains.first {
+            selectedBrowserSubdomain = first
+            browserSubdomain = first
+        }
+
+        if let selectedFeedCategoryId,
+           !browserFeedCategories.contains(where: { $0.id == selectedFeedCategoryId }) {
+            self.selectedFeedCategoryId = nil
+        }
+    }
+
+    private func applyBrowserCategory(_ category: BrowserCategory) {
+        selectedFeedCategoryId = nil
+        selectedBrowserCategory = category
+        browserDomain = category.domain
+        browserRiskProfile = category.defaultRisk
+
+        if !category.subdomains.contains(selectedBrowserSubdomain),
+           let first = category.subdomains.first {
+            selectedBrowserSubdomain = first
+        }
+        browserSubdomain = selectedBrowserSubdomain
+    }
+
+    private func applyFeedCategory(_ category: SafeClashBrowserCategory) {
+        selectedFeedCategoryId = category.id
+        browserDomain = category.domain
+        if let first = category.subdomains.first {
+            selectedBrowserSubdomain = first
+            browserSubdomain = first
+        }
+
+        let domainToken = normalizedCatalogToken(category.domain)
+        if let matched = BrowserCategory.allCases.first(where: { normalizedCatalogToken($0.domain) == domainToken }) {
+            selectedBrowserCategory = matched
+            if matched.subdomains.contains(browserSubdomain) {
+                selectedBrowserSubdomain = browserSubdomain
+            }
+        }
+        runSafeClashSearch()
+    }
+
+    private func readableSubdomain(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+
+    private func relatedIncomingTools(for intention: EmergingIntentionProfile) -> [IncomingToolSummary] {
+        let cells = Set(intention.linkedCells.map { $0.lowercased() })
+        let intentionTerms = browserTerms(
+            from: "\(intention.domain) \(intention.subdomain) \(intention.description) \(intention.clashdSignalSummary)"
+        )
+
+        return incomingTools
+            .map { tool -> (tool: IncomingToolSummary, score: Int) in
+                var score = 0
+                let toolText = "\(tool.title) \(tool.intentSummary) \(tool.capabilitySummary) \(tool.discoveryOrigin)".lowercased()
+                let toolCells = Set(tool.linkedCells.map { $0.lowercased() })
+
+                if !cells.isEmpty && !cells.intersection(toolCells).isEmpty {
+                    score += 3
+                }
+                if toolText.contains(normalizedCatalogToken(intention.domain).replacingOccurrences(of: "-", with: " ")) {
+                    score += 2
+                }
+                if toolText.contains(normalizedCatalogToken(intention.subdomain).replacingOccurrences(of: "-", with: " ")) {
+                    score += 2
+                }
+                if intentionTerms.contains(where: { token in toolText.contains(token) }) {
+                    score += 1
+                }
+                return (tool, score)
+            }
+            .filter { $0.score > 0 }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                return lhs.tool.title < rhs.tool.title
+            }
+            .map(\.tool)
+            .prefix(3)
+            .map { $0 }
+    }
+
+    private func certifiedMatch(for intention: EmergingIntentionProfile) -> BrowserCard? {
+        let domain = normalizedCatalogToken(intention.domain)
+        let subdomain = normalizedCatalogToken(intention.subdomain)
+        let intentionTokens = browserTerms(from: "\(intention.intentionId) \(intention.description)")
+
+        return aiBrowserCards
+            .map { card -> (card: BrowserCard, score: Int) in
+                var score = 0
+                if normalizedCatalogToken(card.domain) == domain { score += 4 }
+                if normalizedCatalogToken(card.subdomain) == subdomain { score += 4 }
+                if normalizedCatalogToken(card.intentionId) == normalizedCatalogToken(intention.intentionId) {
+                    score += 5
+                }
+                let cardText = "\(card.title) \(card.intentionId) \(card.whyRecommended)".lowercased()
+                if intentionTokens.contains(where: { token in cardText.contains(token) }) {
+                    score += 1
+                }
+                return (card, score)
+            }
+            .filter { $0.score > 0 }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                return lhs.card.rankingScore > rhs.card.rankingScore
+            }
+            .first?
+            .card
+    }
+
+    private func hasCertifiedConfiguration(for intention: EmergingIntentionProfile) -> Bool {
+        if intention.hasCertifiedConfiguration == true { return true }
+        if intention.candidateConfigurationAvailable == true { return true }
+        if intention.state == .certified || intention.state == .promoted { return true }
+        return certifiedMatch(for: intention) != nil
+    }
+
+    private func emergingSiblingCount(for card: BrowserCard) -> Int {
+        let cardDomain = normalizedCatalogToken(card.domain)
+        let cardSubdomain = normalizedCatalogToken(card.subdomain)
+        return emergingIntentions.reduce(into: 0) { count, intention in
+            let intentionDomain = normalizedCatalogToken(intention.domain)
+            let intentionSubdomain = normalizedCatalogToken(intention.subdomain)
+            if intentionDomain == cardDomain && intentionSubdomain == cardSubdomain {
+                count += 1
+            }
+        }
+    }
+
+    private func browserTerms(from text: String) -> Set<String> {
+        Set(
+            text
+                .lowercased()
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" && $0 != "-" })
+                .map(String.init)
+                .filter { $0.count >= 4 }
+        )
+    }
+
+    private func runSafeClashSearch() {
+        let domain = browserDomain.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subdomain = browserSubdomain.trimmingCharacters(in: .whitespacesAndNewlines)
+        let risk = browserRiskProfile.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !domain.isEmpty, !subdomain.isEmpty else {
+            browserErrorMessage = "Domain and subdomain are required."
+            return
+        }
+
+        browserHasExecutedQuery = true
+        browserLoading = true
+        browserErrorMessage = nil
+        browserStatusMessage = nil
+        let constraints = parsedBrowserConstraints(browserConstraintsRaw)
+
+        Task {
+            do {
+                let client = safeClashClient()
+
+                if let feed = try? await client.fetchBrowserFeed(
+                    domain: domain,
+                    subdomain: subdomain,
+                    risk: risk,
+                    constraints: constraints
+                ) {
+                    let certified = feed.certified
+                    let emerging = feed.emerging
+                    var cacheUpdates: [String: AIConfigurationAtom] = [:]
+                    for item in certified {
+                        cacheUpdates[item.configId] = item.configurationAtom
+                    }
+                    await MainActor.run {
+                        browserFeed = feed
+                        browserResults = certified.map(\.profile)
+                        browserEmergingRemote = emerging.map(\.profile)
+                        browserConfigurationCache.merge(cacheUpdates) { _, incoming in incoming }
+                        browserLoading = false
+                        browserStatusMessage = "Browser feed loaded: \(feed.featured.count) featured, \(certified.count) certified, \(emerging.count) emerging."
+                    }
+                    return
+                }
+
+                let results = try await client.searchIntentions(
+                    domain: domain,
+                    subdomain: subdomain,
+                    risk: risk,
+                    constraints: constraints
+                )
+                var emerging: [EmergingIntentionProfile] = []
+                do {
+                    emerging = try await client.fetchEmergingIntentions(
+                        domain: domain,
+                        subdomain: subdomain,
+                        risk: risk,
+                        constraints: constraints
+                    )
+                } catch {}
+
+                await MainActor.run {
+                    browserFeed = nil
+                    browserResults = results
+                    browserEmergingRemote = emerging
+                    browserLoading = false
+                    browserStatusMessage = "Found \(results.count) certified and \(emerging.count) emerging intentions for \(domain)/\(subdomain)."
+                }
+            } catch {
+                await MainActor.run {
+                    browserLoading = false
+                    browserErrorMessage = describeSafeClashFailure(error)
+                }
+            }
+        }
+    }
+
+    private func primeEmergingIntentionsFeedIfNeeded() {
+        guard !browserHasPrimedEmergingFeed else { return }
+        browserHasPrimedEmergingFeed = true
+
+        Task {
+            do {
+                let client = safeClashClient()
+                if let feed = try? await client.fetchBrowserFeed() {
+                    var cacheUpdates: [String: AIConfigurationAtom] = [:]
+                    for item in feed.certified {
+                        cacheUpdates[item.configId] = item.configurationAtom
+                    }
+                    await MainActor.run {
+                        browserFeed = feed
+                        browserConfigurationCache.merge(cacheUpdates) { _, incoming in incoming }
+                        browserResults = feed.certified.map(\.profile)
+                        browserEmergingRemote = mergeEmergingIntentions(
+                            primary: browserEmergingRemote,
+                            secondary: feed.emerging.map(\.profile)
+                        )
+                        if browserStatusMessage == nil {
+                            browserStatusMessage = "Browser feed active."
+                        }
+                    }
+                    return
+                }
+                let emerging = try await client.fetchEmergingIntentions()
+                await MainActor.run {
+                    browserEmergingRemote = mergeEmergingIntentions(
+                        primary: browserEmergingRemote,
+                        secondary: emerging
+                    )
+                    if !emerging.isEmpty, browserStatusMessage == nil {
+                        browserStatusMessage = "Emerging intentions feed active (\(emerging.count))."
+                    }
+                }
+            } catch {
+                // Radar-derived emerging intentions remain available as fallback.
+            }
+        }
+    }
+
+    private func openBrowserCard(_ card: BrowserCard) {
+        selectedBrowserCard = card
+        fetchBrowserConfiguration(configId: card.bestConfiguration.configId)
+    }
+
+    private func fetchBrowserConfiguration(configId: String) {
+        if browserConfigurationCache[configId] != nil { return }
+        guard browserConfigurationLoadingId == nil else { return }
+        browserConfigurationLoadingId = configId
+
+        Task {
+            do {
+                let client = safeClashClient()
+                let configuration = try await client.getConfiguration(configId: configId)
+                await MainActor.run {
+                    browserConfigurationCache[configId] = configuration
+                    browserConfigurationLoadingId = nil
+                }
+            } catch {
+                await MainActor.run {
+                    browserConfigurationLoadingId = nil
+                    browserStatusMessage = "Configuration details unavailable for \(configId)."
+                }
+            }
+        }
+    }
+
+    private func requestBrowserDeployment(for card: BrowserCard, origin: BrowserDeployActionOrigin) {
+        guard card.deployReady else {
+            browserActionErrorMessage = "This certified result is not deploy-ready yet. Inspect details and wait for certification readiness."
+            showBrowserActionError = true
+            return
+        }
+        let configuration = browserConfigurationCache[card.bestConfiguration.configId] ?? card.bestConfiguration
+        let request = makeBrowserDeploymentRequest(card: card, configuration: configuration)
+        if case .detail = origin {
+            selectedBrowserCard = nil
+            DispatchQueue.main.async {
+                pendingBrowserDeployment = request
+            }
+        } else {
+            pendingBrowserDeployment = request
+        }
+        if case .card = origin {
+            fetchBrowserConfiguration(configId: card.bestConfiguration.configId)
+        }
+    }
+
+    private func makeBrowserDeploymentRequest(
+        card: BrowserCard,
+        configuration: AIConfigurationAtom
+    ) -> DeployConfigurationRequest {
+        DeployConfigurationRequest(
+            intentionId: card.intentionId,
+            intentionTitle: card.title,
+            domain: card.domain,
+            subdomain: card.subdomain,
+            riskProfile: card.riskProfile,
+            configId: configuration.configId,
+            model: configuration.model,
+            certificationLevel: configuration.certificationLevel,
+            certificateId: configuration.certificateId,
+            rankingScore: card.rankingScore,
+            benchmarkScore: configuration.benchmarkScore,
+            benchmarkContractId: configuration.benchmarkContract,
+            runtimeEnvelopeHash: configuration.runtimeEnvelopeHash,
+            promptArchitectureReference: configuration.promptArchitectureReference,
+            capabilities: configuration.capabilities,
+            constraints: parsedBrowserConstraints(browserConstraintsRaw),
+            whyEligible: card.whyRecommended,
+            source: "safeclash_browser"
+        )
+    }
+
+    private func benchmarkSummary(for request: DeployConfigurationRequest) -> String {
+        "benchmark \(String(format: "%.2f", request.benchmarkScore)) · ranking \(String(format: "%.2f", request.rankingScore))"
+    }
+
+    private func constraintsSummary(for request: DeployConfigurationRequest) -> String {
+        if request.constraints.isEmpty {
+            return "No additional constraints"
+        }
+        return request.constraints.keys.sorted().compactMap { key in
+            guard let value = request.constraints[key], !value.isEmpty else { return nil }
+            return "\(key)=\(value)"
+        }.joined(separator: ", ")
+    }
+
+    private func createGovernedBrowserDeploymentProposal(request: DeployConfigurationRequest) {
+        guard browserDeployingConfigId == nil else { return }
+        browserDeployingConfigId = request.configId
+        browserLastCreatedProposalId = nil
+
+        Task {
+            let resolved = await resolveEndpoint()
+            guard let token = resolved.token, !token.isEmpty else {
+                await MainActor.run {
+                    browserDeployingConfigId = nil
+                    browserActionErrorMessage = "Geen token beschikbaar. Voeg een token toe in Instellingen."
+                    showBrowserActionError = true
+                }
+                return
+            }
+
+            let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
+
+            do {
+                let response = try await client.deployCertifiedConfiguration(deployment: request)
+                await poller.refresh(gateway: gateway)
+                await MainActor.run {
+                    browserDeployingConfigId = nil
+                    browserLastCreatedProposalId = response.proposalId
+                    let summary = response.summary
+                        ?? "Governed deployment proposal created for \(request.configId)."
+                    let nextStep = response.nextStep ?? "Approval is required before activation."
+                    browserStatusMessage = "\(summary) \(nextStep)"
+                }
+            } catch {
+                await MainActor.run {
+                    browserDeployingConfigId = nil
+                    browserActionErrorMessage = describeBrowserDeployFailure(error, host: resolved.host, port: resolved.port)
+                    showBrowserActionError = true
+                }
+            }
+        }
+    }
+
+    private func safeClashClient() -> SafeClashClient {
+        let token = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return SafeClashClient(
+            baseURL: resolveSafeClashBaseURL(),
+            token: (token?.isEmpty == false) ? token : nil
+        )
+    }
+
+    private func resolveSafeClashBaseURL() -> URL {
+        let env = ProcessInfo.processInfo.environment
+        if let raw = env["SAFECLASH_BASE_URL"] ?? env["SAFECLASH_URL"],
+           let url = URL(string: raw),
+           let scheme = url.scheme,
+           (scheme == "http" || scheme == "https"),
+           url.host != nil {
+            return url
+        }
+
+        var components = URLComponents()
+        components.scheme = "http"
+        if !gateway.host.isEmpty, gateway.host.lowercased() != "mock" {
+            components.host = gateway.host
+            components.port = gateway.port > 0 ? gateway.port : 19001
+        } else if let runtimeHost = RuntimeConfig.shared.host {
+            components.host = runtimeHost
+            components.port = RuntimeConfig.shared.port ?? 19001
+        } else {
+            components.host = "localhost"
+            components.port = 19001
+        }
+        return components.url ?? URL(string: "http://localhost:19001")!
+    }
+
+    private func parsedBrowserConstraints(_ raw: String) -> [String: String] {
+        var values: [String: String] = [:]
+        let entries = raw.split(separator: ",")
+        for entry in entries {
+            let pair = entry.split(separator: "=", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard pair.count == 2, !pair[0].isEmpty, !pair[1].isEmpty else { continue }
+            values[pair[0]] = pair[1]
+        }
+        return values
+    }
+
+    private func describeSafeClashFailure(_ error: Error) -> String {
+        if case SafeClashClientError.httpStatus(let status) = error {
+            return "SafeClash browser query failed (\(status))."
+        }
+        return "SafeClash browser feed unavailable."
+    }
+
+    private func describeBrowserDeployFailure(_ error: Error, host: String, port: Int) -> String {
+        if case GatewayClientError.httpStatus(let status) = error {
+            switch status {
+            case 400, 422:
+                return "Deployment proposal rejected: missing or invalid certified configuration provenance."
+            case 401:
+                return "Token ongeldig of verlopen voor \(host):\(port)."
+            case 403:
+                return "Governed deployment proposal blocked by policy."
+            case 404:
+                return "Canonical deploy route not available on \(host):\(port)."
+            default:
+                return "Proposal creation failed with backend status \(status)."
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cannotFindHost, .cannotConnectToHost, .timedOut, .networkConnectionLost:
+                return "Backend onbereikbaar op \(host):\(port)."
+            default:
+                break
+            }
+        }
+        return "Aanmaken van governed deployment proposal mislukt."
     }
 
     // MARK: - Pending Queue
@@ -2433,9 +3907,813 @@ private struct RadarSignalDetailSheet: View {
     }
 }
 
+private struct FeaturedAICard: View {
+    let card: BrowserCard
+    let isDeploying: Bool
+    let onInspect: () -> Void
+    let onDeploy: () -> Void
+
+    private var certificationColor: Color {
+        switch card.bestConfiguration.certificationLevel.lowercased() {
+        case "gold":
+            return .consentGreen
+        case "silver":
+            return .cyan
+        case "bronze":
+            return .consentOrange
+        default:
+            return .secondary
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Featured AI")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.cyan)
+                Spacer()
+                Text(card.bestConfiguration.certificationLevel.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(certificationColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(certificationColor.opacity(0.16))
+                    .clipShape(Capsule())
+            }
+
+            Text(card.title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+
+            Text(card.intentionPath)
+                .font(.jeevesMono)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Text(card.shortDescription)
+                .font(.jeevesBody)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(card.whyRecommended)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            HStack(spacing: 8) {
+                statChip(text: "score \(String(format: "%.2f", card.rankingScore))", tint: .cyan)
+                statChip(text: card.benchmarkSummary, tint: .blue)
+                statChip(text: card.bestConfiguration.model, tint: .secondary)
+            }
+
+            Text(card.deployReady ? "Ready for governed deployment proposal." : "Deploy readiness pending certification envelope.")
+                .font(.caption2)
+                .foregroundStyle(card.deployReady ? Color.consentGreen : .consentOrange)
+
+            HStack(spacing: 8) {
+                Button("Inspect") {
+                    onInspect()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Deploy via proposal") {
+                    onDeploy()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.consentGreen)
+                .disabled(isDeploying || !card.deployReady)
+
+                if isDeploying {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+        }
+        .controlRoomPanel(padding: 14)
+    }
+
+    private func statChip(text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.14))
+            .clipShape(Capsule())
+    }
+}
+
+private struct AIBrowserResultCard: View {
+    let card: BrowserCard
+    let emergingMomentumCount: Int
+    let isDeploying: Bool
+    let onOpen: () -> Void
+    let onDeploy: () -> Void
+
+    private var certificationColor: Color {
+        switch card.bestConfiguration.certificationLevel.lowercased() {
+        case "gold":
+            return .consentGreen
+        case "silver":
+            return .blue
+        case "bronze":
+            return .consentOrange
+        default:
+            return .secondary
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.title)
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Text(card.intentionPath)
+                        .font(.jeevesMono)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                capsule(text: card.bestConfiguration.certificationLevel, tint: certificationColor)
+                capsule(text: card.deployReady ? "READY" : "PENDING", tint: card.deployReady ? .consentGreen : .consentOrange)
+            }
+
+            Text(card.shortDescription)
+                .font(.jeevesBody)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(card.whyRecommended)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            HStack(spacing: 8) {
+                metricChip(text: "score \(String(format: "%.2f", card.rankingScore))", tint: .cyan)
+                metricChip(text: card.benchmarkSummary, tint: .blue)
+                metricChip(text: card.bestConfiguration.model, tint: .secondary)
+            }
+
+            Text(card.deployReady ? "Deploy readiness: governed proposal available." : "Deploy readiness: awaiting certification envelope.")
+                .font(.caption2)
+                .foregroundStyle(card.deployReady ? Color.consentGreen : .consentOrange)
+
+            if emergingMomentumCount > 0 {
+                Text("Emerging momentum: \(emergingMomentumCount) related signal(s)")
+                    .font(.caption2)
+                    .foregroundStyle(Color.consentOrange)
+            }
+
+            HStack(spacing: 8) {
+                Button("Inspect") {
+                    onOpen()
+                }
+                    .buttonStyle(.bordered)
+
+                Button("Deploy via proposal") {
+                    onDeploy()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.consentGreen)
+                .disabled(isDeploying || !card.deployReady)
+
+                if isDeploying {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+        }
+        .controlRoomPanel(padding: 12)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onTapGesture {
+            onOpen()
+        }
+    }
+
+    private func capsule(text: String, tint: Color) -> some View {
+        Text(text.uppercased())
+            .font(.jeevesCaption.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.15))
+            .clipShape(Capsule())
+    }
+
+    private func metricChip(text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.14))
+            .clipShape(Capsule())
+    }
+}
+
+private struct AIBrowserDetailSheet: View {
+    let card: BrowserCard
+    let configuration: AIConfigurationAtom
+    let isLoadingConfiguration: Bool
+    let isDeploying: Bool
+    let onRefreshConfiguration: () -> Void
+    let onDeploy: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(card.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+
+                        Text(card.shortDescription)
+                            .font(.jeevesBody)
+                            .foregroundStyle(.secondary)
+
+                        metadataRow(label: "Intention path", value: card.intentionPath)
+
+                        metadataRow(label: "Config ID", value: configuration.configId)
+                        metadataRow(label: "Model", value: configuration.model)
+                        metadataRow(label: "Certification", value: configuration.certificationLevel)
+                        metadataRow(label: "Ranking", value: String(format: "%.2f", configuration.rankingScore))
+                        metadataRow(label: "Benchmark", value: String(format: "%.2f", configuration.benchmarkScore))
+                        metadataRow(label: "Prompt architecture", value: configuration.promptArchitectureReference ?? "not provided")
+                        metadataRow(label: "Capabilities", value: configuration.capabilities.joined(separator: ", "))
+                        metadataRow(label: "Benchmark contract", value: configuration.benchmarkContract ?? "not provided")
+                        metadataRow(label: "Runtime envelope", value: configuration.runtimeEnvelopeHash ?? "not provided")
+                        metadataRow(label: "Publisher", value: configuration.publisherIdentity ?? "not provided")
+                        metadataRow(label: "Pricing policy", value: configuration.pricingPolicy ?? "not provided")
+                        if let certificate = card.certificateReference, !certificate.isEmpty {
+                            metadataRow(label: "Certificate", value: certificate)
+                        }
+                        if let benchmarkContract = card.benchmarkContractReference, !benchmarkContract.isEmpty {
+                            metadataRow(label: "Benchmark contract", value: benchmarkContract)
+                        }
+                        if let capabilities = card.capabilitiesSummary, !capabilities.isEmpty {
+                            metadataRow(label: "Capabilities", value: capabilities)
+                        }
+                        if let constraints = card.constraintsSummary, !constraints.isEmpty {
+                            metadataRow(label: "Constraints", value: constraints)
+                        }
+
+                        Text("Why recommended")
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                        Text(card.whyRecommended)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        if let rankingExplanation = card.rankingExplanation, !rankingExplanation.isEmpty {
+                            Text("Ranking explanation")
+                                .font(.jeevesHeadline)
+                                .foregroundStyle(.white)
+                            Text(rankingExplanation)
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+
+                        Text(card.deployReady
+                             ? "Deploy creates a governed proposal. Human approval remains required before any action executes."
+                             : "This item is certified for browsing but not deploy-ready yet. Governance deploy route stays locked until readiness is true.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 8) {
+                            Button("Refresh config") {
+                                onRefreshConfiguration()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isLoadingConfiguration)
+
+                            Button("Deploy via proposal") {
+                                onDeploy()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.consentGreen)
+                            .disabled(isDeploying || !card.deployReady)
+                        }
+
+                        if isLoadingConfiguration {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Loading configuration details...")
+                                    .font(.jeevesCaption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if isDeploying {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Creating governed deployment proposal...")
+                                    .font(.jeevesCaption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .controlRoomPanel()
+                    .padding()
+                }
+            }
+            .navigationTitle("AI Configuration")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("OK") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func metadataRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 132, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+private struct BrowserDeployConfirmationSheet: View {
+    let request: DeployConfigurationRequest
+    let benchmarkSummary: String
+    let constraintsSummary: String
+    let isCreatingProposal: Bool
+    let onCreateProposal: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Deploy this certified configuration?")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+
+                        Text("This creates a governed proposal in openclashd. Execution can only happen after human approval.")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+
+                        metadataRow(label: "Config ID", value: request.configId)
+                        metadataRow(label: "Intention", value: "\(request.domain) / \(request.subdomain)")
+                        metadataRow(label: "Certification", value: request.certificationLevel)
+                        metadataRow(label: "Benchmark", value: benchmarkSummary)
+                        metadataRow(label: "Constraints", value: constraintsSummary)
+                        metadataRow(label: "Runtime envelope", value: abbreviatedHash(request.runtimeEnvelopeHash))
+                        metadataRow(label: "Eligibility", value: request.whyEligible)
+                        metadataRow(label: "Source", value: request.source)
+
+                        if let certificateId = request.certificateId, !certificateId.isEmpty {
+                            metadataRow(label: "Certificate ID", value: certificateId)
+                        }
+                        if let benchmarkContractId = request.benchmarkContractId, !benchmarkContractId.isEmpty {
+                            metadataRow(label: "Benchmark contract", value: benchmarkContractId)
+                        }
+
+                        HStack(spacing: 8) {
+                            Button("Cancel", role: .cancel) {
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button("Create Proposal") {
+                                onCreateProposal()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.consentGreen)
+                            .disabled(isCreatingProposal)
+                        }
+
+                        if isCreatingProposal {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Submitting governed proposal...")
+                                    .font(.jeevesCaption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .controlRoomPanel()
+                    .padding()
+                }
+            }
+            .navigationTitle("Governed Deployment")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("OK") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func metadataRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 126, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(.white)
+        }
+    }
+
+    private func abbreviatedHash(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "not provided" }
+        if value.count <= 20 { return value }
+        let prefix = value.prefix(10)
+        let suffix = value.suffix(8)
+        return "\(prefix)…\(suffix)"
+    }
+}
+
+private struct EmergingIntentionCard: View {
+    let intention: EmergingIntentionProfile
+    let relatedToolsCount: Int
+    let hasCertifiedConfiguration: Bool
+    let onOpen: () -> Void
+
+    private var stateTint: Color {
+        switch intention.state {
+        case .promoted:
+            return .consentGreen
+        case .certified:
+            return .cyan
+        case .emerging:
+            return .consentOrange
+        }
+    }
+
+    private var stateLabel: String {
+        switch intention.state {
+        case .promoted:
+            return "PROMOTED"
+        case .certified:
+            return "CERTIFIED"
+        case .emerging:
+            return "EMERGING"
+        }
+    }
+
+    private var confidenceLabel: String {
+        "score \(String(format: "%.2f", intention.confidenceScore))"
+    }
+
+    private var effectiveRelatedToolsCount: Int {
+        max(relatedToolsCount, intention.relatedIncomingToolCount ?? 0)
+    }
+
+    private var discoveryLabel: String {
+        if let source = intention.sourceClusters.first, !source.isEmpty {
+            return source
+        }
+        return "CLASHD27 cluster"
+    }
+
+    private var certificationLabel: String {
+        if hasCertifiedConfiguration {
+            return "Candidate configuration available"
+        }
+        return "No certified configuration yet"
+    }
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(intention.title)
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Spacer()
+                    capsule(text: stateLabel, tint: stateTint)
+                }
+
+                Text("\(intention.domain) / \(intention.subdomain)")
+                    .font(.jeevesMono)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Text(intention.description)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                HStack(spacing: 8) {
+                    capsule(text: "Emerging intention", tint: .consentOrange)
+                    capsule(text: confidenceLabel, tint: .cyan)
+                    if let risk = intention.riskProfile, !risk.isEmpty {
+                        capsule(text: "risk \(risk)", tint: .secondary)
+                    }
+                    capsule(text: discoveryLabel, tint: .secondary)
+                    Spacer()
+                }
+
+                detailRow(label: "Signal", value: intention.clashdSignalSummary)
+                detailRow(label: "Certification", value: certificationLabel)
+
+                if !intention.linkedCells.isEmpty {
+                    detailRow(label: "Cells", value: intention.linkedCells.joined(separator: ", "))
+                }
+                if effectiveRelatedToolsCount > 0 {
+                    detailRow(label: "Related tools", value: "\(effectiveRelatedToolsCount)")
+                }
+            }
+            .controlRoomPanel(padding: 12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func detailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 92, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+        }
+    }
+
+    private func capsule(text: String, tint: Color) -> some View {
+        Text(text.uppercased())
+            .font(.jeevesCaption.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.15))
+            .clipShape(Capsule())
+    }
+}
+
+private struct EmergingIntentionDetailSheet: View {
+    let intention: EmergingIntentionProfile
+    let relatedTools: [IncomingToolSummary]
+    let certifiedMatch: BrowserCard?
+    let onOpenTool: (IncomingToolSummary) -> Void
+    let onOpenCertified: (BrowserCard) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var stateTint: Color {
+        switch intention.state {
+        case .promoted:
+            return .consentGreen
+        case .certified:
+            return .cyan
+        case .emerging:
+            return .consentOrange
+        }
+    }
+
+    private var stateLabel: String {
+        switch intention.state {
+        case .promoted:
+            return "promoted"
+        case .certified:
+            return "certified"
+        case .emerging:
+            return "emerging"
+        }
+    }
+
+    private var confidenceText: String {
+        String(format: "%.2f", intention.confidenceScore)
+    }
+
+    private var certificationText: String {
+        if intention.hasCertifiedConfiguration == true || certifiedMatch != nil {
+            return "Certified configuration available."
+        }
+        if intention.candidateConfigurationAvailable == true {
+            return "Candidate configuration available, certification in progress."
+        }
+        return "No certified configuration yet."
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(intention.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+
+                        Text("\(intention.domain) / \(intention.subdomain)")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+
+                        metadataRow(label: "State", value: stateLabel, tint: stateTint)
+                        metadataRow(label: "Confidence", value: confidenceText)
+                        if let risk = intention.riskProfile, !risk.isEmpty {
+                            metadataRow(label: "Risk profile", value: risk)
+                        }
+                        metadataRow(label: "Intention ID", value: intention.intentionId)
+                        if let discoveredAtIso = intention.discoveredAtIso {
+                            metadataRow(label: "Discovered", value: discoveredAtIso)
+                        }
+                        metadataRow(label: "Certification", value: certificationText)
+
+                        Text("Why this intention exists")
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                        Text(intention.description)
+                            .font(.jeevesBody)
+                            .foregroundStyle(.secondary)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        Text("Signal summary")
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                        Text(intention.clashdSignalSummary)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+
+                        if !intention.sourceClusters.isEmpty {
+                            Text("Originating clusters")
+                                .font(.jeevesHeadline)
+                                .foregroundStyle(.white)
+                            ForEach(intention.sourceClusters.prefix(4), id: \.self) { cluster in
+                                Text(cluster)
+                                    .font(.jeevesMono)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if !intention.linkedCells.isEmpty {
+                            metadataRow(label: "Linked cells", value: intention.linkedCells.joined(separator: ", "))
+                        }
+
+                        certificationSection
+                        relatedToolsSection
+                        nextStepSection
+                    }
+                    .controlRoomPanel()
+                    .padding()
+                }
+            }
+            .navigationTitle("Emerging Intention")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("OK") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func metadataRow(label: String, value: String, tint: Color = .white) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(tint)
+        }
+    }
+
+    @ViewBuilder
+    private var certificationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Certification path")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            if let certifiedMatch {
+                Text("A certified SafeClash configuration is already linked to this intention.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(certifiedMatch.title)
+                        .font(.jeevesBody)
+                        .foregroundStyle(.white)
+                    Text("Model \(certifiedMatch.bestConfiguration.model) · \(certifiedMatch.bestConfiguration.certificationLevel)")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Button("Open certified configuration") {
+                        onOpenCertified(certifiedMatch)
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                Text("No certified SafeClash configuration yet. Route this through refinement or incoming tools.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var relatedToolsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Related incoming tools")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            if relatedTools.isEmpty {
+                Text("No linked incoming tools detected.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(relatedTools) { tool in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(tool.title)
+                            .font(.jeevesBody)
+                            .foregroundStyle(.white)
+                        Text(tool.intentSummary)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+
+                        HStack {
+                            Text("risk \(tool.risk)")
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Open Incoming Tool") {
+                                onOpenTool(tool)
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private var nextStepSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Next governed step")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+            Text(nextStepHint)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var nextStepHint: String {
+        if certifiedMatch != nil {
+            return "Inspect certified configuration and deploy into proposal flow when governance context is complete."
+        }
+        return "Inspect related tools, review lineage, and search certified alternatives before deployment. Emerging intentions do not bypass approval."
+    }
+}
+
 private struct IncomingToolCard: View {
     let tool: IncomingToolSummary
+    let isActionInFlight: Bool
     let onOpen: () -> Void
+    let onAction: (IncomingToolActionKind) -> Void
 
     private var riskColor: Color {
         switch tool.risk {
@@ -2451,40 +4729,62 @@ private struct IncomingToolCard: View {
     }
 
     var body: some View {
-        Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(tool.title)
-                        .font(.jeevesHeadline)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Spacer()
-                    capsule(text: tool.source, tint: .cyan)
-                    capsule(text: tool.risk.uppercased(), tint: riskColor)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(tool.title)
+                    .font(.jeevesHeadline)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Spacer()
+                capsule(text: tool.source, tint: .cyan)
+                capsule(text: tool.risk.uppercased(), tint: riskColor)
+            }
 
-                detailRow(label: "Intent", value: tool.intentSummary)
-                detailRow(label: "Capabilities", value: tool.capabilitySummary)
-                detailRow(label: "Suggested refinement", value: tool.suggestedRefinement)
-                if !tool.linkedCells.isEmpty {
-                    detailRow(label: "Cells", value: tool.linkedCells.joined(separator: ", "))
-                }
+            detailRow(label: "Intent", value: tool.intentSummary)
+            detailRow(label: "Capabilities", value: tool.capabilitySummary)
+            detailRow(label: "Suggested refinement", value: tool.suggestedRefinement)
+            detailRow(label: "Status", value: tool.status)
 
-                HStack(spacing: 8) {
-                    actionChip(title: "Reject", tint: .consentRed, enabled: false, action: {})
-                    actionChip(title: "Sandbox", tint: .consentOrange, enabled: false, action: {})
-                    actionChip(title: "Refine", tint: .cyan, enabled: true, action: onOpen)
-                    actionChip(title: "Promote", tint: .consentGreen, enabled: false, action: {})
-                }
+            if !tool.linkedCells.isEmpty {
+                detailRow(label: "Cells", value: tool.linkedCells.joined(separator: ", "))
+            }
 
-                Text("Reject/Sandbox/Promote wiring remains backend-governed. Open card to inspect first.")
+            HStack(spacing: 8) {
+                actionChip(title: "Reject", tint: .consentRed, enabled: tool.actions.reject.available) {
+                    onAction(.reject)
+                }
+                actionChip(title: "Sandbox", tint: .consentOrange, enabled: tool.actions.sandbox.available) {
+                    onAction(.sandbox)
+                }
+                actionChip(title: "Refine", tint: .cyan, enabled: tool.actions.refine.available) {
+                    onAction(.refine)
+                }
+                actionChip(title: "Promote", tint: .consentGreen, enabled: tool.actions.promote.available) {
+                    onAction(.promote)
+                }
+                if isActionInFlight {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if let latest = tool.actionHistory.first {
+                Text("Last action: \(latest.action) · \(latest.atIso)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(1)
+            } else {
+                Text("No operator actions recorded yet.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .controlRoomPanel(padding: 14)
         }
-        .buttonStyle(.plain)
+        .controlRoomPanel(padding: 14)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onTapGesture {
+            onOpen()
+        }
     }
 
     private func detailRow(label: String, value: String) -> some View {
@@ -2521,13 +4821,15 @@ private struct IncomingToolCard: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(!enabled)
+        .disabled(!enabled || isActionInFlight)
     }
 }
 
 private struct IncomingToolDetailSheet: View {
     let tool: IncomingToolSummary
     let relatedProposals: [ExtensionProposal]
+    let isActionInFlight: Bool
+    let onAction: (IncomingToolActionKind) -> Void
     let onOpenApprovalCard: (ExtensionProposal) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -2559,10 +4861,16 @@ private struct IncomingToolDetailSheet: View {
                         metadataRow(label: "Risk classification", value: tool.risk.uppercased(), tint: riskColor)
                         metadataRow(label: "Intent", value: tool.intentSummary)
                         metadataRow(label: "Capabilities", value: tool.capabilitySummary)
+                        metadataRow(label: "Status", value: tool.status)
                         metadataRow(label: "Linked cells", value: tool.linkedCells.isEmpty ? "none" : tool.linkedCells.joined(separator: ", "))
                         metadataRow(label: "Weak points", value: tool.weakPoints)
                         metadataRow(label: "Refinement", value: tool.suggestedRefinement)
+                        if let reportId = tool.forensicsReportId {
+                            metadataRow(label: "Forensics report", value: reportId)
+                        }
                         metadataRow(label: "Lineage hint", value: tool.lineageHint)
+
+                        actionSection
 
                         if !tool.explanation.isEmpty {
                             Text(tool.explanation)
@@ -2618,6 +4926,45 @@ private struct IncomingToolDetailSheet: View {
                     }
                 } else {
                     evidenceRow(reference: reference)
+                }
+            }
+        }
+    }
+
+    private var actionSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Operator actions")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            HStack(spacing: 8) {
+                actionButton(title: "Reject", tint: .consentRed, enabled: tool.actions.reject.available) {
+                    onAction(.reject)
+                }
+                actionButton(title: "Sandbox", tint: .consentOrange, enabled: tool.actions.sandbox.available) {
+                    onAction(.sandbox)
+                }
+                actionButton(title: "Refine", tint: .cyan, enabled: tool.actions.refine.available) {
+                    onAction(.refine)
+                }
+                actionButton(title: "Promote", tint: .consentGreen, enabled: tool.actions.promote.available) {
+                    onAction(.promote)
+                }
+                if isActionInFlight {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if tool.actionHistory.isEmpty {
+                Text("No operator actions recorded yet.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(tool.actionHistory) { item in
+                    Text("\(item.action) · \(item.atIso)")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -2686,6 +5033,20 @@ private struct IncomingToolDetailSheet: View {
                 }
             }
         }
+    }
+
+    private func actionButton(title: String, tint: Color, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(enabled ? title : "\(title) (Unavailable)")
+                .font(.jeevesCaption.weight(.medium))
+                .foregroundStyle(enabled ? tint : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background((enabled ? tint : Color.secondary).opacity(0.16))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled || isActionInFlight)
     }
 }
 
