@@ -254,6 +254,137 @@ struct DecidedProposalsEnvelope: Decodable {
     }
 }
 
+enum DeploymentLifecycleStepState: String, Hashable {
+    case complete
+    case pending
+    case missing
+}
+
+struct DeploymentLifecycleStep: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let primary: String
+    let secondary: String?
+    let state: DeploymentLifecycleStepState
+}
+
+struct DeploymentLifecycle: Identifiable, Hashable {
+    let source: String
+    let configId: String
+    let intentionId: String
+    let certificateId: String?
+    let runtimeEnvelopeHash: String?
+    let benchmarkContractId: String?
+    let proposalId: String?
+    let proposalCreatedAtIso: String?
+    let approvalDecision: String?
+    let approvalActor: String?
+    let approvalAtIso: String?
+    let actionKind: String?
+    let actionId: String?
+    let actionState: String?
+    let actionAtIso: String?
+    let knowledgeKind: String?
+    let knowledgeId: String?
+    let knowledgeAtIso: String?
+
+    var id: String { configId }
+
+    var steps: [DeploymentLifecycleStep] {
+        [
+            DeploymentLifecycleStep(
+                id: "source",
+                title: "SafeClash Registry",
+                primary: source,
+                secondary: nil,
+                state: .complete
+            ),
+            DeploymentLifecycleStep(
+                id: "proposal",
+                title: "Proposal Created",
+                primary: proposalId ?? "No proposal linked",
+                secondary: proposalCreatedAtIso,
+                state: stageState(value: proposalId)
+            ),
+            DeploymentLifecycleStep(
+                id: "approval",
+                title: "Approval",
+                primary: approvalDecision ?? "Awaiting approval",
+                secondary: approvalAtIso ?? approvalActor,
+                state: approvalState
+            ),
+            DeploymentLifecycleStep(
+                id: "action",
+                title: "Governed Action",
+                primary: actionKind ?? "No action recorded",
+                secondary: actionLineSecondary,
+                state: actionStageState
+            ),
+            DeploymentLifecycleStep(
+                id: "knowledge",
+                title: "Knowledge Artifact",
+                primary: knowledgeKind ?? "No knowledge artifact",
+                secondary: knowledgeLineSecondary,
+                state: stageState(value: knowledgeId)
+            )
+        ]
+    }
+
+    private var approvalState: DeploymentLifecycleStepState {
+        guard let decision = approvalDecision?.lowercased() else {
+            if proposalId != nil { return .pending }
+            return .missing
+        }
+        if decision.contains("approve") || decision.contains("granted") {
+            return .complete
+        }
+        if decision.contains("deny") || decision.contains("reject") {
+            return .missing
+        }
+        return .pending
+    }
+
+    private var actionStageState: DeploymentLifecycleStepState {
+        guard actionId != nil || actionKind != nil else {
+            if approvalState == .complete { return .pending }
+            return .missing
+        }
+        let normalized = actionState?.lowercased() ?? ""
+        if normalized == "completed" || normalized == "success" || normalized == "ok" {
+            return .complete
+        }
+        if normalized == "failed" || normalized == "denied" {
+            return .missing
+        }
+        return .pending
+    }
+
+    private var actionLineSecondary: String? {
+        if let actionId, let actionState {
+            if let actionAtIso {
+                return "\(actionId) · \(actionState) · \(actionAtIso)"
+            }
+            return "\(actionId) · \(actionState)"
+        }
+        if let actionId { return actionId }
+        if let actionState { return actionState }
+        return actionAtIso
+    }
+
+    private var knowledgeLineSecondary: String? {
+        if let knowledgeId, let knowledgeAtIso {
+            return "\(knowledgeId) · \(knowledgeAtIso)"
+        }
+        if let knowledgeId { return knowledgeId }
+        return knowledgeAtIso
+    }
+
+    private func stageState(value: String?) -> DeploymentLifecycleStepState {
+        if let value, !value.isEmpty { return .complete }
+        return .missing
+    }
+}
+
 // MARK: - Knowledge Graph
 
 struct KnowledgeGraphResponse: Decodable {

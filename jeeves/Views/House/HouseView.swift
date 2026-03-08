@@ -55,6 +55,8 @@ struct HouseView: View {
                 knowledgeStatus = gateway.currentKnowledgeStatus
             }
             .task {
+                await refreshStatus()
+                await refreshKnowledgeStatusAsync()
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(30))
                     await refreshStatus()

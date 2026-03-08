@@ -200,6 +200,7 @@ struct LobbyView: View {
     @State private var selectedEmergingIntention: EmergingIntentionProfile?
     @State private var browserEmergingRemote: [EmergingIntentionProfile] = []
     @State private var browserConfigurationCache: [String: AIConfigurationAtom] = [:]
+    @State private var browserDeploymentProposalByConfigId: [String: String] = [:]
     @State private var browserConfigurationLoadingId: String?
     @State private var browserDeployingConfigId: String?
     @State private var pendingBrowserDeployment: DeployConfigurationRequest?
@@ -373,9 +374,11 @@ struct LobbyView: View {
                 )
             }
             .sheet(item: $selectedBrowserCard) { card in
+                let resolvedConfiguration = browserConfigurationCache[card.bestConfiguration.configId] ?? card.bestConfiguration
                 AIBrowserDetailSheet(
                     card: card,
-                    configuration: browserConfigurationCache[card.bestConfiguration.configId] ?? card.bestConfiguration,
+                    configuration: resolvedConfiguration,
+                    lifecycle: browserLifecycle(for: card, configuration: resolvedConfiguration),
                     isLoadingConfiguration: browserConfigurationLoadingId == card.bestConfiguration.configId,
                     isDeploying: browserDeployingConfigId == card.bestConfiguration.configId,
                     onRefreshConfiguration: {
@@ -383,6 +386,15 @@ struct LobbyView: View {
                     },
                     onDeploy: {
                         requestBrowserDeployment(for: card, origin: .detail)
+                    },
+                    onOpenProposal: { proposalId in
+                        openLifecycleProposal(proposalId: proposalId)
+                    },
+                    onOpenDecision: { proposalId in
+                        openLifecycleDecision(proposalId: proposalId)
+                    },
+                    onOpenKnowledgeArtifact: { objectId in
+                        openLifecycleKnowledge(objectId: objectId)
                     }
                 )
             }
@@ -1045,11 +1057,22 @@ struct LobbyView: View {
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(poller.recentKnowledgeObjects) { object in
+                        let lifecycle = lifecycleFromKnowledgeObject(object)
                         KnowledgeResultCard(
                             object: object,
                             createdLabel: formatKnowledgeTimestamp(object.createdAt),
                             proposalOrigin: proposalOrigin(for: object),
-                            producer: producerLabel(for: object)
+                            producer: producerLabel(for: object),
+                            lifecycle: lifecycle,
+                            onOpenProposal: { proposalId in
+                                openLifecycleProposal(proposalId: proposalId)
+                            },
+                            onOpenDecision: { proposalId in
+                                openLifecycleDecision(proposalId: proposalId)
+                            },
+                            onOpenKnowledgeArtifact: { objectId in
+                                openLifecycleKnowledge(objectId: objectId)
+                            }
                         ) {
                             fetchAndShowKnowledgeGraph(objectId: object.objectId)
                         }
@@ -1788,7 +1811,21 @@ struct LobbyView: View {
         return nil
     }
 
+    private func metadataValue(for object: KnowledgeObject?, keys: [String]) -> AnyCodableValue? {
+        guard let object else { return nil }
+        return metadataValue(for: object, keys: keys)
+    }
+
     private func metadataString(for object: KnowledgeObject, keys: [String]) -> String? {
+        guard let value = metadataValue(for: object, keys: keys),
+              let text = value.scalarStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            return nil
+        }
+        return text
+    }
+
+    private func metadataString(for object: KnowledgeObject?, keys: [String]) -> String? {
         guard let value = metadataValue(for: object, keys: keys),
               let text = value.scalarStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty else {
@@ -2986,6 +3023,9 @@ struct LobbyView: View {
                 await MainActor.run {
                     browserDeployingConfigId = nil
                     browserLastCreatedProposalId = response.proposalId
+                    if let proposalId = response.proposalId, !proposalId.isEmpty {
+                        browserDeploymentProposalByConfigId[request.configId] = proposalId
+                    }
                     let summary = response.summary
                         ?? "Governed deployment proposal created for \(request.configId)."
                     let nextStep = response.nextStep ?? "Approval is required before activation."
@@ -3078,6 +3118,222 @@ struct LobbyView: View {
             }
         }
         return "Aanmaken van governed deployment proposal mislukt."
+    }
+
+    private func browserLifecycle(for card: BrowserCard, configuration: AIConfigurationAtom) -> DeploymentLifecycle {
+        let matchingKnowledge = deploymentKnowledgeObjects(
+            configId: configuration.configId,
+            intentionId: card.intentionId
+        )
+        let latestKnowledge = matchingKnowledge
+            .sorted { lhs, rhs in
+                let lhsDate = lhs.createdAt ?? .distantPast
+                let rhsDate = rhs.createdAt ?? .distantPast
+                if lhsDate != rhsDate { return lhsDate > rhsDate }
+                return lhs.objectId < rhs.objectId
+            }
+            .first
+
+        let source = "SafeClash Registry"
+        let proposalHint = browserDeploymentProposalByConfigId[configuration.configId]
+            ?? proposalIdHint(from: latestKnowledge)
+
+        let fallbackAction = (
+            kind: latestKnowledge.flatMap { metadataString(for: $0, keys: ["action_kind", "actionKind"]) },
+            id: latestKnowledge.flatMap { metadataString(for: $0, keys: ["action_id", "actionId"]) },
+            state: latestKnowledge.flatMap { metadataString(for: $0, keys: ["execution_state", "executionState", "action_state", "actionState"]) },
+            atIso: latestKnowledge.flatMap { metadataString(for: $0, keys: ["action_at_iso", "actionAtIso", "completed_at_iso", "completedAtIso"]) }
+        )
+
+        return buildDeploymentLifecycle(
+            source: source,
+            configId: configuration.configId,
+            intentionId: card.intentionId,
+            certificateId: configuration.certificateId,
+            runtimeEnvelopeHash: configuration.runtimeEnvelopeHash,
+            benchmarkContractId: configuration.benchmarkContract,
+            proposalHint: proposalHint,
+            fallbackAction: fallbackAction,
+            knowledgeObject: latestKnowledge
+        )
+    }
+
+    private func lifecycleFromKnowledgeObject(_ object: KnowledgeObject) -> DeploymentLifecycle? {
+        let configId = metadataString(for: object, keys: ["config_id", "configId"])
+            ?? sourceRefValue(for: object, sourceTypeContains: ["config", "configuration"])
+        let intentionId = metadataString(for: object, keys: ["intention_id", "intentionId"])
+            ?? sourceRefValue(for: object, sourceTypeContains: ["intention"])
+
+        guard isDeploymentKnowledgeObject(object, configId: configId, intentionId: intentionId) else {
+            return nil
+        }
+
+        let resolvedConfigId = configId ?? "unknown-config-\(object.objectId)"
+        let resolvedIntentionId = intentionId ?? "unknown-intention"
+        let source = sourceLabel(for: object)
+        let proposalHint = proposalIdHint(from: object) ?? browserDeploymentProposalByConfigId[resolvedConfigId]
+        let fallbackAction = (
+            kind: metadataString(for: object, keys: ["action_kind", "actionKind"]),
+            id: metadataString(for: object, keys: ["action_id", "actionId"]),
+            state: metadataString(for: object, keys: ["execution_state", "executionState", "action_state", "actionState"]),
+            atIso: metadataString(for: object, keys: ["action_at_iso", "actionAtIso", "completed_at_iso", "completedAtIso"])
+        )
+
+        return buildDeploymentLifecycle(
+            source: source,
+            configId: resolvedConfigId,
+            intentionId: resolvedIntentionId,
+            certificateId: metadataString(for: object, keys: ["certificate_id", "certificateId"]),
+            runtimeEnvelopeHash: metadataString(for: object, keys: ["runtime_envelope_hash", "runtimeEnvelopeHash"]),
+            benchmarkContractId: metadataString(for: object, keys: ["benchmark_contract_id", "benchmarkContractId"]),
+            proposalHint: proposalHint,
+            fallbackAction: fallbackAction,
+            knowledgeObject: object
+        )
+    }
+
+    private func buildDeploymentLifecycle(
+        source: String,
+        configId: String,
+        intentionId: String,
+        certificateId: String?,
+        runtimeEnvelopeHash: String?,
+        benchmarkContractId: String?,
+        proposalHint: String?,
+        fallbackAction: (kind: String?, id: String?, state: String?, atIso: String?),
+        knowledgeObject: KnowledgeObject?
+    ) -> DeploymentLifecycle {
+        let proposalId = proposalHint
+        let proposal = poller.proposals.first(where: { $0.proposalId == proposalId })
+            ?? poller.pendingProposals.first(where: { $0.proposalId == proposalId })
+        let decided = poller.decidedProposals.first(where: { $0.proposalId == proposalId })
+        let action = decided?.action
+        let receipt = action?.receipt
+
+        let actionKind = action?.actionKind ?? fallbackAction.kind
+        let actionId = action?.actionId ?? fallbackAction.id
+        let actionState = action?.executionState ?? fallbackAction.state
+        let actionAtIso = receipt?.completedAtIso ?? fallbackAction.atIso
+
+        return DeploymentLifecycle(
+            source: source,
+            configId: configId,
+            intentionId: intentionId,
+            certificateId: certificateId,
+            runtimeEnvelopeHash: runtimeEnvelopeHash,
+            benchmarkContractId: benchmarkContractId,
+            proposalId: proposalId,
+            proposalCreatedAtIso: proposal?.createdAtIso ?? metadataString(for: knowledgeObject, keys: ["proposal_created_at_iso", "proposalCreatedAtIso"]),
+            approvalDecision: decided?.status,
+            approvalActor: receipt?.actor,
+            approvalAtIso: decided?.decidedAtIso,
+            actionKind: actionKind,
+            actionId: actionId,
+            actionState: actionState,
+            actionAtIso: actionAtIso,
+            knowledgeKind: knowledgeObject?.kind,
+            knowledgeId: knowledgeObject?.objectId,
+            knowledgeAtIso: knowledgeObject?.createdAtIso
+        )
+    }
+
+    private func deploymentKnowledgeObjects(configId: String, intentionId: String) -> [KnowledgeObject] {
+        poller.recentKnowledgeObjects.filter { object in
+            isDeploymentKnowledgeObject(object, configId: configId, intentionId: intentionId)
+        }
+    }
+
+    private func isDeploymentKnowledgeObject(_ object: KnowledgeObject, configId: String?, intentionId: String?) -> Bool {
+        let kind = object.kind.lowercased()
+        if kind.contains("configuration_deployment") {
+            return true
+        }
+        if kind.contains("deployment"), sourceLabel(for: object).lowercased().contains("safeclash") {
+            return true
+        }
+        if let configId, !configId.isEmpty {
+            if metadataString(for: object, keys: ["config_id", "configId"]) == configId {
+                return true
+            }
+            if sourceRefContains(object: object, value: configId) {
+                return true
+            }
+        }
+        if let intentionId, !intentionId.isEmpty,
+           metadataString(for: object, keys: ["intention_id", "intentionId"]) == intentionId {
+            return true
+        }
+        if metadataString(for: object, keys: ["source"]) == "safeclash_browser" {
+            return true
+        }
+        return false
+    }
+
+    private func sourceLabel(for object: KnowledgeObject) -> String {
+        if let source = metadataString(for: object, keys: ["source", "origin_source"]), !source.isEmpty {
+            if source.lowercased().contains("safeclash") {
+                return "SafeClash Registry"
+            }
+            return source
+        }
+        if object.sourceRefs?.contains(where: { ref in
+            ref.sourceType.lowercased().contains("safeclash")
+                || ref.label?.lowercased().contains("safeclash") == true
+        }) == true {
+            return "SafeClash Registry"
+        }
+        return "SafeClash Registry"
+    }
+
+    private func sourceRefContains(object: KnowledgeObject, value: String) -> Bool {
+        object.sourceRefs?.contains(where: { ref in
+            ref.sourceId == value || ref.label == value
+        }) == true
+    }
+
+    private func sourceRefValue(for object: KnowledgeObject, sourceTypeContains tokens: [String]) -> String? {
+        object.sourceRefs?.first(where: { ref in
+            let sourceType = ref.sourceType.lowercased()
+            return tokens.contains(where: { sourceType.contains($0) })
+        })?.sourceId
+    }
+
+    private func proposalIdHint(from object: KnowledgeObject?) -> String? {
+        guard let object else { return nil }
+        if let proposalId = metadataString(for: object, keys: ["proposal_id", "proposalId"]), !proposalId.isEmpty {
+            return proposalId
+        }
+        if let fromSource = object.sourceRefs?.first(where: { ref in
+            ref.sourceType.lowercased().contains("proposal")
+                || ref.sourceId.lowercased().contains("proposal")
+        })?.sourceId {
+            return fromSource
+        }
+        if let linked = object.linkedObjectIds?.first(where: { $0.lowercased().contains("proposal") }) {
+            return linked
+        }
+        return nil
+    }
+
+    private func openLifecycleProposal(proposalId: String) {
+        selectedBrowserCard = nil
+        selectedDecision = nil
+        browserLastCreatedProposalId = proposalId
+        shouldScrollToDecisions = true
+    }
+
+    private func openLifecycleDecision(proposalId: String) {
+        selectedBrowserCard = nil
+        if let decision = poller.decidedProposals.first(where: { $0.proposalId == proposalId }) {
+            selectedDecision = decision
+        } else {
+            shouldScrollToDecisions = true
+        }
+    }
+
+    private func openLifecycleKnowledge(objectId: String) {
+        selectedBrowserCard = nil
+        fetchAndShowKnowledgeGraph(objectId: objectId)
     }
 
     // MARK: - Pending Queue
@@ -4119,10 +4375,14 @@ private struct AIBrowserResultCard: View {
 private struct AIBrowserDetailSheet: View {
     let card: BrowserCard
     let configuration: AIConfigurationAtom
+    let lifecycle: DeploymentLifecycle
     let isLoadingConfiguration: Bool
     let isDeploying: Bool
     let onRefreshConfiguration: () -> Void
     let onDeploy: () -> Void
+    let onOpenProposal: (String) -> Void
+    let onOpenDecision: (String) -> Void
+    let onOpenKnowledgeArtifact: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -4179,8 +4439,8 @@ private struct AIBrowserDetailSheet: View {
 
                         if let rankingExplanation = card.rankingExplanation, !rankingExplanation.isEmpty {
                             Text("Ranking explanation")
-                                .font(.jeevesHeadline)
-                                .foregroundStyle(.white)
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
                             Text(rankingExplanation)
                                 .font(.jeevesCaption)
                                 .foregroundStyle(.secondary)
@@ -4189,6 +4449,22 @@ private struct AIBrowserDetailSheet: View {
                                 .background(Color.white.opacity(0.05))
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
+
+                        LifecycleLineagePanel(
+                            lifecycle: lifecycle,
+                            onOpenProposal: { proposalId in
+                                onOpenProposal(proposalId)
+                                dismiss()
+                            },
+                            onOpenDecision: { proposalId in
+                                onOpenDecision(proposalId)
+                                dismiss()
+                            },
+                            onOpenKnowledgeArtifact: { objectId in
+                                onOpenKnowledgeArtifact(objectId)
+                                dismiss()
+                            }
+                        )
 
                         Text(card.deployReady
                              ? "Deploy creates a governed proposal. Human approval remains required before any action executes."
@@ -5055,33 +5331,48 @@ private struct KnowledgeResultCard: View {
     let createdLabel: String
     let proposalOrigin: String
     let producer: String
+    let lifecycle: DeploymentLifecycle?
+    let onOpenProposal: (String) -> Void
+    let onOpenDecision: (String) -> Void
+    let onOpenKnowledgeArtifact: (String) -> Void
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(object.title)
-                        .font(.jeevesHeadline)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    Spacer()
-                    Text(createdLabel)
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: onTap) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(object.title)
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                        Spacer()
+                        Text(createdLabel)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(object.summary)
                         .font(.jeevesCaption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
+
+                    detailRow(label: "Origin proposal", value: proposalOrigin)
+                    detailRow(label: "Created by", value: producer)
                 }
-
-                Text(object.summary)
-                    .font(.jeevesCaption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-
-                detailRow(label: "Origin proposal", value: proposalOrigin)
-                detailRow(label: "Created by", value: producer)
             }
-            .controlRoomPanel(padding: 14)
+            .buttonStyle(.plain)
+
+            if let lifecycle {
+                LifecycleLineagePanel(
+                    lifecycle: lifecycle,
+                    onOpenProposal: onOpenProposal,
+                    onOpenDecision: onOpenDecision,
+                    onOpenKnowledgeArtifact: onOpenKnowledgeArtifact
+                )
+            }
         }
-        .buttonStyle(.plain)
+        .controlRoomPanel(padding: 14)
     }
 
     private func detailRow(label: String, value: String) -> some View {
@@ -5094,6 +5385,144 @@ private struct KnowledgeResultCard: View {
                 .font(.jeevesMono)
                 .foregroundStyle(.white)
                 .lineLimit(1)
+        }
+    }
+}
+
+private struct LifecycleLineagePanel: View {
+    let lifecycle: DeploymentLifecycle
+    let onOpenProposal: ((String) -> Void)?
+    let onOpenDecision: ((String) -> Void)?
+    let onOpenKnowledgeArtifact: ((String) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Lifecycle")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            VStack(alignment: .leading, spacing: 6) {
+                timelineDetailRow(label: "Config", value: lifecycle.configId)
+                timelineDetailRow(label: "Intention", value: lifecycle.intentionId)
+                if let certificateId = lifecycle.certificateId, !certificateId.isEmpty {
+                    timelineDetailRow(label: "Certificate", value: certificateId)
+                }
+                if let runtimeEnvelopeHash = lifecycle.runtimeEnvelopeHash, !runtimeEnvelopeHash.isEmpty {
+                    timelineDetailRow(label: "Runtime envelope", value: abbreviatedHash(runtimeEnvelopeHash))
+                }
+                if let benchmarkContractId = lifecycle.benchmarkContractId, !benchmarkContractId.isEmpty {
+                    timelineDetailRow(label: "Benchmark contract", value: benchmarkContractId)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(lifecycle.steps.enumerated()), id: \.element.id) { index, step in
+                    LifecycleTimelineRow(
+                        step: step,
+                        isLast: index == lifecycle.steps.count - 1
+                    )
+                }
+            }
+
+            HStack(spacing: 8) {
+                if let proposalId = lifecycle.proposalId, let onOpenProposal {
+                    Button("Open proposal") {
+                        onOpenProposal(proposalId)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                if let proposalId = lifecycle.proposalId, let onOpenDecision {
+                    Button("Open decision") {
+                        onOpenDecision(proposalId)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                if let knowledgeId = lifecycle.knowledgeId, let onOpenKnowledgeArtifact {
+                    Button("Open knowledge artifact") {
+                        onOpenKnowledgeArtifact(knowledgeId)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.04))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func timelineDetailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 116, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+        }
+    }
+
+    private func abbreviatedHash(_ value: String) -> String {
+        if value.count <= 20 { return value }
+        let prefix = value.prefix(10)
+        let suffix = value.suffix(8)
+        return "\(prefix)…\(suffix)"
+    }
+}
+
+private struct LifecycleTimelineRow: View {
+    let step: DeploymentLifecycleStep
+    let isLast: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 10, height: 10)
+                if !isLast {
+                    Rectangle()
+                        .fill(dotColor.opacity(0.45))
+                        .frame(width: 2, height: 28)
+                }
+            }
+            .frame(width: 12)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.title)
+                    .font(.jeevesCaption.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text(step.primary)
+                    .font(.jeevesMono)
+                    .foregroundStyle(step.state == .missing ? Color.secondary : Color.white)
+                    .lineLimit(1)
+                if let secondary = step.secondary, !secondary.isEmpty {
+                    Text(secondary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private var dotColor: Color {
+        if step.id == "source" {
+            return .cyan
+        }
+        switch step.state {
+        case .complete:
+            return .consentGreen
+        case .pending:
+            return .consentOrange
+        case .missing:
+            return .secondary
         }
     }
 }
