@@ -92,9 +92,11 @@ struct OnboardingView: View {
             errorMessage = "Ongeldig poortnummer"
             return
         }
-        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedInputHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEndpoint = GatewayManager.normalizeEndpoint(host: normalizedInputHost, port: portNum)
+        let normalizedHost = normalizedEndpoint.host
+        let normalizedPort = normalizedEndpoint.port
         let isLocalDev = GatewayManager.isLocalDevelopmentHost(normalizedHost)
-        let normalizedPort = portNum
 
         isConnecting = true
         errorMessage = nil
@@ -125,13 +127,8 @@ struct OnboardingView: View {
                 connection.host = resolution.host
             }
 
-            if let token = resolution.token, !token.isEmpty {
-                gateway.useMock = false
-                gateway.connect(host: resolution.host, port: resolution.port, token: token, channelId: "ios-app")
-            } else {
-                gateway.useMock = true
-                gateway.connect(host: "mock", port: Self.localDefaultPort, token: "mock", channelId: "ios-app")
-            }
+            gateway.useMock = false
+            gateway.connect(host: resolution.host, port: resolution.port, token: resolution.token, channelId: "ios-app")
             isConnecting = false
             onComplete()
         }

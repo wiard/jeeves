@@ -238,28 +238,26 @@ struct ChatView: View {
         }
 
         Task { @MainActor in
-            let preferredToken = gateway.token ?? KeychainHelper.load(for: "\(gateway.host):\(gateway.port)")
-            let resolution = GatewayManager.isLocalDevelopmentHost(gateway.host)
+            let normalizedEndpoint = GatewayManager.normalizeEndpoint(host: gateway.host, port: gateway.port)
+            let resolvedHost = normalizedEndpoint.host
+            let resolvedPort = normalizedEndpoint.port
+            let preferredToken = gateway.token ?? KeychainHelper.load(for: "\(resolvedHost):\(resolvedPort)")
+            let resolution = GatewayManager.isLocalDevelopmentHost(resolvedHost)
                 ? await gateway.resolveLocalDevelopmentGateway(
-                    host: gateway.host,
-                    preferredPort: gateway.port,
+                    host: resolvedHost,
+                    preferredPort: resolvedPort,
                     preferredToken: preferredToken,
                     allowPortFallback: true
                 )
                 : GatewayManager.LocalGatewayResolution(
-                    host: gateway.host,
-                    port: gateway.port,
+                    host: resolvedHost,
+                    port: resolvedPort,
                     token: preferredToken,
                     isHealthy: false
                 )
 
-            if let token = resolution.token, !token.isEmpty {
-                gateway.useMock = false
-                gateway.connect(host: resolution.host, port: resolution.port, token: token)
-            } else {
-                gateway.useMock = true
-                gateway.connect(host: "mock", port: Self.localDefaultPort, token: "mock")
-            }
+            gateway.useMock = false
+            gateway.connect(host: resolution.host, port: resolution.port, token: resolution.token)
         }
     }
 }

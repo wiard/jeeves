@@ -15,6 +15,6 @@ final class GatewayConnection {
     }
 
     var baseURL: String {
-        "ws://\(host):\(port)"
+        "http://\(host):\(port)"
     }
 }

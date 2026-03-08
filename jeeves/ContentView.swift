@@ -3,46 +3,35 @@ import SwiftData
 
 struct ContentView: View {
     private static let localDefaultPort = 19001
-    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
     @Query private var connections: [GatewayConnection]
-    @State private var showOnboarding: Bool = false
-
-    private var hasConnection: Bool { !connections.isEmpty }
+    @State private var hasBootstrappedStartupConnection = false
+    @State private var isBootstrappingConnection = true
 
     var body: some View {
         Group {
-            if showOnboarding || !hasConnection {
-                OnboardingView {
-                    withAnimation { showOnboarding = false }
-                }
+            if isBootstrappingConnection {
+                ProgressView("Gateway verbinding initialiseren...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 mainTabView
             }
         }
         .onAppear {
-            guard hasConnection else {
-                showOnboarding = true
-                return
-            }
+            guard !hasBootstrappedStartupConnection else { return }
+            hasBootstrappedStartupConnection = true
 
-            if gateway.isConnected {
-                poller.start(gateway: gateway)
-                return
-            }
-            guard let conn = connections.first else { return }
             Task { @MainActor in
-                await bootstrapGatewayConnection(using: conn)
+                await bootstrapStartupConnection()
+                isBootstrappingConnection = false
             }
         }
         .onChange(of: gateway.isConnected) {
             if gateway.isConnected {
                 poller.start(gateway: gateway)
-                Task {
-                    await poller.seedIfNeeded(gateway: gateway)
-                }
             } else {
                 poller.stop()
             }
@@ -50,6 +39,72 @@ struct ContentView: View {
     }
 
     @State private var selectedTab = 0
+
+    @MainActor
+    private func bootstrapStartupConnection() async {
+        if let discovered = gateway.startupGatewayConfigFromFile() {
+            let normalized = GatewayManager.normalizeEndpoint(host: discovered.host, port: discovered.port)
+            let connection = upsertConnection(
+                host: normalized.host,
+                port: normalized.port,
+                channelId: "ios-app"
+            )
+            gateway.useMock = false
+            gateway.connect(
+                host: normalized.host,
+                port: normalized.port,
+                token: discovered.token,
+                channelId: connection.channelId
+            )
+            return
+        }
+
+        if gateway.startupGatewayFileExists() {
+            let existing = connections.first
+            let preferredHost = existing?.host ?? "localhost"
+            let preferredPort = existing?.port ?? Self.localDefaultPort
+            let normalized = GatewayManager.normalizeEndpoint(host: preferredHost, port: preferredPort)
+            let connection = upsertConnection(
+                host: normalized.host,
+                port: normalized.port,
+                channelId: existing?.channelId ?? "ios-app"
+            )
+            gateway.useMock = false
+            gateway.connect(
+                host: normalized.host,
+                port: normalized.port,
+                token: nil,
+                channelId: connection.channelId
+            )
+            return
+        }
+
+        let connection = upsertConnection(
+            host: "mock",
+            port: Self.localDefaultPort,
+            channelId: "ios-app"
+        )
+        gateway.useMock = true
+        gateway.connect(
+            host: "mock",
+            port: Self.localDefaultPort,
+            token: "mock",
+            channelId: connection.channelId
+        )
+    }
+
+    @MainActor
+    private func upsertConnection(host: String, port: Int, channelId: String) -> GatewayConnection {
+        if let existing = connections.first {
+            existing.host = host
+            existing.port = port
+            existing.channelId = channelId
+            return existing
+        }
+        let created = GatewayConnection(host: host, port: port, channelId: channelId)
+        modelContext.insert(created)
+        return created
+    }
 
     private var mainTabView: some View {
         #if os(macOS)
@@ -105,87 +160,5 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: poller.seedToastMessage)
         #endif
-    }
-
-    @MainActor
-    private func bootstrapGatewayConnection(using conn: GatewayConnection) async {
-        let cfg = RuntimeConfig.shared
-        gateway.useMock = cfg.useMock
-
-        let resolvedHost: String = {
-            let h = (cfg.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return h.isEmpty ? conn.host : h
-        }()
-
-        let resolvedPort: Int = {
-            if let p = cfg.port, p > 0 { return p }
-            return conn.port > 0 ? conn.port : Self.localDefaultPort
-        }()
-
-        let runtimeToken = (cfg.token ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedToken: String? = {
-            if !runtimeToken.isEmpty { return runtimeToken }
-            if let primary = KeychainHelper.load(for: "\(resolvedHost):\(resolvedPort)"), !primary.isEmpty {
-                return primary
-            }
-            return nil
-        }()
-
-        if cfg.useMock {
-            gateway.useMock = true
-            gateway.connect(
-                host: "mock",
-                port: Self.localDefaultPort,
-                token: "mock",
-                channelId: conn.channelId
-            )
-            return
-        }
-
-        let isLocalDev = GatewayManager.isLocalDevelopmentHost(resolvedHost)
-        let hasRuntimePortOverride = (cfg.port != nil)
-
-        let resolution = isLocalDev
-            ? await gateway.resolveLocalDevelopmentGateway(
-                host: resolvedHost,
-                preferredPort: resolvedPort,
-                preferredToken: resolvedToken,
-                allowPortFallback: !hasRuntimePortOverride
-            )
-            : GatewayManager.LocalGatewayResolution(
-                host: resolvedHost,
-                port: resolvedPort,
-                token: resolvedToken,
-                isHealthy: false
-            )
-
-        #if DEBUG
-        print("[Jeeves][ContentView] gateway resolution configured=\(resolvedHost):\(resolvedPort) discovered=\(resolution.host):\(resolution.port) healthy=\(resolution.isHealthy) token=\((resolution.token?.isEmpty == false) ? "present" : "missing")")
-        #endif
-
-        if !hasRuntimePortOverride, isLocalDev, conn.port != resolution.port {
-            conn.port = resolution.port
-        }
-        if isLocalDev, conn.host != resolution.host {
-            conn.host = resolution.host
-        }
-
-        if let token = resolution.token, !token.isEmpty {
-            gateway.useMock = false
-            gateway.connect(
-                host: resolution.host,
-                port: resolution.port,
-                token: token,
-                channelId: conn.channelId
-            )
-        } else {
-            gateway.useMock = true
-            gateway.connect(
-                host: "mock",
-                port: Self.localDefaultPort,
-                token: "mock",
-                channelId: conn.channelId
-            )
-        }
     }
 }

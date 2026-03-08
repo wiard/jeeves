@@ -78,6 +78,14 @@ struct StreamView: View {
                 ForEach(sortedProposals) { proposal in
                     ProposalRow(proposal: proposal)
                 }
+
+                if let action = poller.lastActionReceipt {
+                    ActionReceiptRow(action: action)
+                }
+
+                ForEach(poller.recentKnowledgeObjects.prefix(10)) { object in
+                    KnowledgeObjectRow(object: object)
+                }
             }
             .padding()
         }
@@ -104,6 +112,8 @@ struct StreamView: View {
             && poller.radarSources.isEmpty
             && poller.radarGravityHotspots.isEmpty
             && poller.radarDiscoveryCandidates.isEmpty
+            && poller.recentKnowledgeObjects.isEmpty
+            && poller.lastActionReceipt == nil
             && radarCounts == 0
     }
 
@@ -571,6 +581,119 @@ private struct DiscoveryCandidateRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 12)
         .background(Color.cyan.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct ActionReceiptRow: View {
+    let action: ActionSummary
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("")
+                .frame(width: 40, alignment: .leading)
+
+            Image(systemName: action.isCompleted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(action.isCompleted ? .green : .red)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action.actionKind)
+                    .font(.jeevesMono)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 8) {
+                    Text(action.executionState)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    if let receipt = action.receipt, let duration = receipt.durationMs {
+                        Text("\(Int(duration))ms")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let receipt = action.receipt {
+                    Text(receipt.resultSummary)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer()
+
+            Text("actie")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(action.isCompleted ? .green : .red)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(action.isCompleted ? Color.green.opacity(0.08) : Color.red.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct KnowledgeObjectRow: View {
+    let object: KnowledgeObject
+
+    private var timeString: String {
+        guard let date = object.createdAt else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var kindColor: Color {
+        switch object.kind {
+        case "discovery": return .cyan
+        case "decision": return .orange
+        case "action_receipt": return .green
+        case "investigation_outcome": return .purple
+        case "evidence": return .indigo
+        default: return .secondary
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(timeString)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            Text(object.kindEmoji)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(object.title)
+                    .font(.jeevesMono)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+
+                Text(object.summary)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                HStack(spacing: 6) {
+                    Text(object.kind.replacingOccurrences(of: "_", with: " "))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(kindColor)
+
+                    if let refs = object.sourceRefs, !refs.isEmpty {
+                        Text("\(refs.count) bron\(refs.count == 1 ? "" : "nen")")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(kindColor.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

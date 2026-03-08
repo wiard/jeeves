@@ -9,6 +9,31 @@ final class GatewayManager {
     private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1"]
     private static let localGatewayDiscoveryFile = ".openclashd/gateway.json"
 
+    static func normalizeEndpoint(host: String, port: Int) -> (host: String, port: Int) {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackPort = port > 0 ? port : localDefaultPort
+
+        guard !trimmedHost.isEmpty else {
+            return ("localhost", fallbackPort)
+        }
+        if trimmedHost.lowercased() == "mock" {
+            return ("mock", fallbackPort)
+        }
+
+        let candidateInputs = [trimmedHost, "http://\(trimmedHost)"]
+        for candidate in candidateInputs {
+            guard let components = URLComponents(string: candidate),
+                  let parsedHost = components.host,
+                  !parsedHost.isEmpty else {
+                continue
+            }
+            let parsedPort = components.port ?? fallbackPort
+            return (parsedHost, parsedPort > 0 ? parsedPort : fallbackPort)
+        }
+
+        return (trimmedHost, fallbackPort)
+    }
+
     /// Returns true if the host is a loopback address or a private/local IP
     /// that likely represents a local development gateway.
     static func isLocalDevelopmentHost(_ host: String) -> Bool {
@@ -60,6 +85,12 @@ final class GatewayManager {
         let isHealthy: Bool
     }
 
+    struct StartupGatewayConfig: Sendable {
+        let host: String
+        let port: Int
+        let token: String?
+    }
+
     private struct GatewayEndpoint: Hashable, Sendable {
         let host: String
         let port: Int
@@ -78,6 +109,24 @@ final class GatewayManager {
             case port
             case healthPath = "health_path"
             case token
+            case gateway
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let nested = try container.decodeIfPresent(LocalGatewayDiscoveryRecord.self, forKey: .gateway)
+
+            let directBaseURL = try container.decodeIfPresent(String.self, forKey: .baseURL)
+            let directHost = try container.decodeIfPresent(String.self, forKey: .host)
+            let directPort = try container.decodeIfPresent(Int.self, forKey: .port)
+            let directHealthPath = try container.decodeIfPresent(String.self, forKey: .healthPath)
+            let directToken = try container.decodeIfPresent(String.self, forKey: .token)
+
+            self.baseURL = nested?.baseURL ?? directBaseURL
+            self.host = nested?.host ?? directHost
+            self.port = nested?.port ?? directPort
+            self.healthPath = nested?.healthPath ?? directHealthPath
+            self.token = nested?.token ?? directToken
         }
     }
 
@@ -95,9 +144,11 @@ final class GatewayManager {
 
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedChannel = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let resolvedHost = normalizedHost.isEmpty ? self.host : normalizedHost
-        let resolvedPort = port > 0 ? port : self.port
+        let preferredHost = normalizedHost.isEmpty ? self.host : normalizedHost
+        let preferredPort = port > 0 ? port : self.port
+        let normalizedEndpoint = Self.normalizeEndpoint(host: preferredHost, port: preferredPort)
+        let resolvedHost = normalizedEndpoint.host
+        let resolvedPort = normalizedEndpoint.port
         let resolvedChannel = normalizedChannel.isEmpty ? self.channelId : normalizedChannel
         let normalizedLowerHost = resolvedHost.lowercased()
 
@@ -161,7 +212,6 @@ final class GatewayManager {
         allowPortFallback: Bool
     ) async -> LocalGatewayResolution {
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedLower = normalizedHost.lowercased()
         let normalizedPreferredPort = preferredPort > 0 ? preferredPort : Self.localDefaultPort
         let normalizedPreferredToken = preferredToken?.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -273,6 +323,23 @@ final class GatewayManager {
             token: normalizedPreferredToken,
             isHealthy: firstHealthyWithoutTokenEndpoint != nil
         )
+    }
+
+    func startupGatewayConfigFromFile() -> StartupGatewayConfig? {
+        guard let (_, record) = firstLocalGatewayDiscoveryRecord(),
+              let endpoint = gatewayEndpoint(from: record) else {
+            return nil
+        }
+        let fileToken = record.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return StartupGatewayConfig(
+            host: endpoint.host,
+            port: endpoint.port,
+            token: (fileToken?.isEmpty == false) ? fileToken : nil
+        )
+    }
+
+    func startupGatewayFileExists() -> Bool {
+        firstExistingLocalGatewayDiscoveryPath() != nil
     }
 
     func disconnect() {
@@ -560,46 +627,64 @@ final class GatewayManager {
 
     /// Returns (endpoint, token) from the first valid discovery file.
     private func loadLocalGatewayDiscovery() -> (GatewayEndpoint?, String?) {
+        guard let (path, record) = firstLocalGatewayDiscoveryRecord() else {
+            return (nil, nil)
+        }
+        let endpoint = gatewayEndpoint(from: record)
+        // Token from discovery file itself (local dev)
+        let fileToken = record.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let discoveredToken: String? = {
+            if let fileToken, !fileToken.isEmpty { return fileToken }
+            // Fall back to keychain entry for the discovered endpoint
+            if let ep = endpoint {
+                let key = "\(ep.host):\(ep.port)"
+                if let stored = KeychainHelper.load(for: key), !stored.isEmpty { return stored }
+            }
+            return nil
+        }()
+        if endpoint != nil || (discoveredToken != nil && !(discoveredToken?.isEmpty ?? true)) {
+            #if DEBUG
+            print("[Jeeves][GatewayManager] discovery file=\(path) endpoint=\(endpoint.map { "\($0.host):\($0.port)" } ?? "nil") token=\(discoveredToken != nil ? "present" : "nil")")
+            #endif
+        }
+        return (endpoint, discoveredToken)
+    }
+
+    private func firstLocalGatewayDiscoveryRecord() -> (path: String, record: LocalGatewayDiscoveryRecord)? {
         let fm = FileManager.default
         for path in localGatewayDiscoveryPaths() {
             guard fm.fileExists(atPath: path) else { continue }
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { continue }
             guard let record = try? JSONDecoder().decode(LocalGatewayDiscoveryRecord.self, from: data) else { continue }
-            let endpoint = gatewayEndpoint(from: record)
-            // Token from discovery file itself (local dev)
-            let fileToken = record.token?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let discoveredToken: String? = {
-                if let fileToken, !fileToken.isEmpty { return fileToken }
-                // Fall back to keychain entry for the discovered endpoint
-                if let ep = endpoint {
-                    let key = "\(ep.host):\(ep.port)"
-                    if let stored = KeychainHelper.load(for: key), !stored.isEmpty { return stored }
-                }
-                return nil
-            }()
-            if endpoint != nil || (discoveredToken != nil && !(discoveredToken?.isEmpty ?? true)) {
-                #if DEBUG
-                print("[Jeeves][GatewayManager] discovery file=\(path) endpoint=\(endpoint.map { "\($0.host):\($0.port)" } ?? "nil") token=\(discoveredToken != nil ? "present" : "nil")")
-                #endif
-                return (endpoint, discoveredToken)
-            }
+            return (path, record)
         }
-        return (nil, nil)
+        return nil
+    }
+
+    private func firstExistingLocalGatewayDiscoveryPath() -> String? {
+        let fm = FileManager.default
+        for path in localGatewayDiscoveryPaths() where fm.fileExists(atPath: path) {
+            return path
+        }
+        return nil
     }
 
     private func gatewayEndpoint(from record: LocalGatewayDiscoveryRecord) -> GatewayEndpoint? {
         let baseURL = (record.baseURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !baseURL.isEmpty,
            let components = URLComponents(string: baseURL),
-           let host = components.host,
-           let port = components.port,
-           port > 0 {
-            return GatewayEndpoint(host: host, port: port)
+           let host = components.host {
+            let parsedPort = components.port ?? record.port ?? Self.localDefaultPort
+            guard parsedPort > 0 else { return nil }
+            return GatewayEndpoint(host: host, port: parsedPort)
         }
 
         let fallbackHost = (record.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !fallbackHost.isEmpty, let fallbackPort = record.port, fallbackPort > 0 {
             return GatewayEndpoint(host: fallbackHost, port: fallbackPort)
+        }
+        if !fallbackHost.isEmpty {
+            return GatewayEndpoint(host: fallbackHost, port: Self.localDefaultPort)
         }
         return nil
     }

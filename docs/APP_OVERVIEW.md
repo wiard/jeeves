@@ -49,11 +49,12 @@ Current gateway integration is in:
 
 Current behavior:
 
-- Default is **mock mode enabled** (`useMock = true`)
-- WebSocket target when enabled: `ws://<host>:<port>/ws/ios-app`
+- Default path is **real backend mode** when host/token are configured.
+- Mock mode is explicit-only (`MOCK=1`, host `mock`, or onboarding mock button).
+- Transport for observatory/proposals is HTTP polling against gateway APIs.
 - Message send path exists (`OutgoingMessage.chat(...)`)
 - Consent response send path exists (`ConsentResponseMessage`)
-- Status/audit/kill-switch fetch methods are currently mock-only (non-mock paths return `notConnected`)
+- Status/audit/kill-switch and proposal APIs are wired to real conductor/gateway endpoints.
 
 ## 4) Persistence model
 
@@ -173,7 +174,7 @@ Status now:
 
 Gaps against production OpenClashd integration:
 
-- Live WebSocket path in iOS points to `/ws/ios-app`, but current OpenClashd v2 gateway exposes HTTP/SSE routes (`/health`, `/api/message`, `/api/consent`, `/events`) in `src/gateway/server.ts`
+- No dedicated live stream socket in iOS yet; it mirrors web behavior using HTTP polling (`/api/observatory/stream`, `/api/agents/proposals`).
 - No implemented report-list/report-view API consumption in iOS yet
 - No House Model 3-section UX (Huiskamer/Buitenwereld/Machinekamer) yet
 - No local text-first cache for status/reports/report content yet
@@ -196,6 +197,9 @@ From `/Users/wiardvasen/openclashd-v2`:
   - `GET /health`
   - `POST /api/message`
   - `POST /api/consent`
+  - `GET /api/agents/proposals`
+  - `POST /api/agents/proposals/decide`
+  - `GET /api/observatory/stream`
 - Office/report generation exists in scripts:
   - `scripts/office/daily-briefing.mjs`
   - Writes markdown reports to `~/.jeeves-office/reports`

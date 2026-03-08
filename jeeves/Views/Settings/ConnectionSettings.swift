@@ -9,18 +9,10 @@ struct ConnectionSettings: View {
     private let runtime = RuntimeConfig.shared
 
     var body: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 0) {
-
-
-
-            HStack {
-                Text("Gateway")
-                Spacer()
-                Text(gatewayLabel)
-                    .font(.jeevesMono)
-                    .foregroundStyle(.secondary)
-            }
+        Section("Verbinding") {
+            settingRow("Databron", modeLabel)
+            settingRow("Gateway", gatewayLabel)
+            settingRow("Ontdekt", discoveredGatewayLabel)
 
             HStack {
                 Text("Status")
@@ -35,69 +27,81 @@ struct ConnectionSettings: View {
             }
 
             if let latency = gateway.latencyMs {
-                HStack {
-                    Text("Latency")
-                    Spacer()
-                    Text("\(latency)ms")
-                        .font(.jeevesMono)
-                        .foregroundStyle(.secondary)
-                }
+                settingRow("Latency", "\(latency)ms")
             }
 
-            HStack {
-                Text("Kanaal")
-                Spacer()
-                Text(saved?.channelId ?? "ios-app")
-                    .font(.jeevesMono)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Beveiliging") {
-                HStack {
-                    Text("Token")
-                    Spacer()
-                    Text(tokenLabel)
-                        .font(.jeevesMono)
-                        .foregroundStyle(tokenLabel == "Geen token" ? .red : .secondary)
-                }
-
-                HStack {
-                    Text("Mock")
-                    Spacer()
-                    Text(runtime.useMock ? "aan" : "uit")
-                        .font(.jeevesMono)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        
-            }
-        } header: {
-            Text("Verbinding")
+            settingRow("Kanaal", saved?.channelId ?? "ios-app")
+            settingRow("Token", tokenLabel, color: tokenLabel == "Geen token" ? .red : .secondary)
+            settingRow("Mock flag", runtime.useMock ? "aan" : "uit")
         }
     }
 
-    private var gatewayLabel: String {
-        // 1) toon runtime als die er is (dit is je “echte” run)
-        if let h = runtime.host, let p = runtime.port {
-            return "\(h):\(p)"
+    @ViewBuilder
+    private func settingRow(_ label: String, _ value: String, color: Color = .secondary) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(color)
         }
-        // 2) anders toon wat in DB staat
+    }
+
+    private var modeLabel: String {
+        (gateway.useMock || gateway.host.lowercased() == "mock") ? "Mock" : "Gateway"
+    }
+
+    private var gatewayLabel: String {
+        if gateway.host.lowercased() == "mock" {
+            return "mock"
+        }
+        if !gateway.host.isEmpty, gateway.port > 0 {
+            return "\(gateway.host):\(gateway.port)"
+        }
+        if let h = runtime.host, let p = runtime.port {
+            let normalized = GatewayManager.normalizeEndpoint(host: h, port: p)
+            return "\(normalized.host):\(normalized.port)"
+        }
+        if let discovered = gateway.startupGatewayConfigFromFile() {
+            let normalized = GatewayManager.normalizeEndpoint(host: discovered.host, port: discovered.port)
+            return "\(normalized.host):\(normalized.port)"
+        }
         if let c = saved {
-            return "\(c.host):\(c.port)"
+            let normalized = GatewayManager.normalizeEndpoint(host: c.host, port: c.port)
+            return "\(normalized.host):\(normalized.port)"
         }
         return "Niet geconfigureerd"
     }
 
+    private var discoveredGatewayLabel: String {
+        if let discovered = gateway.startupGatewayConfigFromFile() {
+            let normalized = GatewayManager.normalizeEndpoint(host: discovered.host, port: discovered.port)
+            return "\(normalized.host):\(normalized.port)"
+        }
+        if gateway.startupGatewayFileExists() {
+            return "gateway.json gevonden, endpoint onleesbaar"
+        }
+        return "Geen gateway.json"
+    }
+
     private var tokenLabel: String {
-        // 1) runtime token (ENV of /tmp file)
         if let t = runtime.token, !t.isEmpty {
             return "\(t.prefix(10))…"
         }
-        // 2) keychain fallback
-        if let h = saved?.host, let p = saved?.port,
-           let t = KeychainHelper.load(for: "\(h):\(p)"),
-           !t.isEmpty, t != "mock" {
-            return "\(t.prefix(10))…"
+
+        let liveKey: String? = {
+            guard !gateway.host.isEmpty, gateway.port > 0 else { return nil }
+            return "\(gateway.host):\(gateway.port)"
+        }()
+        let savedKey: String? = {
+            guard let c = saved else { return nil }
+            return "\(c.host):\(c.port)"
+        }()
+
+        for key in [liveKey, savedKey].compactMap({ $0 }) {
+            if let token = KeychainHelper.load(for: key), !token.isEmpty, token != "mock" {
+                return "\(token.prefix(10))…"
+            }
         }
         return "Geen token"
     }
@@ -112,11 +116,16 @@ struct ConnectionSettings: View {
 
     private var statusText: String {
         switch gateway.connectionState {
-        case .connected: "Verbonden"
-        case .connecting: "Verbinden..."
-        case .reconnecting: "Opnieuw verbinden..."
-        case .idle, .disconnected: "Niet verbonden"
-        case .failed: "Verbinding mislukt"
+        case .connected:
+            return "Verbonden"
+        case .connecting:
+            return "Verbinden..."
+        case .reconnecting:
+            return "Opnieuw verbinden..."
+        case .idle, .disconnected:
+            return "Niet verbonden"
+        case .failed:
+            return tokenLabel == "Geen token" ? "Token ontbreekt" : "Verbinding mislukt"
         }
     }
 }

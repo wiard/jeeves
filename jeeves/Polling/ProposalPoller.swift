@@ -10,8 +10,15 @@ final class ProposalPoller {
         case bookmark
     }
 
+    enum ProposalDecisionResult {
+        case success
+        case failure(message: String)
+    }
+
     var proposals: [Proposal] = []
     var pendingProposals: [Proposal] = []
+    var recentKnowledgeObjects: [KnowledgeObject] = []
+    var lastActionReceipt: ActionSummary?
     var emergenceClusters: [EmergenceCluster] = []
     var streamEvents: [ObservatoryStreamEvent] = []
     var radarStatus: RadarStatusSnapshot?
@@ -69,7 +76,12 @@ final class ProposalPoller {
             #if DEBUG
             print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
             #endif
-            lastRefreshError = "No token available for \(resolvedEndpoint.host):\(resolvedEndpoint.port)"
+            proposals = []
+            pendingProposals = []
+            streamEvents = []
+            emergenceClusters = []
+            NotificationManager.shared.updateBadge(count: 0)
+            lastRefreshError = "Geen token beschikbaar voor \(resolvedEndpoint.host):\(resolvedEndpoint.port)."
             hasLoadedOnce = true
             return
         }
@@ -79,8 +91,19 @@ final class ProposalPoller {
         print("[Jeeves][ProposalPoller] refresh start host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port) auth=true connected=\(gateway.isConnected)")
         #endif
 
+        var proposalFetchSucceeded = false
+        var observedSuccessfulResponse = false
+        var proposalFetchErrorMessage: String?
+
         do {
-            let fetched = try await client.fetchProposals()
+            let fetched: [Proposal]
+            if let ranked = try? await client.fetchRankedProposals(), !ranked.isEmpty {
+                fetched = ranked
+            } else {
+                fetched = try await client.fetchProposals()
+            }
+            proposalFetchSucceeded = true
+            observedSuccessfulResponse = true
             proposals = fetched
 
             let pending = fetched.filter(\.isPending)
@@ -93,9 +116,19 @@ final class ProposalPoller {
             }
 
             previousPendingIds = newPendingIds
-            pendingProposals = pending
+            pendingProposals = pending.sorted { ($0.priorityScore ?? 0) > ($1.priorityScore ?? 0) }
             NotificationManager.shared.updateBadge(count: pending.count)
-        } catch {}
+        } catch {
+            proposals = []
+            pendingProposals = []
+            previousPendingIds = []
+            NotificationManager.shared.updateBadge(count: 0)
+            proposalFetchErrorMessage = describeRefreshFailure(
+                error,
+                host: resolvedEndpoint.host,
+                port: resolvedEndpoint.port
+            )
+        }
 
         var runtimeEmergenceClusters: [EmergenceCluster] = []
         var radarEmergenceClusters: [EmergenceCluster] = []
@@ -115,6 +148,7 @@ final class ProposalPoller {
             do {
                 let stream = try await streamTask
                 streamEventsFromApi = stream.events
+                observedSuccessfulResponse = true
             } catch {
                 #if DEBUG
                 print("[Jeeves][ProposalPoller] stream fetch failed: \(error)")
@@ -125,6 +159,7 @@ final class ProposalPoller {
                 let runtimeEvents = Self.runtimeStreamEvents(runtime)
                 streamEventsFromApi = Self.mergeStreamEvents(primary: streamEventsFromApi, secondary: runtimeEvents)
                 runtimeEmergenceClusters = Self.runtimeEmergenceToClusters(runtime.emergenceClusters)
+                observedSuccessfulResponse = true
             } catch {
                 #if DEBUG
                 print("[Jeeves][ProposalPoller] signals runtime fetch failed: \(error)")
@@ -133,6 +168,7 @@ final class ProposalPoller {
             do {
                 let status = try await radarStatusTask
                 radarStatus = status
+                observedSuccessfulResponse = true
             } catch {
                 #if DEBUG
                 print("[Jeeves][ProposalPoller] radar status fetch failed: \(error)")
@@ -140,25 +176,32 @@ final class ProposalPoller {
             }
             if let activations = try? await activationsTask {
                 radarActivations = Self.sortRadarActivations(activations)
+                observedSuccessfulResponse = true
             }
             if let collisions = try? await collisionsTask {
                 radarCollisions = Self.sortRadarCollisions(collisions)
+                observedSuccessfulResponse = true
             }
             if let emergence = try? await emergenceTask {
                 radarEmergence = Self.sortRadarCollisions(emergence)
                 radarEmergenceClusters = Self.radarEmergenceToClusters(radarEmergence)
+                observedSuccessfulResponse = true
             }
             if let clusters = try? await clustersTask {
                 radarClusters = Self.sortRadarClusters(clusters)
+                observedSuccessfulResponse = true
             }
             if let sources = try? await sourcesTask {
                 radarSources = Self.sortRadarSources(sources)
+                observedSuccessfulResponse = true
             }
             if let hotspots = try? await gravityTask {
                 radarGravityHotspots = Self.sortRadarGravity(hotspots)
+                observedSuccessfulResponse = true
             }
             if let discoveries = try? await discoveriesTask {
                 radarDiscoveryCandidates = Self.sortRadarDiscoveries(discoveries)
+                observedSuccessfulResponse = true
             }
         } catch {}
         let derivedRadarEvents = Self.radarDerivedStreamEvents(
@@ -170,14 +213,21 @@ final class ProposalPoller {
         )
         streamEventsFromApi = Self.mergeStreamEvents(primary: streamEventsFromApi, secondary: derivedRadarEvents)
         streamEvents = Self.sortStreamEvents(streamEventsFromApi)
-        lastRefreshError = nil
-        hasLoadedOnce = true
         #if DEBUG
         print("[Jeeves][ProposalPoller] stream events=\(streamEvents.count) activations=\(radarActivations.count) collisions=\(radarCollisions.count) emergence=\(radarEmergence.count) gravity=\(radarGravityHotspots.count) discoveries=\(radarDiscoveryCandidates.count)")
         #endif
 
         do {
+            let knowledgeObjects = try? await client.fetchRecentKnowledgeObjects(limit: 10)
+            if let objects = knowledgeObjects {
+                recentKnowledgeObjects = objects
+                observedSuccessfulResponse = true
+            }
+        } catch {}
+
+        do {
             let snapshot = try await client.fetchObservatorySnapshot(proposals: proposals)
+            observedSuccessfulResponse = true
             observatorySnapshot = snapshot
 
             var escalatedClusters = snapshot.collisions
@@ -210,9 +260,36 @@ final class ProposalPoller {
                     let clusters = try await client.fetchEmergence()
                     let escalated = clusters.filter(\.escalatesToIphone)
                     processEmergenceChanges(escalated)
+                    observedSuccessfulResponse = true
                 } catch {}
             }
         }
+
+        if !proposalFetchSucceeded && !observedSuccessfulResponse {
+            streamEvents = []
+            emergenceClusters = []
+            recentKnowledgeObjects = []
+            radarStatus = nil
+            radarActivations = []
+            radarCollisions = []
+            radarEmergence = []
+            radarClusters = []
+            radarSources = []
+            radarGravityHotspots = []
+            radarDiscoveryCandidates = []
+            observatorySnapshot = .empty
+        }
+
+        if proposalFetchSucceeded {
+            lastRefreshError = nil
+        } else if let proposalFetchErrorMessage {
+            lastRefreshError = proposalFetchErrorMessage
+        } else if !observedSuccessfulResponse {
+            lastRefreshError = "Backend onbereikbaar op \(resolvedEndpoint.host):\(resolvedEndpoint.port)."
+        } else {
+            lastRefreshError = nil
+        }
+        hasLoadedOnce = true
     }
 
     private struct ResolvedEndpoint {
@@ -231,6 +308,9 @@ final class ProposalPoller {
         if let runtimePort = RuntimeConfig.shared.port, runtimePort > 0 {
             port = runtimePort
         }
+        let normalizedEndpoint = GatewayManager.normalizeEndpoint(host: host, port: port)
+        host = normalizedEndpoint.host
+        port = normalizedEndpoint.port
 
         let initialToken = resolveToken(host: host, port: port, gateway: gateway)
         if GatewayManager.isLocalDevelopmentHost(host) {
@@ -278,14 +358,21 @@ final class ProposalPoller {
         return nil
     }
 
-    func decide(proposalId: String, decision: String, reason: String? = nil, gateway: GatewayManager) async -> Bool {
+    func decide(
+        proposalId: String,
+        decision: String,
+        reason: String? = nil,
+        gateway: GatewayManager
+    ) async -> ProposalDecisionResult {
         if gateway.useMock || gateway.host.lowercased() == "mock" {
             applyDemoDecision(proposalId: proposalId, decision: decision)
-            return true
+            return .success
         }
 
         let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
-        guard let token = resolvedEndpoint.token, !token.isEmpty else { return false }
+        guard let token = resolvedEndpoint.token, !token.isEmpty else {
+            return .failure(message: "Geen token beschikbaar. Voeg een token toe in Instellingen.")
+        }
 
         let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
 
@@ -293,10 +380,28 @@ final class ProposalPoller {
             let response = try await client.decideProposal(proposalId: proposalId, decision: decision, reason: reason)
             if response.ok {
                 await refresh(gateway: gateway)
+                return .success
             }
-            return response.ok
+            await refresh(gateway: gateway)
+            return .failure(message: response.reason ?? "Besluit niet bevestigd door backend.")
         } catch {
-            return false
+            await refresh(gateway: gateway)
+            if case GatewayClientError.httpStatus(let status) = error {
+                if status == 404 {
+                    return .failure(message: "Voorstel is al verwerkt of niet meer beschikbaar.")
+                }
+                if status == 401 {
+                    return .failure(message: "Token verlopen of ongeldig.")
+                }
+                return .failure(message: "Backend fout (\(status)). Probeer opnieuw.")
+            }
+            return .failure(
+                message: describeRefreshFailure(
+                    error,
+                    host: resolvedEndpoint.host,
+                    port: resolvedEndpoint.port
+                )
+            )
         }
     }
 
@@ -329,6 +434,30 @@ final class ProposalPoller {
         } else {
             hasSeeded = true
         }
+    }
+
+    private func describeRefreshFailure(_ error: Error, host: String, port: Int) -> String {
+        if case GatewayClientError.httpStatus(let status) = error {
+            switch status {
+            case 401:
+                return "Token ongeldig of verlopen voor \(host):\(port)."
+            case 404:
+                return "API route niet gevonden op \(host):\(port)."
+            default:
+                return "Backend fout (\(status)) op \(host):\(port)."
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return "Geen netwerkverbinding met \(host):\(port)."
+            case .cannotFindHost, .cannotConnectToHost, .timedOut:
+                return "Backend onbereikbaar op \(host):\(port)."
+            default:
+                break
+            }
+        }
+        return "Verbinding met backend mislukt op \(host):\(port)."
     }
 
     func handleEmergenceAlertAction(_ action: EmergenceAlertAction, clusterId: String) {
@@ -431,7 +560,11 @@ final class ProposalPoller {
             agentId: "observer.loop",
             title: "Summarize stable residue drift",
             intent: ProposalIntent(kind: "analysis", key: "residue_summary", risk: "green", requiresConsent: false),
-            status: greenStatus
+            status: greenStatus,
+            priorityScore: 35,
+            priorityExplanation: nil,
+            rank: 2,
+            priorityFactors: nil
         )
 
         let orange = Proposal(
@@ -440,7 +573,11 @@ final class ProposalPoller {
             agentId: "observer.fabric",
             title: "Inspect cross-domain anomaly",
             intent: ProposalIntent(kind: "analysis", key: "anomaly_probe", risk: "orange", requiresConsent: true),
-            status: orangeStatus
+            status: orangeStatus,
+            priorityScore: 72,
+            priorityExplanation: "Cross-domain anomaly with elevated risk",
+            rank: 1,
+            priorityFactors: nil
         )
 
         let denied = Proposal(
@@ -449,7 +586,11 @@ final class ProposalPoller {
             agentId: "observer.guard",
             title: "Rejected high-risk mutation",
             intent: ProposalIntent(kind: "mutation", key: "kernel_override", risk: "red", requiresConsent: true),
-            status: "denied"
+            status: "denied",
+            priorityScore: 0,
+            priorityExplanation: nil,
+            rank: nil,
+            priorityFactors: nil
         )
 
         return [orange, green, denied].sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
@@ -465,7 +606,11 @@ final class ProposalPoller {
             agentId: current.agentId,
             title: current.title,
             intent: current.intent,
-            status: decision == "approve" ? "approved" : "denied"
+            status: decision == "approve" ? "approved" : "denied",
+            priorityScore: current.priorityScore,
+            priorityExplanation: current.priorityExplanation,
+            rank: current.rank,
+            priorityFactors: current.priorityFactors
         )
 
         proposals[index] = updated

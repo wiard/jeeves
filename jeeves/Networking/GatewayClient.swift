@@ -39,6 +39,28 @@ actor GatewayClient {
         return envelope.resolved
     }
 
+    func fetchRankedProposals() async throws -> [Proposal] {
+        if let direct: [Proposal] = try? await get("/api/agents/proposals/ranked") {
+            return direct
+        }
+        let envelope: ProposalsEnvelope = try await get("/api/agents/proposals/ranked")
+        return envelope.resolved
+    }
+
+    func fetchActions() async throws -> [ActionSummary] {
+        struct Envelope: Decodable {
+            let ok: Bool?
+            let actions: [ActionSummary]?
+        }
+        let envelope: Envelope = try await get("/api/actions")
+        return envelope.actions ?? []
+    }
+
+    func fetchRecentKnowledgeObjects(limit: Int = 20) async throws -> [KnowledgeObject] {
+        let envelope: KnowledgeObjectsEnvelope = try await get("/api/knowledge/objects/recent?limit=\(limit)")
+        return envelope.objects ?? []
+    }
+
     func fetchEmergence() async throws -> [EmergenceCluster] {
         let snapshot = try await fetchObservatorySnapshot(proposals: [])
 

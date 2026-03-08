@@ -1,75 +1,86 @@
-# Jeeves
+# Jeeves iOS
 
-A native iOS app for OpenClashd — your personal AI butler in your pocket.
+Native iOS companion for OpenClashd. Jeeves now uses the same real gateway APIs as the web frontend for proposals and observatory data.
 
-## What it does
+## Connection Modes
 
-Jeeves connects to your OpenClashd gateway via WebSocket and gives you a secure, consent-aware interface to your AI butler. Every action goes through the SafeClash kernel: consent, channel trust, budget, and audit.
+- `Mock` (explicit only): enabled by user choice (`Gebruik mock modus`) or runtime `MOCK=1`.
+- `Lokale gateway (echt)`: local/OpenClashd host (localhost, LAN IP, `.local`).
+- `Website backend (echt)`: non-local host using the same HTTP API surface.
 
+Default runtime behavior is real backend mode when host/token config exists. Jeeves no longer silently falls back to mock when token/backend is missing.
+
+## Shared API Surface (Web + iOS)
+
+Jeeves iOS uses the same proposal and observatory endpoints as the web UI in `openclashd-v2`:
+
+- `GET /api/agents/proposals`
+- `POST /api/agents/proposals/decide`
+- `GET /api/observatory/stream?limit=...`
+- `GET /api/signals/state`
+- `GET /api/radar/status`
+- `GET /api/radar/activations`
+- `GET /api/radar/collisions`
+- `GET /api/radar/emergence`
+- `GET /api/radar/clusters`
+- `GET /api/radar/sources`
+- `GET /api/radar/gravity`
+- `GET /api/radar/discoveries`
+- `GET /api/fabric/state`
+- `GET /api/fabric/clock`
+- `GET /api/fabric/emergence`
+- `GET /api/lobby/challenges`
+- `GET /api/knowledge/status`
+- `GET /api/knowledge/emergence`
+- `GET /api/observatory/alerts`
+- `GET /api/conductor/health`
+- `GET /api/conductor/state`
+- `POST /api/conductor/intent`
+- `GET /api/conductor/audit`
+
+Auth model matches web:
+
+- token as query param `?token=...`
+- plus `Authorization: Bearer <token>` header where applicable
+
+Approval contract:
+
+- request body: `{ "proposalId": "...", "decision": "approve|deny", "reason": "..." }`
+- backend status result: `approved|denied`
+
+## Real Mode Setup (Local)
+
+1. Run OpenClashd gateway.
+2. Configure Jeeves host/port in onboarding or runtime config.
+3. Provide a valid conductor token (Keychain/runtime file/env).
+
+Optional runtime file in app Documents sandbox:
+
+```json
+{
+  "host": "192.168.1.23",
+  "port": 19001,
+  "token": "YOUR_TOKEN"
+}
 ```
-iPhone (Jeeves app)
-    ↓ WebSocket
-OpenClashd Gateway (your Mac)
-    ↓
-SafeClash Kernel → Consent × Trust × Budget
-    ↓
-Jeeves (agent) → Tools (with permission)
-```
 
-## Screens
+Environment overrides:
 
-**Jeeves** — Chat with your butler. Consent prompts appear as orange cards. Blocked actions appear as red cards. You approve or deny from your phone.
+- `HOST`
+- `PORT`
+- `TOKEN`
+- `MOCK=1` (explicit mock)
 
-**Huis** — The Great Room in your pocket. Kernel status, budget progress bars, connected channels with trust levels, and a kill switch.
+## Intentional Mock Mode (Development)
 
-**Logboek** — Full audit trail. Every action Jeeves took, which channel, what it cost, whether it was approved or blocked.
+Mock/demo proposal generation is kept for development previews only. To use mock intentionally:
 
-**Instellingen** — Gateway connection, token management, display preferences.
+- select `Gebruik mock modus` in onboarding, or
+- run with `MOCK=1`, or
+- connect to host `mock`
 
-## Architecture
+## Notes
 
-- **SwiftUI** — native iOS interface
-- **SwiftData** — local chat history
-- **URLSession WebSocket** — native connection to gateway
-- **Keychain** — token storage (never in UserDefaults)
-- **Zero dependencies** — only Apple frameworks
-
-## Security
-
-- No credentials stored on device (only gateway token in Keychain)
-- No direct tool access — everything goes through the gateway
-- No internet traffic to third parties
-- No analytics, no tracking, no telemetry
-- Channel trust level: `trusted` (your device, your app)
-
-## Current Status
-
-- [x] Chat UI with message bubbles
-- [x] Consent cards (orange/red)
-- [x] Mock gateway for development
-- [x] Onboarding flow
-- [x] Dark theme (Jeeves gold accent)
-- [x] House status tab
-- [x] Logbook tab
-- [x] Settings tab
-- [ ] Live WebSocket connection to OpenClashd gateway
-- [ ] Speech input
-- [ ] Bonjour gateway discovery
-- [ ] Real iPhone deployment
-
-## Requirements
-
-- Xcode 16.4+ (Xcode 26.3 recommended for Claude Agent)
-- iOS 18.0+
-- An OpenClashd v2 gateway running on your local network (or mock mode)
-
-## Related
-
-- [OpenClashd v2](https://github.com/wiard/openclashd-v2) — the kernel
-- [Angelopp](https://github.com/wiard/angelopp) — USSD platform for Kenya
-
-## Philosophy
-
-"Not Jarvis. Jeeves. An AI that can do anything — and asks permission first."
-
-Your butler. Your house. Your rules.
+- Proposal cards keep existing UI/UX but now render real backend proposals in real mode.
+- Approve/Reject (`Goedkeuren` / `Afwijzen`) calls the real backend in real mode.
+- If backend is unavailable, Jeeves shows disconnected/unavailable state instead of fake data.

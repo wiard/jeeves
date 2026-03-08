@@ -5,6 +5,11 @@ struct LobbyView: View {
     @Environment(ProposalPoller.self) private var poller
     @State private var showOrangeConfirm = false
     @State private var pendingDecision: (proposalId: String, decision: String)?
+    @State private var decidingProposalId: String?
+    @State private var decisionErrorMessage: String?
+    @State private var showDecisionError = false
+    @State private var lastActionResult: ActionSummary?
+    @State private var showActionReceipt = false
 
     var body: some View {
         NavigationStack {
@@ -29,18 +34,35 @@ struct LobbyView: View {
                     pendingDecision = nil
                 }
             }
+            .alert("Actie niet uitgevoerd", isPresented: $showDecisionError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(decisionErrorMessage ?? "Onbekende fout.")
+            }
+            .sheet(isPresented: $showActionReceipt) {
+                if let action = lastActionResult {
+                    ActionReceiptSheet(action: action)
+                }
+            }
         }
     }
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: "leaf")
+            Image(systemName: isBackendUnavailable ? "antenna.radiowaves.left.and.right.slash" : "leaf")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
-            Text(TextKeys.Lobby.noProposals)
+            Text(isBackendUnavailable ? "Backend niet beschikbaar" : TextKeys.Lobby.noProposals)
                 .font(.jeevesBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if let message = unavailableMessage {
+                Text(message)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
         }
         .padding()
     }
@@ -51,6 +73,7 @@ struct LobbyView: View {
                 SwipeCard(
                     proposal: topProposal,
                     isTop: true,
+                    isDecisionInFlight: decidingProposalId != nil,
                     onSwipe: { direction in
                         handleSwipe(proposal: topProposal, direction: direction)
                     }
@@ -73,6 +96,7 @@ struct LobbyView: View {
                             .background(.red)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
+                    .disabled(decidingProposalId != nil)
 
                     Button {
                         handleSwipe(proposal: topProposal, direction: .right)
@@ -85,6 +109,17 @@ struct LobbyView: View {
                             .background(.green)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
+                    .disabled(decidingProposalId != nil)
+                }
+
+                if decidingProposalId != nil {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Beslissing wordt bevestigd bij backend...")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
                 }
             }
         }
@@ -93,6 +128,7 @@ struct LobbyView: View {
     }
 
     private func handleSwipe(proposal: Proposal, direction: SwipeDirection) {
+        guard decidingProposalId == nil else { return }
         let decision = direction == .right ? "approve" : "deny"
 
         if proposal.intent.risk == "orange" {
@@ -112,11 +148,39 @@ struct LobbyView: View {
         }
 
         let reason = decision == "approve" ? TextKeys.Lobby.approveReason : TextKeys.Lobby.denyReason
+        decidingProposalId = proposalId
         Task {
-            _ = await poller.decide(proposalId: proposalId, decision: decision, reason: reason, gateway: gateway)
+            let result = await poller.decide(
+                proposalId: proposalId,
+                decision: decision,
+                reason: reason,
+                gateway: gateway
+            )
+            await MainActor.run {
+                decidingProposalId = nil
+                if case .failure(let message) = result {
+                    decisionErrorMessage = message
+                    showDecisionError = true
+                }
+            }
         }
 
         pendingDecision = nil
+    }
+
+    private var isBackendUnavailable: Bool {
+        !isMockMode && !gateway.isConnected
+    }
+
+    private var isMockMode: Bool {
+        gateway.useMock || gateway.host.lowercased() == "mock"
+    }
+
+    private var unavailableMessage: String? {
+        if isBackendUnavailable {
+            return poller.lastRefreshError ?? "Geen actieve verbinding met de echte backend."
+        }
+        return nil
     }
 }
 
@@ -127,6 +191,7 @@ enum SwipeDirection {
 private struct SwipeCard: View {
     let proposal: Proposal
     let isTop: Bool
+    let isDecisionInFlight: Bool
     let onSwipe: (SwipeDirection) -> Void
 
     @State private var offset: CGSize = .zero
@@ -174,10 +239,30 @@ private struct SwipeCard: View {
                 Text(proposal.agentId)
                     .font(.jeevesHeadline)
                 Spacer()
+                if let score = proposal.priorityScore, score > 0 {
+                    Text("P\(Int(score))")
+                        .font(.jeevesMono)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(priorityColor(score))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                if let rank = proposal.rank, rank > 0 {
+                    Text("#\(rank)")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Text(proposal.title)
                 .font(.jeevesBody)
+
+            if let explanation = proposal.priorityExplanation, !explanation.isEmpty {
+                Text(explanation)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.orange)
+            }
 
             HStack {
                 Text("Intent:")
@@ -210,7 +295,7 @@ private struct SwipeCard: View {
         .offset(offset)
         .rotationEffect(.degrees(Double(offset.width) / 20))
         .gesture(
-            isTop ? DragGesture()
+            (isTop && !isDecisionInFlight) ? DragGesture()
                 .onChanged { value in
                     offset = value.translation
                 }
@@ -228,7 +313,7 @@ private struct SwipeCard: View {
                 }
             : nil
         )
-        .allowsHitTesting(isTop)
+        .allowsHitTesting(isTop && !isDecisionInFlight)
     }
 
     private func swipeAway(direction: SwipeDirection) {
@@ -239,6 +324,79 @@ private struct SwipeCard: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             onSwipe(direction)
+        }
+    }
+
+    private func priorityColor(_ score: Double) -> Color {
+        if score >= 70 { return .red }
+        if score >= 40 { return .orange }
+        return .green
+    }
+}
+
+private struct ActionReceiptSheet: View {
+    let action: ActionSummary
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Image(systemName: action.isCompleted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(action.isCompleted ? .green : .red)
+                        .font(.title)
+                    Text(action.isCompleted ? "Actie uitgevoerd" : "Actie mislukt")
+                        .font(.jeevesHeadline)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Soort:")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                        Text(action.actionKind)
+                            .font(.jeevesMono)
+                    }
+                    HStack {
+                        Text("Status:")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                        Text(action.executionState)
+                            .font(.jeevesMono)
+                    }
+                }
+
+                if let receipt = action.receipt {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Resultaat")
+                            .font(.jeevesHeadline)
+                        Text(receipt.resultSummary)
+                            .font(.jeevesBody)
+                        if let duration = receipt.durationMs {
+                            HStack {
+                                Text("Duur:")
+                                    .font(.jeevesCaption)
+                                    .foregroundStyle(.secondary)
+                                Text("\(Int(duration))ms")
+                                    .font(.jeevesMono)
+                            }
+                        }
+                    }
+                }
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Actie-ontvangstbewijs")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("OK") { dismiss() }
+                }
+            }
         }
     }
 }
