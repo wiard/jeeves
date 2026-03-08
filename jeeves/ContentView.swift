@@ -36,6 +36,9 @@ struct ContentView: View {
                 poller.stop()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenObservatoryTab)) { _ in
+            selectedTab = 3
+        }
     }
 
     @State private var selectedTab = 0

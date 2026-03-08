@@ -82,6 +82,8 @@ struct ExtensionProposal: Decodable, Identifiable {
     let approvedAtIso: String?
     let loadedAtIso: String?
     let sourceType: String?
+    let linkedCells: [String]
+    let reasoningTrace: String?
 
     var id: String { extensionId }
 
@@ -101,7 +103,9 @@ struct ExtensionProposal: Decodable, Identifiable {
         status: String,
         approvedAtIso: String? = nil,
         loadedAtIso: String? = nil,
-        sourceType: String? = nil
+        sourceType: String? = nil,
+        linkedCells: [String] = [],
+        reasoningTrace: String? = nil
     ) {
         self.extensionId = extensionId
         self.title = title
@@ -114,6 +118,8 @@ struct ExtensionProposal: Decodable, Identifiable {
         self.approvedAtIso = approvedAtIso
         self.loadedAtIso = loadedAtIso
         self.sourceType = sourceType
+        self.linkedCells = linkedCells
+        self.reasoningTrace = reasoningTrace
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -135,6 +141,10 @@ struct ExtensionProposal: Decodable, Identifiable {
         case approvedAtIso
         case loadedAtIso
         case sourceType = "source_type"
+        case linkedCells = "linked_cells"
+        case cubeCells = "cube_cells"
+        case reasoningTrace = "reasoning_trace"
+        case trace
     }
 
     init(from decoder: Decoder) throws {
@@ -150,6 +160,8 @@ struct ExtensionProposal: Decodable, Identifiable {
         let approvedAtIso = container.decodeFirstString(for: [.approvedAtIso])
         let loadedAtIso = container.decodeFirstString(for: [.loadedAtIso])
         let sourceType = container.decodeFirstString(for: [.sourceType])
+        let linkedCells = container.decodeFirstStringArray(for: [.linkedCells, .cubeCells])
+        let reasoningTrace = container.decodeFirstString(for: [.reasoningTrace, .trace])
 
         self.init(
             extensionId: extensionId,
@@ -162,7 +174,9 @@ struct ExtensionProposal: Decodable, Identifiable {
             status: status,
             approvedAtIso: approvedAtIso,
             loadedAtIso: loadedAtIso,
-            sourceType: sourceType
+            sourceType: sourceType,
+            linkedCells: linkedCells,
+            reasoningTrace: reasoningTrace
         )
     }
 }
@@ -179,6 +193,8 @@ struct ExtensionManifest: Decodable, Identifiable {
     let approvedAtIso: String?
     let loadedAtIso: String?
     let sourceType: String?
+    let linkedCells: [String]
+    let reasoningTrace: String?
     let knowledgeLinks: [String]
     let auditTrail: [ExtensionDecision]
     let receipt: ExtensionReceipt?
@@ -197,6 +213,8 @@ struct ExtensionManifest: Decodable, Identifiable {
         approvedAtIso: String? = nil,
         loadedAtIso: String? = nil,
         sourceType: String? = nil,
+        linkedCells: [String] = [],
+        reasoningTrace: String? = nil,
         knowledgeLinks: [String] = [],
         auditTrail: [ExtensionDecision] = [],
         receipt: ExtensionReceipt? = nil
@@ -212,6 +230,8 @@ struct ExtensionManifest: Decodable, Identifiable {
         self.approvedAtIso = approvedAtIso
         self.loadedAtIso = loadedAtIso
         self.sourceType = sourceType
+        self.linkedCells = linkedCells
+        self.reasoningTrace = reasoningTrace
         self.knowledgeLinks = knowledgeLinks
         self.auditTrail = auditTrail
         self.receipt = receipt
@@ -230,6 +250,8 @@ struct ExtensionManifest: Decodable, Identifiable {
             approvedAtIso: proposal.approvedAtIso,
             loadedAtIso: proposal.loadedAtIso,
             sourceType: proposal.sourceType,
+            linkedCells: proposal.linkedCells,
+            reasoningTrace: proposal.reasoningTrace,
             knowledgeLinks: [],
             auditTrail: auditTrail,
             receipt: receipt
@@ -255,6 +277,10 @@ struct ExtensionManifest: Decodable, Identifiable {
         case approvedAtIso
         case loadedAtIso
         case sourceType = "source_type"
+        case linkedCells = "linked_cells"
+        case cubeCells = "cube_cells"
+        case reasoningTrace = "reasoning_trace"
+        case trace
         case knowledgeLinks = "knowledge_links"
         case linkedObjectIds = "linked_object_ids"
         case auditTrail = "audit_trail"
@@ -275,6 +301,8 @@ struct ExtensionManifest: Decodable, Identifiable {
         let approvedAtIso = container.decodeFirstString(for: [.approvedAtIso])
         let loadedAtIso = container.decodeFirstString(for: [.loadedAtIso])
         let sourceType = container.decodeFirstString(for: [.sourceType])
+        let linkedCells = container.decodeFirstStringArray(for: [.linkedCells, .cubeCells])
+        let reasoningTrace = container.decodeFirstString(for: [.reasoningTrace, .trace])
         let knowledgeLinks = container.decodeFirstStringArray(for: [.knowledgeLinks, .linkedObjectIds])
         let auditTrail = container.decodeFirstDecodableArray(ExtensionDecision.self, for: [.auditTrail, .decisions]) ?? []
         let receipt = container.decodeFirstDecodable(ExtensionReceipt.self, for: [.receipt])
@@ -291,6 +319,8 @@ struct ExtensionManifest: Decodable, Identifiable {
             approvedAtIso: approvedAtIso,
             loadedAtIso: loadedAtIso,
             sourceType: sourceType,
+            linkedCells: linkedCells,
+            reasoningTrace: reasoningTrace,
             knowledgeLinks: knowledgeLinks,
             auditTrail: auditTrail,
             receipt: receipt

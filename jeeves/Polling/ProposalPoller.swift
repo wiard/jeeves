@@ -40,10 +40,12 @@ final class ProposalPoller {
     var focusedClusterId: String?
 
     var pendingCount: Int { pendingProposals.count }
+    var isDegraded: Bool { hasLoadedOnce && lastRefreshError != nil }
     var seedToastMessage: String?
     var isSeeding = false
     var hasLoadedOnce = false
     var lastRefreshError: String?
+    var lastSuccessfulRefreshAt: Date?
 
     private var pollingTask: Task<Void, Never>?
     private var previousPendingIds: Set<String> = []
@@ -72,6 +74,7 @@ final class ProposalPoller {
             refreshDemoState()
             hasLoadedOnce = true
             lastRefreshError = nil
+            lastSuccessfulRefreshAt = Date()
             return
         }
 
@@ -80,13 +83,6 @@ final class ProposalPoller {
             #if DEBUG
             print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
             #endif
-            proposals = []
-            pendingProposals = []
-            extensionProposals = []
-            extensionUsesDemoFallback = false
-            streamEvents = []
-            emergenceClusters = []
-            NotificationManager.shared.updateBadge(count: 0)
             lastRefreshError = "Geen token beschikbaar voor \(resolvedEndpoint.host):\(resolvedEndpoint.port)."
             hasLoadedOnce = true
             return
@@ -134,10 +130,6 @@ final class ProposalPoller {
             pendingProposals = pending.sorted { ($0.priorityScore ?? 0) > ($1.priorityScore ?? 0) }
             NotificationManager.shared.updateBadge(count: pending.count)
         } catch {
-            proposals = []
-            pendingProposals = []
-            previousPendingIds = []
-            NotificationManager.shared.updateBadge(count: 0)
             proposalFetchErrorMessage = describeRefreshFailure(
                 error,
                 host: resolvedEndpoint.host,
@@ -219,6 +211,16 @@ final class ProposalPoller {
                 observedSuccessfulResponse = true
             }
         } catch {}
+
+        let feedDiscoveries = Self.discoveryCandidatesFromStream(streamEventsFromApi)
+        if !feedDiscoveries.isEmpty {
+            radarDiscoveryCandidates = Self.mergeDiscoveryCandidates(
+                primary: radarDiscoveryCandidates,
+                secondary: feedDiscoveries
+            )
+            observedSuccessfulResponse = true
+        }
+
         let derivedRadarEvents = Self.radarDerivedStreamEvents(
             activations: radarActivations,
             emergence: radarEmergence,
@@ -289,22 +291,11 @@ final class ProposalPoller {
         }
 
         if !proposalFetchSucceeded && !observedSuccessfulResponse {
-            streamEvents = []
-            emergenceClusters = []
-            recentKnowledgeObjects = []
-            decidedProposals = []
-            radarStatus = nil
-            radarActivations = []
-            radarCollisions = []
-            radarEmergence = []
-            radarClusters = []
-            radarSources = []
-            radarGravityHotspots = []
-            radarDiscoveryCandidates = []
-            observatorySnapshot = .empty
-            if !extensionUsesDemoFallback {
-                extensionProposals = []
-            }
+            // Keep last known data visible in degraded mode.
+        }
+
+        if observedSuccessfulResponse {
+            lastSuccessfulRefreshAt = Date()
         }
 
         if proposalFetchSucceeded {
@@ -660,7 +651,9 @@ final class ProposalPoller {
                 status: "pending",
                 approvedAtIso: nil,
                 loadedAtIso: nil,
-                sourceType: "demo-fallback"
+                sourceType: "system",
+                linkedCells: ["architecture|external|current", "surface|engine|current"],
+                reasoningTrace: "Cross-domain anomaly cluster vraagt beperkte read/write capability."
             ),
             ExtensionProposal(
                 extensionId: "demo.extension.observer.loop",
@@ -676,7 +669,9 @@ final class ProposalPoller {
                 status: "pending",
                 approvedAtIso: nil,
                 loadedAtIso: nil,
-                sourceType: "demo-fallback"
+                sourceType: "clashd27",
+                linkedCells: ["trust-model|engine|emerging"],
+                reasoningTrace: "Stabiele residue drift met lage risico-score; geschikt voor bounded summarization."
             ),
         ]
     }
@@ -892,6 +887,85 @@ final class ProposalPoller {
             }
             return lhs.candidateId < rhs.candidateId
         }
+    }
+
+    private static func mergeDiscoveryCandidates(
+        primary: [RadarDiscoveryCandidate],
+        secondary: [RadarDiscoveryCandidate]
+    ) -> [RadarDiscoveryCandidate] {
+        var byId: [String: RadarDiscoveryCandidate] = [:]
+        for candidate in primary {
+            byId[candidate.candidateId] = candidate
+        }
+        for candidate in secondary where byId[candidate.candidateId] == nil {
+            byId[candidate.candidateId] = candidate
+        }
+        return sortRadarDiscoveries(Array(byId.values))
+    }
+
+    private static func discoveryCandidatesFromStream(_ events: [ObservatoryStreamEvent]) -> [RadarDiscoveryCandidate] {
+        var discovered: [RadarDiscoveryCandidate] = []
+        for (index, event) in events.enumerated() {
+            guard event.isDiscoveryCandidate || event.type == "discovery_candidate" else { continue }
+
+            let candidateId = event.candidateId ?? event.signalId ?? event.id
+            let candidateType = event.candidateType
+                ?? event.title
+                ?? event.event
+                ?? "emerging_signal"
+            let candidateScore = event.candidateScore ?? event.gravityScore ?? 0.5
+            let rank = event.rank ?? (index + 1)
+            let crossDomain = event.crossDomain
+                ?? ((event.reason ?? "").localizedCaseInsensitiveContains("cross"))
+            let sources = inferredSources(from: event)
+            let explanation = event.explanation
+                ?? event.summary
+                ?? event.title
+                ?? "Signal needs human review."
+
+            discovered.append(
+                RadarDiscoveryCandidate(
+                    candidateId: candidateId,
+                    candidateType: candidateType,
+                    candidateScore: candidateScore,
+                    rank: rank,
+                    crossDomain: crossDomain,
+                    sources: sources,
+                    explanation: explanation
+                )
+            )
+        }
+        return sortRadarDiscoveries(deduplicateDiscoveries(discovered))
+    }
+
+    private static func deduplicateDiscoveries(_ discoveries: [RadarDiscoveryCandidate]) -> [RadarDiscoveryCandidate] {
+        var seen: Set<String> = []
+        var unique: [RadarDiscoveryCandidate] = []
+        for candidate in discoveries {
+            if seen.insert(candidate.candidateId).inserted {
+                unique.append(candidate)
+            }
+        }
+        return unique
+    }
+
+    private static func inferredSources(from event: ObservatoryStreamEvent) -> [String] {
+        if let reason = event.reason, reason.contains("/") {
+            let parts = reason
+                .split(separator: "/")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !parts.isEmpty {
+                return parts
+            }
+        }
+        if let sourceId = event.sourceId, !sourceId.isEmpty {
+            return [sourceId]
+        }
+        if let agentId = event.agentId, !agentId.isEmpty {
+            return [agentId]
+        }
+        return []
     }
 
     private static func radarEmergenceToClusters(_ collisions: [RadarCollision]) -> [EmergenceCluster] {

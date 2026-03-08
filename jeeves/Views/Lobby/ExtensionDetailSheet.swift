@@ -9,16 +9,37 @@ struct ExtensionDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    metadata
-                    capabilitiesSection
-                    knowledgeLinksSection
-                    auditTrailSection
-                    receiptSection
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.04, green: 0.07, blue: 0.11),
+                        Color(red: 0.02, green: 0.03, blue: 0.06)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        header
+                        metadata
+                        capabilitiesSection
+                        knowledgeLinksSection
+                        auditTrailSection
+                        receiptSection
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.06))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                            )
+                    )
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle("Extension")
             #if os(iOS)
@@ -36,6 +57,7 @@ struct ExtensionDetailSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(manifest.title)
                 .font(.jeevesHeadline)
+                .foregroundStyle(.white)
             HStack(spacing: 8) {
                 riskBadge
                 Text(manifest.status)
@@ -53,6 +75,12 @@ struct ExtensionDetailSheet: View {
             detailRow(label: TextKeys.Lobby.extensionEntrypoint, value: manifest.entrypoint)
             detailRow(label: TextKeys.Lobby.extensionSource, value: manifest.sourceType ?? "unknown")
             detailRow(label: TextKeys.Lobby.extensionCodeHash, value: manifest.codeHash)
+            if !manifest.linkedCells.isEmpty {
+                detailRow(label: "Cells", value: manifest.linkedCells.joined(separator: ", "))
+            }
+            if let reasoningTrace = manifest.reasoningTrace, !reasoningTrace.isEmpty {
+                detailRow(label: "Trace", value: reasoningTrace)
+            }
             if let approvedAtIso = manifest.approvedAtIso {
                 detailRow(label: "Approved", value: approvedAtIso)
             }
@@ -79,6 +107,7 @@ struct ExtensionDetailSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(capability.title)
                             .font(.jeevesBody)
+                            .foregroundStyle(.white)
                         if let details = capability.details, !details.isEmpty {
                             Text(details)
                                 .font(.jeevesCaption)
@@ -215,6 +244,7 @@ struct ExtensionDetailSheet: View {
                 .frame(width: 110, alignment: .leading)
             Text(value)
                 .font(.jeevesMono)
+                .foregroundStyle(.white)
         }
     }
 }

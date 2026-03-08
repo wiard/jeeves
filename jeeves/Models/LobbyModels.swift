@@ -88,7 +88,7 @@ struct DecideRequest: Encodable {
     let reason: String?
 }
 
-struct DecideResponse: Codable {
+struct DecideResponse: Decodable {
     let ok: Bool
     let status: String?
     let executed: Bool?
@@ -96,7 +96,7 @@ struct DecideResponse: Codable {
     let action: ActionSummary?
 }
 
-struct ActionSummary: Codable, Identifiable {
+struct ActionSummary: Decodable, Identifiable {
     let actionId: String
     let actionKind: String
     let executionState: String
@@ -107,7 +107,7 @@ struct ActionSummary: Codable, Identifiable {
     var isFailed: Bool { executionState == "failed" }
 }
 
-struct ActionReceipt: Codable, Identifiable {
+struct ActionReceipt: Decodable, Identifiable {
     let receiptId: String
     let actionId: String
     let completedAtIso: String
@@ -117,12 +117,112 @@ struct ActionReceipt: Codable, Identifiable {
     let resultType: String?
     let outputObjectIds: [String]?
     let notes: String?
+    let actor: String?
+    let reason: String?
+    let correlationId: String?
+    let requestId: String?
+    let eventType: String?
     var id: String { receiptId }
+
+    init(
+        receiptId: String,
+        actionId: String,
+        completedAtIso: String,
+        executionState: String,
+        resultSummary: String,
+        durationMs: Double?,
+        resultType: String?,
+        outputObjectIds: [String]?,
+        notes: String?,
+        actor: String? = nil,
+        reason: String? = nil,
+        correlationId: String? = nil,
+        requestId: String? = nil,
+        eventType: String? = nil
+    ) {
+        self.receiptId = receiptId
+        self.actionId = actionId
+        self.completedAtIso = completedAtIso
+        self.executionState = executionState
+        self.resultSummary = resultSummary
+        self.durationMs = durationMs
+        self.resultType = resultType
+        self.outputObjectIds = outputObjectIds
+        self.notes = notes
+        self.actor = actor
+        self.reason = reason
+        self.correlationId = correlationId
+        self.requestId = requestId
+        self.eventType = eventType
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case receiptId
+        case actionId
+        case completedAtIso
+        case executionState
+        case resultSummary
+        case durationMs
+        case resultType
+        case outputObjectIds
+        case notes
+        case actor
+        case reason
+        case correlationId
+        case requestId
+        case eventType
+        case receipt_id
+        case action_id
+        case completed_at_iso
+        case execution_state
+        case result_summary
+        case duration_ms
+        case result_type
+        case output_object_ids
+        case correlation_id
+        case request_id
+        case event_type
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        receiptId = (try? container.decode(String.self, forKey: .receiptId))
+            ?? (try? container.decode(String.self, forKey: .receipt_id))
+            ?? UUID().uuidString
+        actionId = (try? container.decode(String.self, forKey: .actionId))
+            ?? (try? container.decode(String.self, forKey: .action_id))
+            ?? "unknown-action"
+        completedAtIso = (try? container.decode(String.self, forKey: .completedAtIso))
+            ?? (try? container.decode(String.self, forKey: .completed_at_iso))
+            ?? ISO8601DateFormatter().string(from: Date())
+        executionState = (try? container.decode(String.self, forKey: .executionState))
+            ?? (try? container.decode(String.self, forKey: .execution_state))
+            ?? "unknown"
+        resultSummary = (try? container.decode(String.self, forKey: .resultSummary))
+            ?? (try? container.decode(String.self, forKey: .result_summary))
+            ?? "Geen samenvatting beschikbaar."
+        durationMs = (try? container.decodeIfPresent(Double.self, forKey: .durationMs))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .duration_ms))
+        resultType = (try? container.decodeIfPresent(String.self, forKey: .resultType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .result_type))
+        outputObjectIds = (try? container.decodeIfPresent([String].self, forKey: .outputObjectIds))
+            ?? (try? container.decodeIfPresent([String].self, forKey: .output_object_ids))
+        notes = try? container.decodeIfPresent(String.self, forKey: .notes)
+        actor = try? container.decodeIfPresent(String.self, forKey: .actor)
+        reason = try? container.decodeIfPresent(String.self, forKey: .reason)
+        correlationId = (try? container.decodeIfPresent(String.self, forKey: .correlationId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .correlation_id))
+        requestId = (try? container.decodeIfPresent(String.self, forKey: .requestId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .request_id))
+        eventType = (try? container.decodeIfPresent(String.self, forKey: .eventType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .event_type))
+    }
 }
 
 // MARK: - Decided Proposals
 
-struct DecidedProposal: Codable, Identifiable {
+struct DecidedProposal: Decodable, Identifiable {
     let proposalId: String
     let title: String
     let agentId: String
