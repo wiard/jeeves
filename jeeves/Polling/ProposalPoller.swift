@@ -17,6 +17,8 @@ final class ProposalPoller {
 
     var proposals: [Proposal] = []
     var pendingProposals: [Proposal] = []
+    var extensionProposals: [ExtensionProposal] = []
+    var extensionUsesDemoFallback = false
     var decidedProposals: [DecidedProposal] = []
     var recentKnowledgeObjects: [KnowledgeObject] = []
     var lastActionReceipt: ActionSummary?
@@ -80,6 +82,8 @@ final class ProposalPoller {
             #endif
             proposals = []
             pendingProposals = []
+            extensionProposals = []
+            extensionUsesDemoFallback = false
             streamEvents = []
             emergenceClusters = []
             NotificationManager.shared.updateBadge(count: 0)
@@ -96,6 +100,15 @@ final class ProposalPoller {
         var proposalFetchSucceeded = false
         var observedSuccessfulResponse = false
         var proposalFetchErrorMessage: String?
+
+        do {
+            extensionProposals = try await client.fetchExtensionProposals()
+            extensionUsesDemoFallback = false
+            observedSuccessfulResponse = true
+        } catch {
+            extensionProposals = demoExtensionProposals()
+            extensionUsesDemoFallback = true
+        }
 
         do {
             let fetched: [Proposal]
@@ -219,13 +232,11 @@ final class ProposalPoller {
         print("[Jeeves][ProposalPoller] stream events=\(streamEvents.count) activations=\(radarActivations.count) collisions=\(radarCollisions.count) emergence=\(radarEmergence.count) gravity=\(radarGravityHotspots.count) discoveries=\(radarDiscoveryCandidates.count)")
         #endif
 
-        do {
-            let knowledgeObjects = try? await client.fetchRecentKnowledgeObjects(limit: 10)
-            if let objects = knowledgeObjects {
-                recentKnowledgeObjects = objects
-                observedSuccessfulResponse = true
-            }
-        } catch {}
+        let knowledgeObjects = try? await client.fetchRecentKnowledgeObjects(limit: 10)
+        if let objects = knowledgeObjects {
+            recentKnowledgeObjects = objects
+            observedSuccessfulResponse = true
+        }
 
         do {
             let decided = try await client.fetchDecidedProposals(limit: 20)
@@ -291,6 +302,9 @@ final class ProposalPoller {
             radarGravityHotspots = []
             radarDiscoveryCandidates = []
             observatorySnapshot = .empty
+            if !extensionUsesDemoFallback {
+                extensionProposals = []
+            }
         }
 
         if proposalFetchSucceeded {
@@ -563,6 +577,8 @@ final class ProposalPoller {
 
         proposals = demoProposals(tick: demoTick)
         pendingProposals = proposals.filter(\.isPending)
+        extensionProposals = demoExtensionProposals()
+        extensionUsesDemoFallback = true
         decidedProposals = demoDecidedProposals(tick: demoTick)
         NotificationManager.shared.updateBadge(count: pendingProposals.count)
 
@@ -626,6 +642,43 @@ final class ProposalPoller {
         )
 
         return [orange, green, denied].sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+    }
+
+    private func demoExtensionProposals() -> [ExtensionProposal] {
+        return [
+            ExtensionProposal(
+                extensionId: "demo.extension.observer.fabric",
+                title: "Observer Fabric Analyzer",
+                purpose: "Voert gecontroleerde cross-domain analyse uit op fabric-signalen.",
+                capabilities: [
+                    ExtensionCapability(key: "fabric.read"),
+                    ExtensionCapability(key: "knowledge.write")
+                ],
+                risk: "orange",
+                codeHash: "sha256:4af2e91d31f0",
+                entrypoint: "dist/fabric-analyzer.js",
+                status: "pending",
+                approvedAtIso: nil,
+                loadedAtIso: nil,
+                sourceType: "demo-fallback"
+            ),
+            ExtensionProposal(
+                extensionId: "demo.extension.observer.loop",
+                title: "Observer Loop Summarizer",
+                purpose: "Maakt residue-samenvattingen en koppelt die aan de kennisgraaf.",
+                capabilities: [
+                    ExtensionCapability(key: "signals.read"),
+                    ExtensionCapability(key: "summary.emit")
+                ],
+                risk: "green",
+                codeHash: "sha256:b37f1890ac77",
+                entrypoint: "dist/loop-summarizer.js",
+                status: "pending",
+                approvedAtIso: nil,
+                loadedAtIso: nil,
+                sourceType: "demo-fallback"
+            ),
+        ]
     }
 
     private func demoDecidedProposals(tick: Int) -> [DecidedProposal] {

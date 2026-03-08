@@ -39,6 +39,47 @@ actor GatewayClient {
         return envelope.resolved
     }
 
+    func fetchExtensions() async throws -> [ExtensionProposal] {
+        if let direct: [ExtensionProposal] = try? await get("/api/extensions") {
+            return direct
+        }
+        let envelope: ExtensionProposalsEnvelope = try await get("/api/extensions")
+        return envelope.resolved
+    }
+
+    func fetchExtensionProposals() async throws -> [ExtensionProposal] {
+        let extensions = try await fetchExtensions()
+        let pending = extensions.filter(\.isPending)
+        return pending.isEmpty ? extensions : pending
+    }
+
+    func fetchExtension(id: String) async throws -> ExtensionManifest {
+        if let direct: ExtensionManifest = try? await get("/api/extensions/\(id)") {
+            return direct
+        }
+        let envelope: ExtensionManifestEnvelope = try await get("/api/extensions/\(id)")
+        if let manifest = envelope.resolved {
+            return manifest
+        }
+        throw URLError(.cannotParseResponse)
+    }
+
+    func approveExtension(id: String) async throws -> ExtensionDecision {
+        try await postExtensionDecision(path: "/api/extensions/\(id)/approve")
+    }
+
+    func rejectExtension(id: String) async throws -> ExtensionDecision {
+        try await postExtensionDecision(path: "/api/extensions/\(id)/deny")
+    }
+
+    func loadExtension(id: String) async throws -> ExtensionDecision {
+        try await postExtensionDecision(path: "/api/extensions/\(id)/load")
+    }
+
+    func fetchExtensionGraph(id: String) async throws -> KnowledgeGraphResponse {
+        try await get("/api/extensions/\(id)/graph")
+    }
+
     func fetchRankedProposals() async throws -> [Proposal] {
         if let direct: [Proposal] = try? await get("/api/agents/proposals/ranked") {
             return direct
@@ -403,6 +444,50 @@ actor GatewayClient {
     private func getRawJSON(_ path: String) async throws -> Any {
         let (data, _) = try await request(path: path, method: "GET")
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+    }
+
+    private struct EmptyPostBody: Encodable {}
+
+    private func postExtensionDecision(path: String) async throws -> ExtensionDecision {
+        let (data, _) = try await request(path: path, method: "POST", body: try JSONEncoder().encode(EmptyPostBody()))
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(ExtensionDecision.self, from: data) {
+            return direct
+        }
+
+        if let envelope = try? decoder.decode(ExtensionDecisionEnvelope.self, from: data) {
+            if let decision = envelope.decision ?? envelope.data {
+                if decision.receipt != nil {
+                    return decision
+                }
+                return ExtensionDecision(
+                    extensionId: decision.extensionId,
+                    status: decision.status,
+                    approvedAtIso: decision.approvedAtIso ?? envelope.approvedAtIso,
+                    loadedAtIso: decision.loadedAtIso ?? envelope.loadedAtIso,
+                    decisionAtIso: decision.decisionAtIso,
+                    reason: decision.reason,
+                    actor: decision.actor,
+                    receipt: envelope.receipt ?? decision.receipt
+                )
+            }
+
+            if let extensionId = envelope.extensionId {
+                return ExtensionDecision(
+                    extensionId: extensionId,
+                    status: envelope.status ?? "ok",
+                    approvedAtIso: envelope.approvedAtIso,
+                    loadedAtIso: envelope.loadedAtIso,
+                    decisionAtIso: ISO8601DateFormatter().string(from: Date()),
+                    reason: nil,
+                    actor: nil,
+                    receipt: envelope.receipt
+                )
+            }
+        }
+
+        throw URLError(.cannotParseResponse)
     }
 
     // MARK: - Observatory Parsing

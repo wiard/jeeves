@@ -14,19 +14,33 @@ struct LobbyView: View {
     @State private var knowledgeGraphData: KnowledgeGraphResponse?
     @State private var showKnowledgeGraph = false
     @State private var loadingKnowledgeGraph = false
+    @State private var decidingExtensionId: String?
+    @State private var loadingManifestExtensionId: String?
+    @State private var extensionActionErrorMessage: String?
+    @State private var showExtensionActionError = false
+    @State private var selectedExtensionManifest: ExtensionManifest?
+    @State private var extensionDecisions: [String: ExtensionDecision] = [:]
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    pendingQueueSection
-                    recentDecisionsSection
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        topStatusBar
+                        pendingQueueSection
+                        extensionProposalsSection
+                        recentDecisionsSection
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 28)
                 }
-                .padding(.vertical)
             }
-            .navigationTitle(TextKeys.Lobby.header)
+            .navigationTitle("Control Room")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .alert(TextKeys.Lobby.confirmOrange, isPresented: $showOrangeConfirm) {
                 Button(TextKeys.Lobby.confirmYes) {
@@ -42,6 +56,11 @@ struct LobbyView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(decisionErrorMessage ?? "Onbekende fout.")
+            }
+            .alert("Extension actie niet uitgevoerd", isPresented: $showExtensionActionError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(extensionActionErrorMessage ?? "Onbekende fout.")
             }
             .sheet(isPresented: $showActionReceipt) {
                 if let action = poller.lastActionReceipt {
@@ -70,7 +89,60 @@ struct LobbyView: View {
                     isLoading: loadingKnowledgeGraph
                 )
             }
+            .sheet(item: $selectedExtensionManifest) { manifest in
+                ExtensionDetailSheet(
+                    manifest: manifest,
+                    onKnowledgeTap: { objectId in
+                        selectedExtensionManifest = nil
+                        fetchAndShowKnowledgeGraph(objectId: objectId)
+                    },
+                    onGraphTap: { extensionId in
+                        selectedExtensionManifest = nil
+                        fetchAndShowExtensionGraph(extensionId: extensionId)
+                    }
+                )
+            }
         }
+        .preferredColorScheme(.dark)
+    }
+
+    private var topStatusBar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Jeeves")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text("Personal AI Control Room")
+                        .font(.title3.weight(.semibold))
+                }
+                Spacer()
+                statusChip(
+                    label: isMockMode ? "Mock" : "Live",
+                    systemImage: isMockMode ? "sparkles" : "bolt.horizontal.circle.fill",
+                    tint: isMockMode ? .orange : .consentGreen
+                )
+            }
+
+            HStack(spacing: 8) {
+                statusChip(
+                    label: gateway.isConnected ? "Verbonden" : "Offline",
+                    systemImage: gateway.isConnected ? "dot.radiowaves.left.and.right" : "wifi.slash",
+                    tint: gateway.isConnected ? .consentGreen : .consentRed
+                )
+                statusChip(
+                    label: "Queue \(poller.pendingProposals.count)",
+                    systemImage: "tray.full.fill",
+                    tint: .jeevesGold
+                )
+                statusChip(
+                    label: "Besluiten \(poller.decidedProposals.count)",
+                    systemImage: "checkmark.seal.fill",
+                    tint: .blue
+                )
+            }
+        }
+        .controlRoomPanel()
     }
 
     // MARK: - Pending Queue
@@ -83,14 +155,11 @@ struct LobbyView: View {
                 icon: "tray.full",
                 count: poller.pendingProposals.count
             )
-            .padding(.horizontal)
 
             if isBackendUnavailable {
                 backendUnavailableCard
-                    .padding(.horizontal)
             } else if poller.pendingProposals.isEmpty {
                 emptyQueueCard
-                    .padding(.horizontal)
             } else {
                 cardStack
             }
@@ -107,9 +176,7 @@ struct LobbyView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.secondarySystemFill).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .controlRoomPanel()
     }
 
     private var backendUnavailableCard: some View {
@@ -130,9 +197,7 @@ struct LobbyView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemFill).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .controlRoomPanel()
     }
 
     private var cardStack: some View {
@@ -157,11 +222,11 @@ struct LobbyView: View {
                         handleSwipe(proposal: topProposal, direction: .left)
                     } label: {
                         Text(TextKeys.Lobby.deny)
-                            .font(.jeevesHeadline)
+                            .font(.jeevesHeadline.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(.red)
+                            .background(Color.consentRed.opacity(0.85))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .disabled(decidingProposalId != nil)
@@ -170,11 +235,11 @@ struct LobbyView: View {
                         handleSwipe(proposal: topProposal, direction: .right)
                     } label: {
                         Text(TextKeys.Lobby.approve)
-                            .font(.jeevesHeadline)
+                            .font(.jeevesHeadline.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
-                            .background(.green)
+                            .background(Color.consentGreen.opacity(0.88))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .disabled(decidingProposalId != nil)
@@ -191,8 +256,55 @@ struct LobbyView: View {
                 }
             }
         }
-        .padding(.horizontal)
         .animation(.spring(response: 0.4), value: poller.pendingProposals.first?.id)
+    }
+
+    // MARK: - Extension Proposals
+
+    @ViewBuilder
+    private var extensionProposalsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: TextKeys.Lobby.extensionProposals,
+                icon: "puzzlepiece.extension",
+                count: poller.extensionProposals.count
+            )
+
+            if poller.extensionProposals.isEmpty {
+                extensionEmptyCard
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(poller.extensionProposals) { proposal in
+                        ExtensionProposalCard(
+                            proposal: proposal,
+                            isActionInFlight: decidingExtensionId == proposal.extensionId || loadingManifestExtensionId == proposal.extensionId,
+                            onApprove: { approveExtension(proposal) },
+                            onReject: { rejectExtension(proposal) },
+                            onInspectManifest: { inspectExtensionManifest(proposal) }
+                        )
+                    }
+                }
+            }
+
+            if poller.extensionUsesDemoFallback {
+                Text(TextKeys.Lobby.extensionDemoFallback)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var extensionEmptyCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "puzzlepiece.extension")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(TextKeys.Lobby.noExtensionProposals)
+                .font(.jeevesBody)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .controlRoomPanel()
     }
 
     // MARK: - Recent Decisions
@@ -205,7 +317,6 @@ struct LobbyView: View {
                 icon: "checkmark.rectangle.stack",
                 count: nil
             )
-            .padding(.horizontal)
 
             if poller.decidedProposals.isEmpty {
                 HStack(spacing: 12) {
@@ -217,10 +328,7 @@ struct LobbyView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Color(.secondarySystemFill).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
+                .controlRoomPanel()
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(poller.decidedProposals) { decision in
@@ -230,7 +338,6 @@ struct LobbyView: View {
                             }
                     }
                 }
-                .padding(.horizontal)
             }
         }
     }
@@ -240,10 +347,11 @@ struct LobbyView: View {
     private func sectionHeader(title: String, icon: String, count: Int?) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.body)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.jeevesGold)
             Text(title)
-                .font(.jeevesHeadline)
+                .font(.jeevesHeadline.weight(.semibold))
+                .foregroundStyle(.white)
             if let count, count > 0 {
                 Text("\(count)")
                     .font(.jeevesCaption)
@@ -255,6 +363,19 @@ struct LobbyView: View {
             }
             Spacer()
         }
+    }
+
+    private func statusChip(label: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+            Text(label)
+        }
+        .font(.jeevesCaption.weight(.medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(tint.opacity(0.18))
+        .foregroundStyle(tint)
+        .clipShape(Capsule())
     }
 
     // MARK: - Actions
@@ -303,6 +424,124 @@ struct LobbyView: View {
         }
 
         pendingDecision = nil
+    }
+
+    private func approveExtension(_ proposal: ExtensionProposal) {
+        performExtensionDecision(proposal: proposal, approve: true)
+    }
+
+    private func rejectExtension(_ proposal: ExtensionProposal) {
+        performExtensionDecision(proposal: proposal, approve: false)
+    }
+
+    private func performExtensionDecision(proposal: ExtensionProposal, approve: Bool) {
+        guard decidingExtensionId == nil else { return }
+        decidingExtensionId = proposal.extensionId
+
+        Task {
+            let resolved = await resolveEndpoint()
+            guard let token = resolved.token, !token.isEmpty else {
+                await MainActor.run {
+                    decidingExtensionId = nil
+                    extensionActionErrorMessage = "Geen token beschikbaar. Voeg een token toe in Instellingen."
+                    showExtensionActionError = true
+                }
+                return
+            }
+
+            let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
+            do {
+                let decision = try await (approve
+                    ? client.approveExtension(id: proposal.extensionId)
+                    : client.rejectExtension(id: proposal.extensionId))
+                await poller.refresh(gateway: gateway)
+                await MainActor.run {
+                    extensionDecisions[proposal.extensionId] = decision
+                    decidingExtensionId = nil
+                }
+                await MainActor.run {
+                    inspectExtensionManifest(proposal)
+                }
+            } catch {
+                await MainActor.run {
+                    decidingExtensionId = nil
+                    extensionActionErrorMessage = describeExtensionActionFailure(
+                        error,
+                        host: resolved.host,
+                        port: resolved.port
+                    )
+                    showExtensionActionError = true
+                }
+            }
+        }
+    }
+
+    private func inspectExtensionManifest(_ proposal: ExtensionProposal) {
+        guard loadingManifestExtensionId == nil else { return }
+        loadingManifestExtensionId = proposal.extensionId
+
+        Task {
+            let fallbackDecision = extensionDecisions[proposal.extensionId]
+            let fallbackManifest = ExtensionManifest(
+                proposal: proposal,
+                receipt: fallbackDecision?.receipt,
+                auditTrail: fallbackDecision.map { [$0] } ?? []
+            )
+
+            if isMockMode || poller.extensionUsesDemoFallback {
+                await MainActor.run {
+                    selectedExtensionManifest = fallbackManifest
+                    loadingManifestExtensionId = nil
+                }
+                return
+            }
+
+            let resolved = await resolveEndpoint()
+            guard let token = resolved.token, !token.isEmpty else {
+                await MainActor.run {
+                    selectedExtensionManifest = fallbackManifest
+                    loadingManifestExtensionId = nil
+                }
+                return
+            }
+
+            let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
+            do {
+                let fetched = try await client.fetchExtension(id: proposal.extensionId)
+                let merged = mergeManifestWithCachedDecision(fetched)
+                await MainActor.run {
+                    selectedExtensionManifest = merged
+                    loadingManifestExtensionId = nil
+                }
+            } catch {
+                await MainActor.run {
+                    selectedExtensionManifest = fallbackManifest
+                    loadingManifestExtensionId = nil
+                }
+            }
+        }
+    }
+
+    private func mergeManifestWithCachedDecision(_ manifest: ExtensionManifest) -> ExtensionManifest {
+        guard let cached = extensionDecisions[manifest.extensionId] else { return manifest }
+        let mergedAuditTrail = manifest.auditTrail.isEmpty ? [cached] : manifest.auditTrail
+        let mergedReceipt = manifest.receipt ?? cached.receipt
+        return ExtensionManifest(
+            extensionId: manifest.extensionId,
+            title: manifest.title,
+            purpose: manifest.purpose,
+            capabilities: manifest.capabilities,
+            risk: manifest.risk,
+            codeHash: manifest.codeHash,
+            entrypoint: manifest.entrypoint,
+            status: manifest.status,
+            approvedAtIso: manifest.approvedAtIso ?? cached.approvedAtIso,
+            loadedAtIso: manifest.loadedAtIso ?? cached.loadedAtIso,
+            sourceType: manifest.sourceType,
+            knowledgeLinks: manifest.knowledgeLinks,
+            auditTrail: mergedAuditTrail,
+            receipt: mergedReceipt
+        )
     }
 
     private func fetchAndShowKnowledgeGraph(objectId: String) {
@@ -373,6 +612,118 @@ struct LobbyView: View {
         }
     }
 
+    private func fetchAndShowExtensionGraph(extensionId: String) {
+        loadingKnowledgeGraph = true
+        knowledgeGraphData = nil
+        showKnowledgeGraph = true
+
+        Task {
+            guard !isMockMode else {
+                await MainActor.run {
+                    knowledgeGraphData = demoExtensionGraph(extensionId: extensionId)
+                    loadingKnowledgeGraph = false
+                }
+                return
+            }
+
+            let resolved = await resolveEndpoint()
+            guard let token = resolved.token, !token.isEmpty else {
+                await MainActor.run {
+                    knowledgeGraphData = demoExtensionGraph(extensionId: extensionId)
+                    loadingKnowledgeGraph = false
+                }
+                return
+            }
+
+            let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
+            do {
+                let graph = try await client.fetchExtensionGraph(id: extensionId)
+                await MainActor.run {
+                    knowledgeGraphData = graph
+                    loadingKnowledgeGraph = false
+                }
+            } catch {
+                await MainActor.run {
+                    knowledgeGraphData = demoExtensionGraph(extensionId: extensionId)
+                    loadingKnowledgeGraph = false
+                }
+            }
+        }
+    }
+
+    private func demoExtensionGraph(extensionId: String) -> KnowledgeGraphResponse {
+        let now = ISO8601DateFormatter().string(from: Date())
+        let root = KnowledgeObject(
+            objectId: "extension-proposal-\(extensionId)",
+            kind: "extension_proposal",
+            createdAtIso: now,
+            title: "Extension proposal \(extensionId)",
+            summary: "Demo kennisgraaf voor extension review.",
+            sourceRefs: nil,
+            linkedObjectIds: [
+                "extension-decision-\(extensionId)",
+                "extension-manifest-\(extensionId)",
+                "extension-receipt-\(extensionId)"
+            ],
+            metadata: nil
+        )
+        let linked: [KnowledgeObject] = [
+            KnowledgeObject(
+                objectId: "extension-decision-\(extensionId)",
+                kind: "extension_decision",
+                createdAtIso: now,
+                title: "Decision \(extensionId)",
+                summary: "Beslissing geregistreerd in demo modus.",
+                sourceRefs: nil,
+                linkedObjectIds: nil,
+                metadata: nil
+            ),
+            KnowledgeObject(
+                objectId: "extension-manifest-\(extensionId)",
+                kind: "extension_manifest",
+                createdAtIso: now,
+                title: "Manifest \(extensionId)",
+                summary: "Manifest geannoteerd met capabilities en risico.",
+                sourceRefs: nil,
+                linkedObjectIds: nil,
+                metadata: nil
+            ),
+            KnowledgeObject(
+                objectId: "extension-receipt-\(extensionId)",
+                kind: "extension_receipt",
+                createdAtIso: now,
+                title: "Receipt \(extensionId)",
+                summary: "Uitvoering niet automatisch geladen; alleen goedkeuring vastgelegd.",
+                sourceRefs: nil,
+                linkedObjectIds: nil,
+                metadata: nil
+            ),
+        ]
+        return KnowledgeGraphResponse(ok: true, root: root, linked: linked, edges: nil)
+    }
+
+    private func describeExtensionActionFailure(_ error: Error, host: String, port: Int) -> String {
+        if case GatewayClientError.httpStatus(let status) = error {
+            switch status {
+            case 401:
+                return "Token ongeldig of verlopen voor \(host):\(port)."
+            case 404:
+                return "Extension niet gevonden of al verwerkt."
+            default:
+                return "Backend fout (\(status)) op \(host):\(port)."
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cannotFindHost, .cannotConnectToHost, .timedOut, .networkConnectionLost:
+                return "Backend onbereikbaar op \(host):\(port)."
+            default:
+                break
+            }
+        }
+        return "Extension actie mislukt."
+    }
+
     private func resolveEndpoint() async -> (host: String, port: Int, token: String?) {
         let host = gateway.host.isEmpty ? "localhost" : gateway.host
         let port = gateway.port > 0 ? gateway.port : 19001
@@ -393,6 +744,92 @@ struct LobbyView: View {
             return poller.lastRefreshError ?? "Geen actieve verbinding met de echte backend."
         }
         return nil
+    }
+}
+
+private struct ExtensionProposalCard: View {
+    let proposal: ExtensionProposal
+    let isActionInFlight: Bool
+    let onApprove: () -> Void
+    let onReject: () -> Void
+    let onInspectManifest: () -> Void
+
+    private var riskColor: Color {
+        switch proposal.risk.lowercased() {
+        case "green":
+            return .green
+        case "orange":
+            return .orange
+        case "red":
+            return .red
+        default:
+            return .secondary
+        }
+    }
+
+    private var capabilitySummary: String {
+        if proposal.capabilities.isEmpty {
+            return "Geen capabilities"
+        }
+        return proposal.capabilities.map(\.title).joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(proposal.title)
+                    .font(.jeevesHeadline)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Spacer()
+                Text(proposal.risk.uppercased())
+                    .font(.jeevesCaption)
+                    .foregroundStyle(riskColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(riskColor.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+
+            detailRow(label: TextKeys.Lobby.extensionPurpose, value: proposal.purpose)
+            detailRow(label: TextKeys.Lobby.extensionCapabilities, value: capabilitySummary)
+            detailRow(label: TextKeys.Lobby.extensionSource, value: proposal.sourceType ?? "unknown")
+            detailRow(label: TextKeys.Lobby.extensionCodeHash, value: proposal.codeHash)
+
+            HStack(spacing: 8) {
+                Button(TextKeys.Lobby.approve, action: onApprove)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.consentGreen)
+                    .disabled(isActionInFlight)
+
+                Button(TextKeys.Lobby.deny, action: onReject)
+                    .buttonStyle(.bordered)
+                    .tint(.consentRed)
+                    .disabled(isActionInFlight)
+
+                Button(TextKeys.Lobby.inspectManifest, action: onInspectManifest)
+                    .buttonStyle(.bordered)
+                    .disabled(isActionInFlight)
+
+                if isActionInFlight {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+        }
+        .controlRoomPanel(padding: 14)
+    }
+
+    private func detailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 92, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .lineLimit(2)
+        }
     }
 }
 
@@ -437,6 +874,7 @@ private struct DecidedProposalRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(decision.title)
                     .font(.jeevesBody)
+                    .foregroundStyle(.white)
                     .lineLimit(2)
 
                 HStack(spacing: 8) {
@@ -471,9 +909,7 @@ private struct DecidedProposalRow: View {
                 .foregroundStyle(.tertiary)
                 .font(.caption)
         }
-        .padding(12)
-        .background(Color(.secondarySystemFill).opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .controlRoomPanel(padding: 12)
     }
 }
 
@@ -486,16 +922,21 @@ private struct DecisionDetailSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    decisionHeader
-                    decisionMetadata
-                    if decision.action != nil {
-                        Divider()
-                        decisionActionSection
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        decisionHeader
+                        decisionMetadata
+                        if decision.action != nil {
+                            Divider().overlay(Color.white.opacity(0.12))
+                            decisionActionSection
+                        }
                     }
+                    .controlRoomPanel()
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle(TextKeys.Lobby.recentDecisions)
             #if os(iOS)
@@ -520,6 +961,7 @@ private struct DecisionDetailSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(decision.title)
                     .font(.jeevesHeadline)
+                    .foregroundStyle(.white)
                 Text(label)
                     .font(.jeevesCaption)
                     .foregroundStyle(color)
@@ -575,7 +1017,7 @@ private struct DecisionDetailSheet: View {
             .font(.jeevesBody)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemFill).opacity(0.5))
+            .background(Color.white.opacity(0.06))
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
         if let duration = receipt.durationMs {
@@ -613,7 +1055,7 @@ private struct DecisionDetailSheet: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(10)
-        .background(Color(.secondarySystemFill).opacity(0.3))
+        .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -656,15 +1098,6 @@ private struct SwipeCard: View {
         }
     }
 
-    private var riskBackground: Color {
-        switch proposal.intent.risk {
-        case "green": return .green.opacity(0.15)
-        case "orange": return .orange.opacity(0.15)
-        case "red": return .red.opacity(0.15)
-        default: return Color(.secondarySystemFill)
-        }
-    }
-
     private var riskEmoji: String {
         switch proposal.intent.risk {
         case "green": return "\u{1F7E2}"
@@ -688,6 +1121,7 @@ private struct SwipeCard: View {
                 Text(riskEmoji)
                 Text(proposal.agentId)
                     .font(.jeevesHeadline)
+                    .foregroundStyle(.white)
                 Spacer()
                 if let score = proposal.priorityScore, score > 0 {
                     Text("P\(Int(score))")
@@ -707,6 +1141,7 @@ private struct SwipeCard: View {
 
             Text(proposal.title)
                 .font(.jeevesBody)
+                .foregroundStyle(.white)
 
             if let explanation = proposal.priorityExplanation, !explanation.isEmpty {
                 Text(explanation)
@@ -738,9 +1173,15 @@ private struct SwipeCard: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(riskBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(riskColor.opacity(0.55), lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
         .opacity(opacity)
         .offset(offset)
         .rotationEffect(.degrees(Double(offset.width) / 20))
@@ -794,20 +1235,25 @@ private struct ActionReceiptSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    receiptHeader
-                    receiptMetadata
-                    if action.receipt != nil {
-                        Divider()
-                        receiptDetailsSection
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        receiptHeader
+                        receiptMetadata
+                        if action.receipt != nil {
+                            Divider().overlay(Color.white.opacity(0.12))
+                            receiptDetailsSection
+                        }
+                        if !linkedKnowledge.isEmpty {
+                            Divider().overlay(Color.white.opacity(0.12))
+                            linkedKnowledgeSection
+                        }
                     }
-                    if !linkedKnowledge.isEmpty {
-                        Divider()
-                        linkedKnowledgeSection
-                    }
+                    .controlRoomPanel()
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle(TextKeys.Lobby.actionReceipt)
             #if os(iOS)
@@ -831,6 +1277,7 @@ private struct ActionReceiptSheet: View {
                 .font(.title)
             Text(label)
                 .font(.jeevesHeadline)
+                .foregroundStyle(.white)
         }
     }
 
@@ -852,7 +1299,7 @@ private struct ActionReceiptSheet: View {
                     .font(.jeevesBody)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemFill).opacity(0.5))
+                    .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 receiptExtraFields(receipt: receipt)
@@ -902,7 +1349,7 @@ private struct ActionReceiptSheet: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(10)
-        .background(Color(.secondarySystemFill).opacity(0.3))
+        .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -964,7 +1411,7 @@ private struct KnowledgeObjectCard: View {
 
                 Text(object.title)
                     .font(.jeevesBody)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
@@ -976,7 +1423,11 @@ private struct KnowledgeObjectCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(kindColor.opacity(0.08))
+            .background(Color.white.opacity(0.05))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(kindColor.opacity(0.35), lineWidth: 1)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
@@ -992,69 +1443,74 @@ private struct KnowledgeGraphSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading {
-                    VStack(spacing: 16) {
-                        ProgressView()
-                        Text("Kennisgraaf laden...")
-                            .font(.jeevesCaption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let graph = graphData {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Root object
-                            if let root = graph.root {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(TextKeys.Lobby.rootObject)
-                                        .font(.jeevesHeadline)
-                                    KnowledgeObjectCard(object: root, onTap: {})
-                                }
-                            }
+            ZStack {
+                ControlRoomBackdrop()
 
-                            // Linked objects
-                            if let linked = graph.linked, !linked.isEmpty {
-                                Divider()
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text(TextKeys.Lobby.linkedObjects)
+                Group {
+                    if isLoading {
+                        VStack(spacing: 16) {
+                            ProgressView()
+                            Text("Kennisgraaf laden...")
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let graph = graphData {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                if let root = graph.root {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(TextKeys.Lobby.rootObject)
                                             .font(.jeevesHeadline)
-                                        Text("\(linked.count)")
-                                            .font(.jeevesCaption)
+                                            .foregroundStyle(.white)
+                                        KnowledgeObjectCard(object: root, onTap: {})
+                                    }
+                                }
+
+                                if let linked = graph.linked, !linked.isEmpty {
+                                    Divider().overlay(Color.white.opacity(0.12))
+
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text(TextKeys.Lobby.linkedObjects)
+                                                .font(.jeevesHeadline)
+                                                .foregroundStyle(.white)
+                                            Text("\(linked.count)")
+                                                .font(.jeevesCaption)
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        ForEach(linked) { obj in
+                                            KnowledgeObjectCard(object: obj, onTap: {})
+                                        }
+                                    }
+                                } else {
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "circle.dotted")
+                                            .font(.title2)
+                                            .foregroundStyle(.secondary)
+                                        Text(TextKeys.Lobby.noLinkedObjects)
+                                            .font(.jeevesBody)
                                             .foregroundStyle(.secondary)
                                     }
-
-                                    ForEach(linked) { obj in
-                                        KnowledgeObjectCard(object: obj, onTap: {})
-                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 20)
                                 }
-                            } else {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "circle.dotted")
-                                        .font(.title2)
-                                        .foregroundStyle(.secondary)
-                                    Text(TextKeys.Lobby.noLinkedObjects)
-                                        .font(.jeevesBody)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
                             }
+                            .controlRoomPanel()
+                            .padding()
                         }
-                        .padding()
+                    } else {
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.title)
+                                .foregroundStyle(.secondary)
+                            Text("Kennisgraaf niet beschikbaar.")
+                                .font(.jeevesBody)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.title)
-                            .foregroundStyle(.secondary)
-                        Text("Kennisgraaf niet beschikbaar.")
-                            .font(.jeevesBody)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .navigationTitle(TextKeys.Lobby.knowledgeGraph)
@@ -1067,5 +1523,59 @@ private struct KnowledgeGraphSheet: View {
                 }
             }
         }
+    }
+}
+
+private struct ControlRoomBackdrop: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.04, green: 0.07, blue: 0.11),
+                    Color(red: 0.02, green: 0.03, blue: 0.06),
+                    Color(red: 0.01, green: 0.02, blue: 0.04)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RadialGradient(
+                colors: [Color.jeevesGold.opacity(0.16), .clear],
+                center: .topTrailing,
+                startRadius: 10,
+                endRadius: 420
+            )
+
+            RadialGradient(
+                colors: [Color.blue.opacity(0.14), .clear],
+                center: .bottomLeading,
+                startRadius: 20,
+                endRadius: 480
+            )
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct ControlRoomPanelModifier: ViewModifier {
+    var padding: CGFloat = 16
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                    )
+            )
+    }
+}
+
+private extension View {
+    func controlRoomPanel(padding: CGFloat = 16) -> some View {
+        modifier(ControlRoomPanelModifier(padding: padding))
     }
 }

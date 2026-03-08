@@ -45,6 +45,20 @@ enum TextKeys {
         static let rootObject = "Hoofdobject"
         static let linkedObjects = "Gekoppelde objecten"
         static let noLinkedObjects = "Geen gekoppelde objecten."
+        static let extensionProposals = "Extension Proposals"
+        static let noExtensionProposals = "Geen extensionvoorstellen."
+        static let extensionDemoFallback = "Demo extensionvoorstellen actief (backend onbereikbaar)."
+        static let inspectManifest = "Inspect Manifest"
+        static let extensionPurpose = "Doel"
+        static let extensionCapabilities = "Capabilities"
+        static let extensionRisk = "Risico"
+        static let extensionEntrypoint = "Entrypoint"
+        static let extensionSource = "Bron"
+        static let extensionCodeHash = "Code-hash"
+        static let extensionAuditTrail = "Audit trail"
+        static let extensionKnowledgeLinks = "Knowledge links"
+        static let extensionReceipt = "Extension receipt"
+        static let extensionGraph = "Inspect Knowledge Graph"
     }
 
     enum Seed {
