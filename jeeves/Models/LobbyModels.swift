@@ -114,7 +114,60 @@ struct ActionReceipt: Codable, Identifiable {
     let executionState: String
     let resultSummary: String
     let durationMs: Double?
+    let resultType: String?
+    let outputObjectIds: [String]?
+    let notes: String?
     var id: String { receiptId }
+}
+
+// MARK: - Decided Proposals
+
+struct DecidedProposal: Codable, Identifiable {
+    let proposalId: String
+    let title: String
+    let agentId: String
+    let status: String
+    let decidedAtIso: String?
+    let decisionReason: String?
+    let intent: ProposalIntent?
+    let priorityScore: Double?
+    let action: ActionSummary?
+    var id: String { proposalId }
+
+    var isApproved: Bool { status == "approved" }
+    var isDenied: Bool { status == "denied" }
+
+    var decidedAt: Date? {
+        guard let iso = decidedAtIso else { return nil }
+        return ISO8601DateFormatter().date(from: iso)
+    }
+}
+
+struct DecidedProposalsEnvelope: Decodable {
+    let proposals: [DecidedProposal]?
+    let items: [DecidedProposal]?
+    let data: [DecidedProposal]?
+    let ok: Bool?
+
+    var resolved: [DecidedProposal] {
+        proposals ?? items ?? data ?? []
+    }
+}
+
+// MARK: - Knowledge Graph
+
+struct KnowledgeGraphResponse: Decodable {
+    let ok: Bool?
+    let root: KnowledgeObject?
+    let linked: [KnowledgeObject]?
+    let edges: [KnowledgeEdge]?
+}
+
+struct KnowledgeEdge: Codable, Identifiable {
+    let fromId: String
+    let toId: String
+    let relation: String?
+    var id: String { "\(fromId)->\(toId)" }
 }
 
 struct KnowledgeObject: Codable, Identifiable {

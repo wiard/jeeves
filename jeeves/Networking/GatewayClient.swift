@@ -61,6 +61,27 @@ actor GatewayClient {
         return envelope.objects ?? []
     }
 
+    func fetchDecidedProposals(limit: Int = 20) async throws -> [DecidedProposal] {
+        let boundedLimit = max(1, min(limit, 100))
+        let (data, _) = try await request(
+            path: "/api/agents/proposals/decided",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
+        if let direct = try? decoder.decode([DecidedProposal].self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(DecidedProposalsEnvelope.self, from: data) {
+            return envelope.resolved
+        }
+        return []
+    }
+
+    func fetchKnowledgeGraph(objectId: String) async throws -> KnowledgeGraphResponse {
+        try await get("/api/knowledge/objects/\(objectId)/graph")
+    }
+
     func fetchEmergence() async throws -> [EmergenceCluster] {
         let snapshot = try await fetchObservatorySnapshot(proposals: [])
 

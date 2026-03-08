@@ -17,8 +17,10 @@ final class ProposalPoller {
 
     var proposals: [Proposal] = []
     var pendingProposals: [Proposal] = []
+    var decidedProposals: [DecidedProposal] = []
     var recentKnowledgeObjects: [KnowledgeObject] = []
     var lastActionReceipt: ActionSummary?
+    var lastDecideLinkedKnowledge: [KnowledgeObject] = []
     var emergenceClusters: [EmergenceCluster] = []
     var streamEvents: [ObservatoryStreamEvent] = []
     var radarStatus: RadarStatusSnapshot?
@@ -226,6 +228,16 @@ final class ProposalPoller {
         } catch {}
 
         do {
+            let decided = try await client.fetchDecidedProposals(limit: 20)
+            decidedProposals = decided
+            observedSuccessfulResponse = true
+        } catch {
+            #if DEBUG
+            print("[Jeeves][ProposalPoller] decided proposals fetch failed: \(error)")
+            #endif
+        }
+
+        do {
             let snapshot = try await client.fetchObservatorySnapshot(proposals: proposals)
             observedSuccessfulResponse = true
             observatorySnapshot = snapshot
@@ -269,6 +281,7 @@ final class ProposalPoller {
             streamEvents = []
             emergenceClusters = []
             recentKnowledgeObjects = []
+            decidedProposals = []
             radarStatus = nil
             radarActivations = []
             radarCollisions = []
@@ -379,6 +392,24 @@ final class ProposalPoller {
         do {
             let response = try await client.decideProposal(proposalId: proposalId, decision: decision, reason: reason)
             if response.ok {
+                if let action = response.action {
+                    lastActionReceipt = action
+                    // Fetch linked knowledge for output objects
+                    if let outputIds = action.receipt?.outputObjectIds, !outputIds.isEmpty {
+                        var linked: [KnowledgeObject] = []
+                        for objId in outputIds.prefix(5) {
+                            if let graph = try? await client.fetchKnowledgeGraph(objectId: objId) {
+                                if let root = graph.root { linked.append(root) }
+                            }
+                        }
+                        lastDecideLinkedKnowledge = linked
+                    } else {
+                        lastDecideLinkedKnowledge = []
+                    }
+                } else {
+                    lastActionReceipt = nil
+                    lastDecideLinkedKnowledge = []
+                }
                 await refresh(gateway: gateway)
                 return .success
             }
@@ -532,6 +563,7 @@ final class ProposalPoller {
 
         proposals = demoProposals(tick: demoTick)
         pendingProposals = proposals.filter(\.isPending)
+        decidedProposals = demoDecidedProposals(tick: demoTick)
         NotificationManager.shared.updateBadge(count: pendingProposals.count)
 
         let escalated = snapshot.collisions
@@ -596,6 +628,75 @@ final class ProposalPoller {
         return [orange, green, denied].sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
     }
 
+    private func demoDecidedProposals(tick: Int) -> [DecidedProposal] {
+        let now = Date()
+        return [
+            DecidedProposal(
+                proposalId: "decided-1",
+                title: "Summarize daily knowledge residue",
+                agentId: "observer.loop",
+                status: "approved",
+                decidedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-600)),
+                decisionReason: "Goedgekeurd door Jeeves iPhone",
+                intent: ProposalIntent(kind: "analysis", key: "residue_summary", risk: "green", requiresConsent: false),
+                priorityScore: 42,
+                action: ActionSummary(
+                    actionId: "demo-action-1",
+                    actionKind: "analysis",
+                    executionState: "completed",
+                    receipt: ActionReceipt(
+                        receiptId: "demo-receipt-1",
+                        actionId: "demo-action-1",
+                        completedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-590)),
+                        executionState: "completed",
+                        resultSummary: "Residue samenvatting gegenereerd met 12 signalen verwerkt.",
+                        durationMs: 1240,
+                        resultType: "report",
+                        outputObjectIds: ["ko-demo-1"],
+                        notes: nil
+                    )
+                )
+            ),
+            DecidedProposal(
+                proposalId: "decided-2",
+                title: "Cross-domain anomaly probe",
+                agentId: "observer.fabric",
+                status: "denied",
+                decidedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-1200)),
+                decisionReason: "Afgewezen door Jeeves iPhone",
+                intent: ProposalIntent(kind: "analysis", key: "anomaly_probe", risk: "orange", requiresConsent: true),
+                priorityScore: 68,
+                action: nil
+            ),
+            DecidedProposal(
+                proposalId: "decided-3",
+                title: "Emit discovery paper brief",
+                agentId: "observer.radar",
+                status: "approved",
+                decidedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-3600)),
+                decisionReason: "Goedgekeurd door Jeeves iPhone",
+                intent: ProposalIntent(kind: "emit", key: "paper_brief", risk: "green", requiresConsent: false),
+                priorityScore: 55,
+                action: ActionSummary(
+                    actionId: "demo-action-3",
+                    actionKind: "emit",
+                    executionState: "completed",
+                    receipt: ActionReceipt(
+                        receiptId: "demo-receipt-3",
+                        actionId: "demo-action-3",
+                        completedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-3580)),
+                        executionState: "completed",
+                        resultSummary: "Paper brief verzonden naar kennisgraaf.",
+                        durationMs: 860,
+                        resultType: "knowledge_object",
+                        outputObjectIds: nil,
+                        notes: "Cross-domain relevance detected"
+                    )
+                )
+            ),
+        ]
+    }
+
     private func applyDemoDecision(proposalId: String, decision: String) {
         guard let index = proposals.firstIndex(where: { $0.proposalId == proposalId }) else { return }
 
@@ -615,6 +716,31 @@ final class ProposalPoller {
 
         proposals[index] = updated
         pendingProposals = proposals.filter(\.isPending)
+
+        if decision == "approve" {
+            let now = Date()
+            let isoNow = ISO8601DateFormatter().string(from: now)
+            lastActionReceipt = ActionSummary(
+                actionId: "demo-action-\(proposalId)",
+                actionKind: current.intent.kind,
+                executionState: "completed",
+                receipt: ActionReceipt(
+                    receiptId: "demo-receipt-\(proposalId)",
+                    actionId: "demo-action-\(proposalId)",
+                    completedAtIso: isoNow,
+                    executionState: "completed",
+                    resultSummary: "Actie '\(current.title)' succesvol uitgevoerd.",
+                    durationMs: 980,
+                    resultType: "report",
+                    outputObjectIds: nil,
+                    notes: nil
+                )
+            )
+            lastDecideLinkedKnowledge = []
+        } else {
+            lastActionReceipt = nil
+            lastDecideLinkedKnowledge = []
+        }
 
         let newDecision = JeevesDecisionEvent(
             id: "demo-decision-\(UUID().uuidString)",
