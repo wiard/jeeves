@@ -310,11 +310,45 @@ struct KnowledgeObjectsEnvelope: Decodable {
     let objects: [KnowledgeObject]?
 }
 
-enum AnyCodableValue: Codable {
+struct IncomingToolEvidenceRef: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let value: String
+    let url: String?
+
+    init(label: String, value: String, url: String? = nil, id: String? = nil) {
+        self.label = label
+        self.value = value
+        self.url = url
+        self.id = id ?? "\(label.lowercased())-\(value.lowercased())"
+    }
+}
+
+struct IncomingToolSummary: Identifiable, Hashable {
+    let id: String
+    let objectId: String
+    let title: String
+    let source: String
+    let intentSummary: String
+    let capabilitySummary: String
+    let capabilities: [String]
+    let risk: String
+    let suggestedRefinement: String
+    let linkedCells: [String]
+    let explanation: String
+    let discoveryOrigin: String
+    let weakPoints: String
+    let evidenceRefs: [IncomingToolEvidenceRef]
+    let lineageHint: String
+}
+
+indirect enum AnyCodableValue: Codable {
     case string(String)
     case int(Int)
     case double(Double)
     case bool(Bool)
+    case array([AnyCodableValue])
+    case object([String: AnyCodableValue])
     case null
 
     init(from decoder: Decoder) throws {
@@ -323,6 +357,8 @@ enum AnyCodableValue: Codable {
         else if let v = try? container.decode(Int.self) { self = .int(v) }
         else if let v = try? container.decode(Double.self) { self = .double(v) }
         else if let v = try? container.decode(String.self) { self = .string(v) }
+        else if let v = try? container.decode([AnyCodableValue].self) { self = .array(v) }
+        else if let v = try? container.decode([String: AnyCodableValue].self) { self = .object(v) }
         else { self = .null }
     }
 
@@ -333,7 +369,55 @@ enum AnyCodableValue: Codable {
         case .int(let v): try container.encode(v)
         case .double(let v): try container.encode(v)
         case .bool(let v): try container.encode(v)
+        case .array(let v): try container.encode(v)
+        case .object(let v): try container.encode(v)
         case .null: try container.encodeNil()
+        }
+    }
+}
+
+extension AnyCodableValue {
+    var scalarStringValue: String? {
+        switch self {
+        case .string(let value):
+            return value
+        case .int(let value):
+            return "\(value)"
+        case .double(let value):
+            return String(format: "%.2f", value)
+        case .bool(let value):
+            return value ? "true" : "false"
+        case .array, .object, .null:
+            return nil
+        }
+    }
+
+    var stringArrayValue: [String]? {
+        switch self {
+        case .array(let values):
+            let normalized = values.compactMap(\.scalarStringValue).map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return normalized.filter { !$0.isEmpty }
+        case .string(let value):
+            let chunks = value
+                .replacingOccurrences(of: "|", with: ",")
+                .replacingOccurrences(of: "/", with: ",")
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            return chunks.isEmpty ? nil : chunks
+        case .int(let value):
+            return ["\(value)"]
+        case .double(let value):
+            return [String(format: "%.2f", value)]
+        case .bool(let value):
+            return [value ? "true" : "false"]
+        case .object(let object):
+            let flattened = object.values.compactMap(\.scalarStringValue)
+            return flattened.isEmpty ? nil : flattened
+        case .null:
+            return nil
         }
     }
 }

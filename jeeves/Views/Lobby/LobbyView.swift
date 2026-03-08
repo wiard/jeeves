@@ -4,6 +4,7 @@ struct LobbyView: View {
     private enum MissionZone {
         case system
         case radar
+        case incomingTools
         case decisions
         case knowledge
 
@@ -11,6 +12,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "SYSTEM"
             case .radar: return "RADAR"
+            case .incomingTools: return "INCOMING TOOLS"
             case .decisions: return "DECISIONS"
             case .knowledge: return "KNOWLEDGE"
             }
@@ -20,6 +22,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "Terminal telemetry"
             case .radar: return "Radar — Emerging Signals"
+            case .incomingTools: return "Forensic intake workbench"
             case .decisions: return "Governed approvals"
             case .knowledge: return "Resulting knowledge"
             }
@@ -29,6 +32,7 @@ struct LobbyView: View {
             switch self {
             case .system: return .blue
             case .radar: return .cyan
+            case .incomingTools: return .cyan
             case .decisions: return .jeevesGold
             case .knowledge: return .consentGreen
             }
@@ -38,6 +42,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "terminal"
             case .radar: return "dot.radiowaves.left.and.right"
+            case .incomingTools: return "shippingbox"
             case .decisions: return "checkmark.shield"
             case .knowledge: return "book.closed"
             }
@@ -92,6 +97,7 @@ struct LobbyView: View {
     @State private var showKnowledgeGraph = false
     @State private var loadingKnowledgeGraph = false
     @State private var selectedRadarSignal: RadarSignalSummary?
+    @State private var selectedIncomingTool: IncomingToolSummary?
     @State private var decidingExtensionId: String?
     @State private var loadingManifestExtensionId: String?
     @State private var extensionActionErrorMessage: String?
@@ -138,6 +144,7 @@ struct LobbyView: View {
                     VStack(spacing: 20) {
                         systemZoneSection
                         radarZoneSection
+                        incomingToolsZoneSection
                         decisionsZoneSection
                         knowledgeZoneSection
                     }
@@ -211,6 +218,16 @@ struct LobbyView: View {
                     }
                 )
             }
+            .sheet(item: $selectedIncomingTool) { tool in
+                IncomingToolDetailSheet(
+                    tool: tool,
+                    relatedProposals: relatedExtensionProposals(for: tool),
+                    onOpenApprovalCard: { proposal in
+                        selectedIncomingTool = nil
+                        inspectExtensionManifest(proposal)
+                    }
+                )
+            }
             .sheet(item: $selectedExtensionManifest) { manifest in
                 ExtensionDetailSheet(
                     manifest: manifest,
@@ -260,6 +277,13 @@ struct LobbyView: View {
             triageSections
             pendingQueueSection
             extensionProposalsSection
+        }
+    }
+
+    private var incomingToolsZoneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            zoneHeader(.incomingTools)
+            incomingToolsSection
         }
     }
 
@@ -1200,6 +1224,388 @@ struct LobbyView: View {
         return "action-pipeline"
     }
 
+    // MARK: - Incoming Tools
+
+    private var incomingToolsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Incoming Tools",
+                icon: "shippingbox.fill",
+                count: incomingTools.count,
+                tint: .cyan
+            )
+
+            if incomingTools.isEmpty {
+                incomingToolsEmptyCard
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(incomingTools) { tool in
+                        IncomingToolCard(tool: tool) {
+                            selectedIncomingTool = tool
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var incomingTools: [IncomingToolSummary] {
+        let derived = poller.recentKnowledgeObjects
+            .filter(isIncomingToolKnowledgeObject(_:))
+            .map(incomingToolSummary(from:))
+            .sorted { lhs, rhs in
+                if lhs.risk != rhs.risk {
+                    return incomingRiskRank(lhs.risk) > incomingRiskRank(rhs.risk)
+                }
+                return lhs.title < rhs.title
+            }
+
+        if !derived.isEmpty {
+            return derived
+        }
+
+        if isMockMode || poller.extensionUsesDemoFallback {
+            return pendingExtensionProposals.prefix(3).map { proposal in
+                IncomingToolSummary(
+                    id: "mock-tool-\(proposal.extensionId)",
+                    objectId: proposal.extensionId,
+                    title: proposal.title,
+                    source: triageExtensionSourceLabel(sourceType: proposal.sourceType),
+                    intentSummary: proposal.purpose,
+                    capabilitySummary: proposal.capabilities.map(\.title).joined(separator: ", "),
+                    capabilities: proposal.capabilities.map(\.title),
+                    risk: normalizeIncomingRisk(proposal.risk),
+                    suggestedRefinement: "Constrain to a narrow scoped workflow before promotion.",
+                    linkedCells: proposal.linkedCells,
+                    explanation: proposal.reasoningTrace ?? proposal.purpose,
+                    discoveryOrigin: "Mock discovery feed",
+                    weakPoints: "Demo fallback artifact",
+                    evidenceRefs: [],
+                    lineageHint: "Discovery -> Forensics -> Proposal"
+                )
+            }
+        }
+
+        return []
+    }
+
+    private var incomingToolsEmptyCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: "shippingbox")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("No incoming forensic tool artifacts.")
+                    .font(.jeevesBody)
+                    .foregroundStyle(.secondary)
+            }
+            if !isMockMode, let error = poller.lastRefreshError, !error.isEmpty {
+                Text(error)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .controlRoomPanel()
+    }
+
+    private func isIncomingToolKnowledgeObject(_ object: KnowledgeObject) -> Bool {
+        let kind = object.kind.lowercased()
+        let toolLikeKinds = [
+            "forensic_tool",
+            "incoming_tool",
+            "tool_candidate",
+            "tool_profile",
+            "forensics",
+            "repository_candidate",
+            "agent_candidate",
+            "extension_candidate",
+            "governed_extension_candidate"
+        ]
+        if toolLikeKinds.contains(where: { kind.contains($0) }) {
+            return true
+        }
+        let titleSummary = "\(object.title) \(object.summary)".lowercased()
+        if titleSummary.contains("tool")
+            || titleSummary.contains("agent")
+            || titleSummary.contains("workflow")
+            || titleSummary.contains("repository")
+            || titleSummary.contains("forensic") {
+            return true
+        }
+        return metadataValue(
+            for: object,
+            keys: [
+                "tool_name",
+                "detected_tool",
+                "capabilities",
+                "capability_list",
+                "suggested_refinement",
+                "weak_points",
+                "evidence_refs"
+            ]
+        ) != nil
+    }
+
+    private func incomingToolSummary(from object: KnowledgeObject) -> IncomingToolSummary {
+        let title = metadataString(
+            for: object,
+            keys: ["tool_name", "detected_tool", "name", "title"]
+        ) ?? object.title
+
+        let source = readableIncomingSource(
+            metadataString(for: object, keys: ["source", "source_type", "origin_source"])
+                ?? object.sourceRefs?.first?.sourceType
+                ?? object.sourceRefs?.first?.label
+                ?? "CLASHD27 discovery"
+        )
+
+        let intentSummary = metadataString(
+            for: object,
+            keys: ["intent_summary", "purpose", "intent", "proposal_intent"]
+        ) ?? object.summary
+
+        let capabilities = metadataStrings(
+            for: object,
+            keys: ["capabilities", "capability_list", "detected_capabilities"]
+        )
+        let capabilitySummary = capabilities.isEmpty
+            ? "No explicit capabilities captured."
+            : capabilities.prefix(4).joined(separator: ", ")
+
+        let risk = normalizeIncomingRisk(
+            metadataString(for: object, keys: ["risk", "risk_level", "risk_classification"])
+                ?? object.summary
+        )
+
+        let suggestedRefinement = metadataString(
+            for: object,
+            keys: ["suggested_refinement", "refinement", "improvement", "recommended_scope"]
+        ) ?? "Scope this tool to one governed task before promotion."
+
+        var linkedCells = metadataStrings(
+            for: object,
+            keys: ["linked_cells", "cube_cells", "cells"]
+        )
+        if linkedCells.isEmpty,
+           let linked = object.linkedObjectIds?.filter({ $0.localizedCaseInsensitiveContains("cell") }),
+           !linked.isEmpty {
+            linkedCells = linked
+        }
+        if linkedCells.isEmpty {
+            linkedCells = triageCells(fromText: "\(object.summary) \(title)")
+        }
+        linkedCells = Array(uniqueStrings(linkedCells).prefix(4))
+
+        let explanation = metadataString(
+            for: object,
+            keys: ["explanation", "why_matters", "forensic_summary", "governance_reason"]
+        ) ?? object.summary
+
+        let discoveryOrigin = metadataString(
+            for: object,
+            keys: ["discovery_origin", "origin", "feed", "signal_origin"]
+        ) ?? object.sourceRefs?.first?.label
+            ?? object.sourceRefs?.first?.sourceId
+            ?? "CLASHD27 signal"
+
+        let weakPoints = metadataString(
+            for: object,
+            keys: ["weak_points", "limitations", "concerns"]
+        ) ?? "Not yet documented."
+
+        let evidenceRefs = incomingEvidenceRefs(for: object)
+        let lineageHint = incomingLineageHint(for: object)
+
+        return IncomingToolSummary(
+            id: object.objectId,
+            objectId: object.objectId,
+            title: title,
+            source: source,
+            intentSummary: intentSummary,
+            capabilitySummary: capabilitySummary,
+            capabilities: capabilities,
+            risk: risk,
+            suggestedRefinement: suggestedRefinement,
+            linkedCells: linkedCells,
+            explanation: explanation,
+            discoveryOrigin: discoveryOrigin,
+            weakPoints: weakPoints,
+            evidenceRefs: evidenceRefs,
+            lineageHint: lineageHint
+        )
+    }
+
+    private func incomingEvidenceRefs(for object: KnowledgeObject) -> [IncomingToolEvidenceRef] {
+        var refs: [IncomingToolEvidenceRef] = []
+
+        for source in object.sourceRefs ?? [] {
+            let label = source.label ?? source.sourceType.uppercased()
+            refs.append(
+                IncomingToolEvidenceRef(
+                    label: label,
+                    value: source.sourceId,
+                    url: source.url,
+                    id: "\(object.objectId)-source-\(source.sourceId)"
+                )
+            )
+        }
+
+        let extra = metadataStrings(
+            for: object,
+            keys: ["evidence_refs", "evidence", "references", "sources"]
+        )
+        for (index, value) in extra.prefix(4).enumerated() {
+            let normalizedURL = value.hasPrefix("http://") || value.hasPrefix("https://") ? value : nil
+            refs.append(
+                IncomingToolEvidenceRef(
+                    label: "Evidence",
+                    value: value,
+                    url: normalizedURL,
+                    id: "\(object.objectId)-evidence-\(index)"
+                )
+            )
+        }
+
+        if refs.isEmpty {
+            refs.append(
+                IncomingToolEvidenceRef(
+                    label: "Evidence",
+                    value: "No explicit references provided.",
+                    id: "\(object.objectId)-evidence-empty"
+                )
+            )
+        }
+        return refs
+    }
+
+    private func incomingLineageHint(for object: KnowledgeObject) -> String {
+        if let linked = object.linkedObjectIds, !linked.isEmpty {
+            let joined = linked.prefix(3).joined(separator: " -> ")
+            return "Related: \(joined)"
+        }
+        return "Discovery -> Forensics -> Proposal"
+    }
+
+    private func readableIncomingSource(_ value: String) -> String {
+        let normalized = value.lowercased()
+        if normalized.contains("clashd27") || normalized.contains("radar") {
+            return "CLASHD27 discovery"
+        }
+        if normalized.contains("github") {
+            return "GitHub"
+        }
+        if normalized.contains("openalex") {
+            return "OpenAlex"
+        }
+        if normalized.contains("semantic") {
+            return "Semantic Scholar"
+        }
+        if normalized.contains("system") {
+            return "System"
+        }
+        return value
+    }
+
+    private func normalizeIncomingRisk(_ value: String) -> String {
+        let normalized = value.lowercased()
+        if normalized.contains("red") || normalized.contains("high") {
+            return "red"
+        }
+        if normalized.contains("orange") || normalized.contains("amber") || normalized.contains("medium") {
+            return "orange"
+        }
+        if normalized.contains("green") || normalized.contains("low") {
+            return "green"
+        }
+        return "unknown"
+    }
+
+    private func incomingRiskRank(_ risk: String) -> Int {
+        switch risk {
+        case "red": return 3
+        case "orange": return 2
+        case "green": return 1
+        default: return 0
+        }
+    }
+
+    private func metadataValue(for object: KnowledgeObject, keys: [String]) -> AnyCodableValue? {
+        guard let metadata = object.metadata else { return nil }
+        let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+        for key in keys {
+            if let value = normalized[key.lowercased()] {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func metadataString(for object: KnowledgeObject, keys: [String]) -> String? {
+        guard let value = metadataValue(for: object, keys: keys),
+              let text = value.scalarStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else {
+            return nil
+        }
+        return text
+    }
+
+    private func metadataStrings(for object: KnowledgeObject, keys: [String]) -> [String] {
+        guard let value = metadataValue(for: object, keys: keys),
+              let values = value.stringArrayValue else {
+            return []
+        }
+        return uniqueStrings(values)
+    }
+
+    private func uniqueStrings(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var ordered: [String] = []
+        for value in values {
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { continue }
+            if seen.insert(normalized).inserted {
+                ordered.append(normalized)
+            }
+        }
+        return ordered
+    }
+
+    private func relatedExtensionProposals(for tool: IncomingToolSummary) -> [ExtensionProposal] {
+        let cells = Set(tool.linkedCells.map { $0.lowercased() })
+        let terms = Set(
+            (tool.title + " " + tool.intentSummary)
+                .lowercased()
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "_" && $0 != "-" })
+                .map(String.init)
+                .filter { $0.count >= 4 }
+        )
+
+        return poller.extensionProposals
+            .map { proposal -> (proposal: ExtensionProposal, score: Int) in
+                var score = 0
+                let proposalText = "\(proposal.title) \(proposal.purpose) \(proposal.reasoningTrace ?? "")".lowercased()
+                if proposal.linkedCells.map({ $0.lowercased() }).contains(where: { cells.contains($0) }) {
+                    score += 3
+                }
+                if terms.contains(where: { proposalText.contains($0) }) {
+                    score += 2
+                }
+                if normalizeIncomingRisk(proposal.risk) == tool.risk {
+                    score += 1
+                }
+                return (proposal, score)
+            }
+            .filter { $0.score > 0 }
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                return lhs.proposal.title < rhs.proposal.title
+            }
+            .map(\.proposal)
+            .prefix(3)
+            .map { $0 }
+    }
+
     // MARK: - Pending Queue
 
     @ViewBuilder
@@ -1991,6 +2397,262 @@ private struct RadarSignalDetailSheet: View {
 
             if relatedProposals.isEmpty {
                 Text("No linked extension proposal in queue yet.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(relatedProposals) { proposal in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(proposal.title)
+                            .font(.jeevesBody)
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+
+                        Text(proposal.purpose)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+
+                        HStack {
+                            Text("risk \(proposal.risk.lowercased())")
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Open approval card") {
+                                onOpenApprovalCard(proposal)
+                                dismiss()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+    }
+}
+
+private struct IncomingToolCard: View {
+    let tool: IncomingToolSummary
+    let onOpen: () -> Void
+
+    private var riskColor: Color {
+        switch tool.risk {
+        case "green":
+            return .green
+        case "orange":
+            return .orange
+        case "red":
+            return .red
+        default:
+            return .secondary
+        }
+    }
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(tool.title)
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                    Spacer()
+                    capsule(text: tool.source, tint: .cyan)
+                    capsule(text: tool.risk.uppercased(), tint: riskColor)
+                }
+
+                detailRow(label: "Intent", value: tool.intentSummary)
+                detailRow(label: "Capabilities", value: tool.capabilitySummary)
+                detailRow(label: "Suggested refinement", value: tool.suggestedRefinement)
+                if !tool.linkedCells.isEmpty {
+                    detailRow(label: "Cells", value: tool.linkedCells.joined(separator: ", "))
+                }
+
+                HStack(spacing: 8) {
+                    actionChip(title: "Reject", tint: .consentRed, enabled: false, action: {})
+                    actionChip(title: "Sandbox", tint: .consentOrange, enabled: false, action: {})
+                    actionChip(title: "Refine", tint: .cyan, enabled: true, action: onOpen)
+                    actionChip(title: "Promote", tint: .consentGreen, enabled: false, action: {})
+                }
+
+                Text("Reject/Sandbox/Promote wiring remains backend-governed. Open card to inspect first.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .controlRoomPanel(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func detailRow(label: String, value: String) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 118, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+        }
+    }
+
+    private func capsule(text: String, tint: Color) -> some View {
+        Text(text.uppercased())
+            .font(.jeevesCaption.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.15))
+            .clipShape(Capsule())
+    }
+
+    private func actionChip(title: String, tint: Color, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.jeevesCaption.weight(.medium))
+                .foregroundStyle(enabled ? tint : .secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background((enabled ? tint : Color.secondary).opacity(0.16))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+}
+
+private struct IncomingToolDetailSheet: View {
+    let tool: IncomingToolSummary
+    let relatedProposals: [ExtensionProposal]
+    let onOpenApprovalCard: (ExtensionProposal) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var riskColor: Color {
+        switch tool.risk {
+        case "green":
+            return .green
+        case "orange":
+            return .orange
+        case "red":
+            return .red
+        default:
+            return .secondary
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                ControlRoomBackdrop()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(tool.title)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+
+                        metadataRow(label: "Discovery origin", value: tool.discoveryOrigin)
+                        metadataRow(label: "Risk classification", value: tool.risk.uppercased(), tint: riskColor)
+                        metadataRow(label: "Intent", value: tool.intentSummary)
+                        metadataRow(label: "Capabilities", value: tool.capabilitySummary)
+                        metadataRow(label: "Linked cells", value: tool.linkedCells.isEmpty ? "none" : tool.linkedCells.joined(separator: ", "))
+                        metadataRow(label: "Weak points", value: tool.weakPoints)
+                        metadataRow(label: "Refinement", value: tool.suggestedRefinement)
+                        metadataRow(label: "Lineage hint", value: tool.lineageHint)
+
+                        if !tool.explanation.isEmpty {
+                            Text(tool.explanation)
+                                .font(.jeevesBody)
+                                .foregroundStyle(.secondary)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+
+                        evidenceSection
+                        relatedProposalSection
+                    }
+                    .controlRoomPanel()
+                    .padding()
+                }
+            }
+            .navigationTitle("Incoming Tool")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("OK") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func metadataRow(label: String, value: String, tint: Color = .white) -> some View {
+        HStack(alignment: .top) {
+            Text("\(label):")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 126, alignment: .leading)
+            Text(value)
+                .font(.jeevesMono)
+                .foregroundStyle(tint)
+        }
+    }
+
+    private var evidenceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Evidence refs")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            ForEach(tool.evidenceRefs) { reference in
+                if let urlString = reference.url, let url = URL(string: urlString) {
+                    Link(destination: url) {
+                        evidenceRow(reference: reference)
+                    }
+                } else {
+                    evidenceRow(reference: reference)
+                }
+            }
+        }
+    }
+
+    private func evidenceRow(reference: IncomingToolEvidenceRef) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(reference.label.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.cyan)
+            Text(reference.value)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer()
+            if reference.url != nil {
+                Image(systemName: "arrow.up.right.square")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var relatedProposalSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Related extension proposals")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+
+            if relatedProposals.isEmpty {
+                Text("No linked approval card is currently in queue.")
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
             } else {
@@ -3171,6 +3833,16 @@ private struct KnowledgeGraphSheet: View {
                     return String(format: "%.2f", number)
                 case .bool(let flag):
                     return flag ? "yes" : "no"
+                case .array(let values):
+                    let rendered = values.compactMap(\.scalarStringValue)
+                    if !rendered.isEmpty {
+                        return rendered.joined(separator: ", ")
+                    }
+                case .object(let values):
+                    let rendered = values.keys.sorted().joined(separator: ", ")
+                    if !rendered.isEmpty {
+                        return rendered
+                    }
                 case .null:
                     continue
                 }
