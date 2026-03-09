@@ -43,6 +43,7 @@ final class JeevesOrchestrator {
     /// Returns nil if the message is purely conversational.
     ///
     /// Priority: structured command → follow-up → NL classification → nil.
+    /// All directives pass through the policy layer before being returned.
     func resolve(
         text: String,
         readers: [ScreenStateReadable]
@@ -54,7 +55,7 @@ final class JeevesOrchestrator {
         // 1. Try structured command parse first
         if let command = JeevesCommandParser.parse(text),
            let directive = JeevesCommandRouter.route(command, readers: allReaders) {
-            return directive
+            return applyPolicy(to: directive)
         }
 
         // 2. Fall back to natural language classification
@@ -64,7 +65,7 @@ final class JeevesOrchestrator {
         //    narrow screen-based follow-up ("meer details", "vertel meer")
         if intent.isConversational, ctx.hasDirectiveContext {
             if let followUp = resolveFollowUp(text: text, context: ctx, readers: allReaders) {
-                return followUp
+                return applyPolicy(to: followUp)
             }
             return nil
         }
@@ -84,7 +85,7 @@ final class JeevesOrchestrator {
             summary: stateSummary
         )
 
-        return JeevesDirective(
+        let directive = JeevesDirective(
             intent: describeIntent(intent),
             destination: destination,
             section: section,
@@ -93,12 +94,56 @@ final class JeevesOrchestrator {
             reason: "Matched intent to \(destination.title)",
             confidence: 0.9
         )
+        return applyPolicy(to: directive)
     }
 
     /// Navigate to a directive. Sets activeDirective so ContentView reacts.
     func navigate(to directive: JeevesDirective) {
         session.recordDirective(directive)
         activeDirective = directive
+    }
+
+    // MARK: - Policy Enforcement
+
+    /// Single policy enforcement point for all directives.
+    /// Looks up the implied capability and evaluates the policy layer.
+    /// Returns the directive unchanged if allowed, or a modified directive
+    /// with an explanation if blocked/planned/governed.
+    private func applyPolicy(to directive: JeevesDirective) -> JeevesDirective? {
+        guard let capability = JeevesCapabilityRegistry.resolve(directive: directive) else {
+            return directive // Unknown capability, pass through
+        }
+
+        let decision = JeevesPolicyLayer.evaluate(capability: capability)
+
+        switch decision.mode {
+        case .allowed, .readOnlyOnly:
+            return directive
+
+        case .blocked, .planned:
+            // Stay in chat, show explanation instead of navigating
+            return JeevesDirective(
+                intent: directive.intent,
+                destination: .chat,
+                section: nil,
+                statePreset: .empty,
+                explanation: decision.operatorMessage,
+                reason: decision.reason,
+                confidence: 1.0
+            )
+
+        case .requiresApproval, .proposalOnly:
+            // Navigate to the screen but append governance notice
+            return JeevesDirective(
+                intent: directive.intent,
+                destination: directive.destination,
+                section: directive.section,
+                statePreset: directive.statePreset,
+                explanation: directive.explanation + " " + decision.operatorMessage,
+                reason: decision.reason,
+                confidence: directive.confidence
+            )
+        }
     }
 
     // MARK: - Intent Classification (keyword-based, v1)
