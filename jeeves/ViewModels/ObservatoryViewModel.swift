@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 @MainActor
-final class ObservatoryViewModel: ObservableObject {
+final class ObservatoryViewModel: ObservableObject, ScreenStateReadable {
     private static let localDefaultPort = 19001
     enum Section: CaseIterable {
         case loop
@@ -464,6 +464,44 @@ final class ObservatoryViewModel: ObservableObject {
     nonisolated private static func parsedIso(_ value: String?) -> Date {
         guard let value else { return .distantPast }
         return ISO8601DateFormatter().date(from: value) ?? .distantPast
+    }
+
+    // MARK: - ScreenStateReadable
+
+    var screenId: AppScreen { .observatory }
+
+    func summary() -> ScreenStateSummary {
+        guard let snap = snapshot else {
+            return ScreenStateSummary(
+                screen: .observatory,
+                headline: "Observatory nog niet geladen.",
+                itemCount: 0,
+                highlights: [],
+                isEmpty: true
+            )
+        }
+
+        var highlights: [String] = []
+        let collisions = snap.radarStatus?.store?.collisionCount ?? snap.radarCollisions.count
+        let activations = snap.radarStatus?.store?.activationCount ?? snap.radarActivations.count
+        let emergenceCount = snap.radarStatus?.store?.emergenceCount ?? snap.radarEmergence.count
+        let alertCount = snap.alerts.count
+        let signalsToday = snap.signals?.signalsToday ?? snap.signalsRuntime?.totalSignals ?? 0
+
+        if activations > 0 { highlights.append("\(activations) radar activaties") }
+        if collisions > 0 { highlights.append("\(collisions) botsingen") }
+        if emergenceCount > 0 { highlights.append("\(emergenceCount) emergence events") }
+        if alertCount > 0 { highlights.append("\(alertCount) alerts") }
+
+        let headline = "\(signalsToday) signalen, \(collisions) botsingen, \(alertCount) alerts."
+
+        return ScreenStateSummary(
+            screen: .observatory,
+            headline: headline,
+            itemCount: signalsToday + collisions + alertCount,
+            highlights: highlights,
+            isEmpty: signalsToday == 0 && collisions == 0 && alertCount == 0
+        )
     }
 
     nonisolated private static func demoSnapshot() -> ObservatoryDashboardSnapshot {

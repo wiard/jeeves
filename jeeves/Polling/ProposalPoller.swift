@@ -1413,3 +1413,34 @@ final class ProposalPoller {
         ])
     }
 }
+
+// MARK: - ScreenStateReadable
+
+extension ProposalPoller: ScreenStateReadable {
+    var screenId: AppScreen { .stream }
+
+    func summary() -> ScreenStateSummary {
+        let pending = pendingProposals.count
+        let clusters = emergenceClusters.count
+        let events = streamEvents.count
+
+        var highlights: [String] = []
+        if pending > 0 { highlights.append("\(pending) voorstellen wachten op goedkeuring") }
+        if clusters > 0 { highlights.append("\(clusters) emergence clusters") }
+
+        let headline: String
+        if pending > 0 {
+            headline = "\(pending) openstaande goedkeuringen, \(events) stream events."
+        } else {
+            headline = "Geen openstaande goedkeuringen. \(events) recente events."
+        }
+
+        return ScreenStateSummary(
+            screen: .stream,
+            headline: headline,
+            itemCount: pending + events,
+            highlights: highlights,
+            isEmpty: pending == 0 && events == 0 && clusters == 0
+        )
+    }
+}

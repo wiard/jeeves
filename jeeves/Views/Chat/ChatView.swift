@@ -6,6 +6,7 @@ struct ChatView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @Environment(JeevesOrchestrator.self) private var orchestrator
+    @Environment(ProposalPoller.self) private var poller
     @Query(sort: \ChatMessage.timestamp) private var messages: [ChatMessage]
     @State private var streamingText: String = ""
     @State private var isStreaming = false
@@ -123,7 +124,7 @@ struct ChatView: View {
         modelContext.insert(userMessage)
 
         // Ask orchestrator first — navigate if it recognises a screen intent
-        if let directive = orchestrator.resolve(text: text, readers: []) {
+        if let directive = orchestrator.resolve(text: text, readers: [poller]) {
             let explanation = ChatMessage(text: directive.explanation, sender: .jeeves)
             modelContext.insert(explanation)
             orchestrator.navigate(to: directive)

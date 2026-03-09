@@ -111,7 +111,11 @@ final class JeevesOrchestrator {
         case .checkRadar:       return .observatory
         case .viewFabric:       return .observatory
         case .viewKnowledge:    return .observatory
-        case .inspectSystem:    return .house
+        case .inspectSystem(let aspect):
+            switch aspect {
+            case .pressure, .signals, .emergence: return .observatory
+            default: return .house
+            }
         case .reviewPending:    return .stream
         case .searchAudit:      return .logbook
         case .manageExtensions: return .lobby
@@ -200,8 +204,14 @@ final class JeevesOrchestrator {
             base = "Ik open de Observatory op de Knowledge-sectie."
 
         case .inspectSystem(let aspect):
-            let aspectLabel = aspect?.rawValue.capitalized ?? "systeemstatus"
-            base = "Ik open het Huis-overzicht voor \(aspectLabel)."
+            switch aspect {
+            case .pressure, .signals, .emergence:
+                let label = aspect?.rawValue.capitalized ?? "druk"
+                base = "Ik open de Observatory voor \(label)-signalen."
+            default:
+                let label = aspect?.rawValue.capitalized ?? "systeemstatus"
+                base = "Ik open het Huis-overzicht voor \(label)."
+            }
 
         case .reviewPending:
             base = "Ik open Mission Control voor openstaande items."
