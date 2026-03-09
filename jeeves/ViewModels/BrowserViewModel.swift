@@ -247,21 +247,27 @@ final class BrowserViewModel {
     func searchCategory(domain: String, subdomain: String, risk: String, gateway: GatewayManager) {
         pendingSearchCategoryTask?.cancel()
         
-        pendingSearchCategoryTask = Task {
+        pendingSearchCategoryTask = Task { [weak self] in
+            guard let self else { return }
+
             do {
                 try await Task.sleep(nanoseconds: 300_000_000)
-                
-                let requestKey = "\(domain):\(subdomain):\(risk)"
-                if let existing = inflight[requestKey] {
-                    await existing.value
-                    return
-                }
-                
-                isLoading = true
-                errorMessage = nil
-                usingStaleFallbackFeed = false
+            } catch {
+                return
+            }
+            
+            let requestKey = "\(domain):\(subdomain):\(risk)"
+            if let existing = inflight[requestKey] {
+                await existing.value
+                return
+            }
+            
+            isLoading = true
+            errorMessage = nil
+            usingStaleFallbackFeed = false
 
-                let searchTask = Task {
+            let searchTask = Task {
+                do {
                     let client = makeSafeClashClient(gateway: gateway)
 
                     if let browserFeed = try? await client.fetchBrowserFeed(
@@ -297,23 +303,22 @@ final class BrowserViewModel {
                     emergingIntentions = emerging ?? []
                     isLoading = false
                     inflight.removeValue(forKey: requestKey)
-                }
-                
-                inflight[requestKey] = searchTask
-                await searchTask.value
-            } catch {
-                isLoading = false
-                let requestKey = "\(domain):\(subdomain):\(risk)"
-                inflight.removeValue(forKey: requestKey)
-                
-                if let fallback = cachedFallbackFeed, !fallback.certified.isEmpty {
-                    usingStaleFallbackFeed = true
-                    feed = fallback
-                    statusMessage = "Showing cached results (latest request failed)."
-                } else {
-                    errorMessage = describeError(error, gateway: gateway)
+                } catch {
+                    isLoading = false
+                    inflight.removeValue(forKey: requestKey)
+                    
+                    if let fallback = cachedFallbackFeed, !fallback.certified.isEmpty {
+                        usingStaleFallbackFeed = true
+                        feed = fallback
+                        statusMessage = "Showing cached results (latest request failed)."
+                    } else {
+                        errorMessage = describeError(error, gateway: gateway)
+                    }
                 }
             }
+            
+            inflight[requestKey] = searchTask
+            await searchTask.value
         }
     }
 
