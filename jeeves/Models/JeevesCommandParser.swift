@@ -32,22 +32,31 @@ enum JeevesCommandParser {
             return nil
         }
 
-        // Second token is the target
-        let target = tokens[1].lowercased()
-
-        // Remaining tokens are key=value arguments
+        // Parse non key=value words as positional tokens.
+        // The first positional token is the target; the rest are modifiers.
+        var positionals: [String] = []
         var arguments: [String: String] = [:]
-        for token in tokens.dropFirst(2) {
+        for token in tokens.dropFirst(1) {
             if let eqIndex = token.firstIndex(of: "=") {
                 let key = String(token[token.startIndex..<eqIndex]).lowercased()
                 let value = String(token[token.index(after: eqIndex)...])
                 if !key.isEmpty, !value.isEmpty {
                     arguments[key] = value
                 }
+            } else {
+                positionals.append(token.lowercased())
             }
         }
 
-        return JeevesCommand(verb: verb, target: target, arguments: arguments)
+        guard let target = positionals.first else { return nil }
+        let modifiers = Array(positionals.dropFirst())
+
+        return JeevesCommand(
+            verb: verb,
+            target: target,
+            modifiers: modifiers,
+            arguments: arguments
+        )
     }
 
     /// Split on whitespace, respecting quoted values (e.g. domain="some value").

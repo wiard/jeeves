@@ -55,6 +55,11 @@ enum JeevesCapabilityRegistry {
         "searchAudit":       "inspect_audit",
         "manageExtensions":  "open_lobby",
         "guidance:":         "explain_focus",
+        "explainability:context":       "explain_context",
+        "explainability:decision":      "explain_decision",
+        "explainability:why_screen":    "explain_screen_route",
+        "explainability:why_suggestion":"explain_suggestion",
+        "explainability:matched":       "explain_match",
     ]
 
     // MARK: - Catalog
@@ -228,6 +233,56 @@ enum JeevesCapabilityRegistry {
             requiresGovernance: false,
             mode: .readOnly,
             commandAliases: ["here", "hier", "capabilities", "mogelijkheden"]
+        ),
+        JeevesCapability(
+            id: "explain_context",
+            title: "Verklaar Context",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["explain context"]
+        ),
+        JeevesCapability(
+            id: "explain_decision",
+            title: "Verklaar Beslissing",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["explain decision"]
+        ),
+        JeevesCapability(
+            id: "explain_screen_route",
+            title: "Waarom Dit Scherm",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["why this screen"]
+        ),
+        JeevesCapability(
+            id: "explain_suggestion",
+            title: "Waarom Deze Suggestie",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["why this suggestion"]
+        ),
+        JeevesCapability(
+            id: "explain_match",
+            title: "Wat Matchte",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what matched"]
         ),
 
         // — Governed Actions (planned) —

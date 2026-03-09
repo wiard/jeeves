@@ -46,10 +46,12 @@ struct JeevesMemoryStore: Sendable {
 // MARK: - Session Context
 
 /// Read-only view of the current operator session state for orchestrator use.
-/// Contains only screen/directive state — no raw operator text.
+/// Contains explicit session context used for deterministic explainability.
 struct JeevesSessionContext: Sendable {
     let currentScreen: AppScreen
     let lastDirective: JeevesDirective?
+    let lastOperatorInput: String?
+    let lastDecisionTrace: JeevesDecisionTrace?
     let currentMissionFocus: String?
     let currentBrowserPreset: ScreenStatePreset?
     let recentScreens: [AppScreen]
@@ -62,6 +64,8 @@ struct JeevesSessionContext: Sendable {
     static let empty = JeevesSessionContext(
         currentScreen: .chat,
         lastDirective: nil,
+        lastOperatorInput: nil,
+        lastDecisionTrace: nil,
         currentMissionFocus: nil,
         currentBrowserPreset: nil,
         recentScreens: []
@@ -75,6 +79,7 @@ struct JeevesContextSnapshot: Sendable {
     let sessionId: String
     let startedAt: Date
     let currentScreen: AppScreen
+    let lastOperatorInput: String?
     let lastDirectiveIntent: String?
     let lastDirectiveDestination: AppScreen?
     let currentMissionFocus: String?
@@ -83,6 +88,7 @@ struct JeevesContextSnapshot: Sendable {
     var summary: String {
         var lines: [String] = ["Sessie: \(sessionId.prefix(8))"]
         lines.append("Scherm: \(currentScreen.title)")
+        if let input = lastOperatorInput { lines.append("Laatste input: \(input)") }
         if let d = lastDirectiveIntent { lines.append("Laatste directief: \(d)") }
         if let s = lastDirectiveDestination { lines.append("Doelscherm: \(s.title)") }
         if let f = currentMissionFocus { lines.append("Focus: \(f)") }
@@ -106,6 +112,8 @@ final class JeevesSession {
 
     private(set) var currentScreen: AppScreen = .chat
     private(set) var lastDirective: JeevesDirective?
+    private(set) var lastOperatorInput: String?
+    private(set) var lastDecisionTrace: JeevesDecisionTrace?
     private(set) var currentMissionFocus: String?
     private(set) var currentBrowserPreset: ScreenStatePreset?
     private(set) var memory = JeevesMemoryStore()
@@ -120,6 +128,15 @@ final class JeevesSession {
     func recordScreenChange(_ screen: AppScreen) {
         currentScreen = screen
         memory.append(.screenVisit(screen))
+    }
+
+    func recordOperatorInput(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        lastOperatorInput = trimmed.isEmpty ? nil : trimmed
+    }
+
+    func recordDecisionTrace(_ trace: JeevesDecisionTrace) {
+        lastDecisionTrace = trace
     }
 
     func recordDirective(_ directive: JeevesDirective) {
@@ -142,6 +159,8 @@ final class JeevesSession {
         JeevesSessionContext(
             currentScreen: currentScreen,
             lastDirective: lastDirective,
+            lastOperatorInput: lastOperatorInput,
+            lastDecisionTrace: lastDecisionTrace,
             currentMissionFocus: currentMissionFocus,
             currentBrowserPreset: currentBrowserPreset,
             recentScreens: memory.recentScreens
@@ -153,6 +172,7 @@ final class JeevesSession {
             sessionId: sessionId,
             startedAt: startedAt,
             currentScreen: currentScreen,
+            lastOperatorInput: lastOperatorInput,
             lastDirectiveIntent: lastDirective?.intent,
             lastDirectiveDestination: lastDirective?.destination,
             currentMissionFocus: currentMissionFocus,
@@ -164,6 +184,8 @@ final class JeevesSession {
 
     func reset() {
         lastDirective = nil
+        lastOperatorInput = nil
+        lastDecisionTrace = nil
         currentMissionFocus = nil
         currentBrowserPreset = nil
         memory.reset()

@@ -153,6 +153,14 @@ enum JeevesCommandRouter {
             base = "Ik licht \(destination.title) toe"
             if let section { base += " → \(section)" }
             base += "."
+        case .why:
+            base = "Ik verklaar waarom \(destination.title) is gekozen"
+            if let section { base += " → \(section)" }
+            base += "."
+        case .what:
+            base = "Ik licht toe wat matchte voor \(destination.title)"
+            if let section { base += " → \(section)" }
+            base += "."
         }
 
         // Add browser filter details

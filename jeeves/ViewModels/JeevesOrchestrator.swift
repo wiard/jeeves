@@ -50,22 +50,64 @@ final class JeevesOrchestrator {
     ) -> JeevesDirective? {
         // Merge passed readers with registered readers (passed take precedence)
         let allReaders = mergedReaders(passed: readers)
+        session.recordOperatorInput(text)
         let ctx = session.context()
 
         // 1. Try structured command parse first
         if let command = JeevesCommandParser.parse(text) {
+            let commandLabel = commandDescriptor(command)
+
+            if let explainability = explainabilityCommand(for: command) {
+                let explanation = JeevesExplainabilityInspector.inspect(
+                    request: explainability,
+                    session: ctx,
+                    readers: allReaders
+                )
+                let directive = JeevesDirective(
+                    intent: "explainability:\(explainability.rawValue)",
+                    destination: .chat,
+                    section: nil,
+                    statePreset: .empty,
+                    explanation: explanation.text,
+                    reason: "explainability_\(explainability.rawValue)",
+                    confidence: 1.0
+                )
+                return applyPolicyResult(to: directive).directive
+            }
+
             // Check if this is a guidance command targeting the Operator Brain
             if let guidanceKind = guidanceCommandKind(for: command) {
-                return applyPolicy(
-                    to: resolveGuidance(kind: guidanceKind, context: ctx, readers: allReaders)
+                let guidanceDirective = resolveGuidance(
+                    kind: guidanceKind,
+                    context: ctx,
+                    readers: allReaders
+                )
+                let recommendationReason: String? = switch guidanceKind {
+                case .attention, .nextScreen, .full: guidanceDirective.reason
+                case .inspect, .available: nil
+                }
+                return routeWithPolicyAndTrace(
+                    input: text,
+                    directive: guidanceDirective,
+                    matchedCommand: commandLabel,
+                    matchedGuidanceKind: guidanceKind.rawValue,
+                    recommendationReason: recommendationReason,
+                    readers: allReaders
                 )
             }
             if let directive = JeevesCommandRouter.route(command, readers: allReaders) {
-                return applyPolicy(to: directive)
+                return routeWithPolicyAndTrace(
+                    input: text,
+                    directive: directive,
+                    matchedCommand: commandLabel,
+                    matchedGuidanceKind: nil,
+                    recommendationReason: nil,
+                    readers: allReaders
+                )
             }
             // Command parsed but target unrecognized — stay in chat with explanation
             // rather than falling through to gateway (which may fail with -1011)
-            return JeevesDirective(
+            let unknownCommandDirective = JeevesDirective(
                 intent: "command:unrecognized",
                 destination: .chat,
                 section: nil,
@@ -74,6 +116,14 @@ final class JeevesOrchestrator {
                 reason: "Unrecognized command target: \(command.target)",
                 confidence: 1.0
             )
+            return routeWithPolicyAndTrace(
+                input: text,
+                directive: unknownCommandDirective,
+                matchedCommand: commandLabel,
+                matchedGuidanceKind: nil,
+                recommendationReason: nil,
+                readers: allReaders
+            )
         }
 
         // 2. Fall back to natural language classification
@@ -81,8 +131,22 @@ final class JeevesOrchestrator {
 
         // 3. Handle guidance intents via the Operator Brain
         if case .seekGuidance(let kind) = intent {
-            return applyPolicy(
-                to: resolveGuidance(kind: kind, context: ctx, readers: allReaders)
+            let guidanceDirective = resolveGuidance(
+                kind: kind,
+                context: ctx,
+                readers: allReaders
+            )
+            let recommendationReason: String? = switch kind {
+            case .attention, .nextScreen, .full: guidanceDirective.reason
+            case .inspect, .available: nil
+            }
+            return routeWithPolicyAndTrace(
+                input: text,
+                directive: guidanceDirective,
+                matchedCommand: nil,
+                matchedGuidanceKind: kind.rawValue,
+                recommendationReason: recommendationReason,
+                readers: allReaders
             )
         }
 
@@ -90,7 +154,14 @@ final class JeevesOrchestrator {
         //    narrow screen-based follow-up ("meer details", "vertel meer")
         if intent.isConversational, ctx.hasDirectiveContext {
             if let followUp = resolveFollowUp(text: text, context: ctx, readers: allReaders) {
-                return applyPolicy(to: followUp)
+                return routeWithPolicyAndTrace(
+                    input: text,
+                    directive: followUp,
+                    matchedCommand: nil,
+                    matchedGuidanceKind: nil,
+                    recommendationReason: nil,
+                    readers: allReaders
+                )
             }
             return nil
         }
@@ -119,7 +190,14 @@ final class JeevesOrchestrator {
             reason: "Matched intent to \(destination.title)",
             confidence: 0.9
         )
-        return applyPolicy(to: directive)
+        return routeWithPolicyAndTrace(
+            input: text,
+            directive: directive,
+            matchedCommand: nil,
+            matchedGuidanceKind: nil,
+            recommendationReason: nil,
+            readers: allReaders
+        )
     }
 
     /// Navigate to a directive. Sets activeDirective so ContentView reacts.
@@ -130,43 +208,78 @@ final class JeevesOrchestrator {
 
     // MARK: - Policy Enforcement
 
+    private func routeWithPolicyAndTrace(
+        input: String,
+        directive: JeevesDirective,
+        matchedCommand: String?,
+        matchedGuidanceKind: String?,
+        recommendationReason: String?,
+        readers: [ScreenStateReadable]
+    ) -> JeevesDirective? {
+        let currentContext = session.context()
+        let policyApplied = applyPolicyResult(to: directive)
+        let trace = JeevesExplainabilityInspector.buildTrace(
+            originalInput: input,
+            matchedCommand: matchedCommand,
+            matchedGuidanceKind: matchedGuidanceKind,
+            recommendationReason: recommendationReason,
+            finalDirective: policyApplied.directive,
+            capability: policyApplied.capability,
+            policyDecision: policyApplied.decision,
+            session: currentContext,
+            readers: readers
+        )
+        session.recordDecisionTrace(trace)
+        return policyApplied.directive
+    }
+
     /// Single policy enforcement point for all directives.
     /// Looks up the implied capability and evaluates the policy layer.
     /// Returns the directive unchanged if allowed, or a modified directive
     /// with an explanation if blocked/planned/governed.
-    private func applyPolicy(to directive: JeevesDirective) -> JeevesDirective? {
+    private func applyPolicyResult(
+        to directive: JeevesDirective
+    ) -> (directive: JeevesDirective, capability: JeevesCapability?, decision: JeevesPolicyDecision?) {
         guard let capability = JeevesCapabilityRegistry.resolve(directive: directive) else {
-            return directive // Unknown capability, pass through
+            return (directive, nil, nil)
         }
 
         let decision = JeevesPolicyLayer.evaluate(capability: capability)
 
         switch decision.mode {
         case .allowed, .readOnlyOnly:
-            return directive
+            return (directive, capability, decision)
 
         case .blocked, .planned:
             // Stay in chat, show explanation instead of navigating
-            return JeevesDirective(
-                intent: directive.intent,
-                destination: .chat,
-                section: nil,
-                statePreset: .empty,
-                explanation: decision.operatorMessage,
-                reason: decision.reason,
-                confidence: 1.0
+            return (
+                JeevesDirective(
+                    intent: directive.intent,
+                    destination: .chat,
+                    section: nil,
+                    statePreset: .empty,
+                    explanation: decision.operatorMessage,
+                    reason: decision.reason,
+                    confidence: 1.0
+                ),
+                capability,
+                decision
             )
 
         case .requiresApproval, .proposalOnly:
             // Navigate to the screen but append governance notice
-            return JeevesDirective(
-                intent: directive.intent,
-                destination: directive.destination,
-                section: directive.section,
-                statePreset: directive.statePreset,
-                explanation: directive.explanation + " " + decision.operatorMessage,
-                reason: decision.reason,
-                confidence: directive.confidence
+            return (
+                JeevesDirective(
+                    intent: directive.intent,
+                    destination: directive.destination,
+                    section: directive.section,
+                    statePreset: directive.statePreset,
+                    explanation: directive.explanation + " " + decision.operatorMessage,
+                    reason: decision.reason,
+                    confidence: directive.confidence
+                ),
+                capability,
+                decision
             )
         }
     }
@@ -607,6 +720,49 @@ final class JeevesOrchestrator {
             return command.verb == .inspect ? .inspect : .available
         case "capabilities", "mogelijkheden":
             return .available
+        default:
+            return nil
+        }
+    }
+
+    private func commandDescriptor(_ command: JeevesCommand) -> String {
+        let phrase = command.targetPhrase
+        if phrase.isEmpty {
+            return command.verb.rawValue
+        }
+        return "\(command.verb.rawValue) \(phrase)"
+    }
+
+    private func explainabilityCommand(for command: JeevesCommand) -> JeevesExplainabilityRequest? {
+        switch command.verb {
+        case .explain:
+            switch command.targetPhrase {
+            case "context":
+                return .context
+            case "decision":
+                return .decision
+            default:
+                return nil
+            }
+
+        case .why:
+            switch command.targetPhrase {
+            case "this screen":
+                return .whyScreen
+            case "this suggestion":
+                return .whySuggestion
+            default:
+                return nil
+            }
+
+        case .what:
+            switch command.targetPhrase {
+            case "matched":
+                return .matched
+            default:
+                return nil
+            }
+
         default:
             return nil
         }
