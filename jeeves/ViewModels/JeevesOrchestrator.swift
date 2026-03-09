@@ -63,6 +63,17 @@ final class JeevesOrchestrator {
             if let directive = JeevesCommandRouter.route(command, readers: allReaders) {
                 return applyPolicy(to: directive)
             }
+            // Command parsed but target unrecognized — stay in chat with explanation
+            // rather than falling through to gateway (which may fail with -1011)
+            return JeevesDirective(
+                intent: "command:unrecognized",
+                destination: .chat,
+                section: nil,
+                statePreset: .empty,
+                explanation: "Ik herken '\(command.verb.rawValue) \(command.target)' niet als een beschikbaar commando. Probeer bijvoorbeeld 'jeeves open radar' of 'jeeves show system'.",
+                reason: "Unrecognized command target: \(command.target)",
+                confidence: 1.0
+            )
         }
 
         // 2. Fall back to natural language classification
@@ -406,7 +417,7 @@ final class JeevesOrchestrator {
         "budget", "kill switch", "killswitch", "noodstop",
         "consent", "status", "health", "gezondheid",
         "pressure", "druk", "system", "systeem",
-        "hoe gaat het", "huis"
+        "huis"
     ]
 
     private let auditPatterns: [String] = [
