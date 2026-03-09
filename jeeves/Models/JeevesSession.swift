@@ -3,14 +3,11 @@ import Observation
 
 // MARK: - Memory Entry
 
-/// A single entry in the session's short-term memory ring buffer.
+/// A single entry in the session's operational trail.
+/// Tracks screen navigation and directives only — not raw operator text.
 enum JeevesMemoryEntry: Sendable {
     case screenVisit(AppScreen)
     case directive(String, AppScreen)
-    case question(String)
-    case explanation(String)
-
-    var timestamp: Date { Date() }
 }
 
 // MARK: - Memory Store
@@ -37,51 +34,43 @@ struct JeevesMemoryStore: Sendable {
     }
 
     var recentScreens: [AppScreen] {
-        entries.compactMap {
+        entries.map {
             switch $0 {
             case .screenVisit(let s): return s
             case .directive(_, let s): return s
-            default: return nil
             }
-        }
-    }
-
-    var recentQuestions: [String] {
-        entries.compactMap {
-            if case .question(let q) = $0 { return q }
-            return nil
         }
     }
 }
 
-// MARK: - Conversation Context
+// MARK: - Session Context
 
-/// Read-only view of the current session state for orchestrator use.
-struct JeevesConversationContext: Sendable {
+/// Read-only view of the current operator session state for orchestrator use.
+/// Contains only screen/directive state — no raw operator text.
+struct JeevesSessionContext: Sendable {
     let currentScreen: AppScreen
     let lastDirective: JeevesDirective?
     let currentMissionFocus: String?
     let currentBrowserPreset: ScreenStatePreset?
-    let lastOperatorQuestion: String?
     let recentScreens: [AppScreen]
 
-    var hasContext: Bool {
-        lastDirective != nil || lastOperatorQuestion != nil
+    /// True only when there is a previous directive to continue from.
+    var hasDirectiveContext: Bool {
+        lastDirective != nil
     }
 
-    static let empty = JeevesConversationContext(
+    static let empty = JeevesSessionContext(
         currentScreen: .chat,
         lastDirective: nil,
         currentMissionFocus: nil,
         currentBrowserPreset: nil,
-        lastOperatorQuestion: nil,
         recentScreens: []
     )
 }
 
 // MARK: - Context Snapshot
 
-/// Frozen, inspectable snapshot of the session state.
+/// Frozen, inspectable snapshot of the operator session state.
 struct JeevesContextSnapshot: Sendable {
     let sessionId: String
     let startedAt: Date
@@ -89,7 +78,6 @@ struct JeevesContextSnapshot: Sendable {
     let lastDirectiveIntent: String?
     let lastDirectiveDestination: AppScreen?
     let currentMissionFocus: String?
-    let lastOperatorQuestion: String?
     let entryCount: Int
 
     var summary: String {
@@ -98,7 +86,6 @@ struct JeevesContextSnapshot: Sendable {
         if let d = lastDirectiveIntent { lines.append("Laatste directief: \(d)") }
         if let s = lastDirectiveDestination { lines.append("Doelscherm: \(s.title)") }
         if let f = currentMissionFocus { lines.append("Focus: \(f)") }
-        if let q = lastOperatorQuestion { lines.append("Laatste vraag: \(q)") }
         lines.append("Geheugenentries: \(entryCount)")
         return lines.joined(separator: "\n")
     }
@@ -108,8 +95,8 @@ struct JeevesContextSnapshot: Sendable {
 
 /// Lightweight session-scoped context for operator continuity.
 ///
-/// Tracks current screen, recent directives, operator questions, and
-/// mission focus. Designed to be explicit, inspectable, and easy to reset.
+/// Tracks current screen, recent directives, and mission focus.
+/// Designed to be explicit, inspectable, and easy to reset.
 /// Does not bypass governance or gateway routing.
 @MainActor
 @Observable
@@ -121,7 +108,6 @@ final class JeevesSession {
     private(set) var lastDirective: JeevesDirective?
     private(set) var currentMissionFocus: String?
     private(set) var currentBrowserPreset: ScreenStatePreset?
-    private(set) var lastOperatorQuestion: String?
     private(set) var memory = JeevesMemoryStore()
 
     init() {
@@ -150,24 +136,14 @@ final class JeevesSession {
         memory.append(.directive(directive.intent, directive.destination))
     }
 
-    func recordQuestion(_ text: String) {
-        lastOperatorQuestion = text
-        memory.append(.question(text))
-    }
-
-    func recordExplanation(_ text: String) {
-        memory.append(.explanation(text))
-    }
-
     // MARK: - Context & Snapshot
 
-    func context() -> JeevesConversationContext {
-        JeevesConversationContext(
+    func context() -> JeevesSessionContext {
+        JeevesSessionContext(
             currentScreen: currentScreen,
             lastDirective: lastDirective,
             currentMissionFocus: currentMissionFocus,
             currentBrowserPreset: currentBrowserPreset,
-            lastOperatorQuestion: lastOperatorQuestion,
             recentScreens: memory.recentScreens
         )
     }
@@ -180,7 +156,6 @@ final class JeevesSession {
             lastDirectiveIntent: lastDirective?.intent,
             lastDirectiveDestination: lastDirective?.destination,
             currentMissionFocus: currentMissionFocus,
-            lastOperatorQuestion: lastOperatorQuestion,
             entryCount: memory.entries.count
         )
     }
@@ -191,7 +166,6 @@ final class JeevesSession {
         lastDirective = nil
         currentMissionFocus = nil
         currentBrowserPreset = nil
-        lastOperatorQuestion = nil
         memory.reset()
     }
 }
