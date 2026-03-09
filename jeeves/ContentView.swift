@@ -113,13 +113,18 @@ struct ContentView: View {
         #if os(macOS)
         NavigationSplitView {
             List(selection: $selectedTab) {
-                Label(TextKeys.Stream.header, systemImage: "list.bullet").tag(0)
-                Label(TextKeys.Lobby.header, systemImage: "tray.full").tag(1)
-                Label("Jeeves", systemImage: "bubble.left.fill").tag(2)
-                Label(TextKeys.Observatory.header, systemImage: "binoculars").tag(3)
-                Label("Huis", systemImage: "house.fill").tag(4)
-                Label("Logboek", systemImage: "scroll.fill").tag(5)
-                Label(TextKeys.Settings.header, systemImage: "gearshape.fill").tag(6)
+                Section("Mission Control") {
+                    Label(TextKeys.Stream.header, systemImage: "list.bullet").tag(0)
+                    Label(TextKeys.Lobby.header, systemImage: "tray.full").tag(1)
+                    Label("Jeeves", systemImage: "bubble.left.fill").tag(2)
+                    Label(TextKeys.Observatory.header, systemImage: "binoculars").tag(3)
+                    Label("Huis", systemImage: "house.fill").tag(4)
+                    Label("Logboek", systemImage: "scroll.fill").tag(5)
+                    Label(TextKeys.Settings.header, systemImage: "gearshape.fill").tag(6)
+                }
+                Section("AI Browser") {
+                    Label("AI Browser", systemImage: "sparkle.magnifyingglass").tag(7)
+                }
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 160, ideal: 180)
@@ -132,6 +137,7 @@ struct ContentView: View {
             case 4: HouseView()
             case 5: LogbookView()
             case 6: SettingsView()
+            case 7: AIBrowserView()
             default: StreamView()
             }
         }
@@ -145,6 +151,7 @@ struct ContentView: View {
             Tab(TextKeys.Observatory.header, systemImage: "binoculars") { ObservatoryView() }
             Tab("Huis", systemImage: "house.fill") { HouseView() }
             Tab("Logboek", systemImage: "scroll.fill") { LogbookView() }
+            Tab("AI Browser", systemImage: "sparkle.magnifyingglass") { AIBrowserView() }
             Tab(TextKeys.Settings.header, systemImage: "gearshape.fill") { SettingsView() }
         }
         .tint(.jeevesGold)
