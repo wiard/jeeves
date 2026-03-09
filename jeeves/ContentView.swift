@@ -44,6 +44,9 @@ struct ContentView: View {
             guard let directive = orchestrator.activeDirective else { return }
             selectedTab = directive.destination
         }
+        .onChange(of: selectedTab) {
+            orchestrator.session.recordScreenChange(selectedTab)
+        }
     }
 
     @State private var selectedTab: AppScreen = .stream

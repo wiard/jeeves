@@ -8,6 +8,9 @@ final class JeevesOrchestrator {
     /// The most recent directive. ContentView observes this to switch tabs.
     var activeDirective: JeevesDirective?
 
+    /// Session context for operator continuity across messages.
+    let session = JeevesSession()
+
     /// Registered screen state readers for Mission Control.
     /// Screens register here so the orchestrator can inspect any screen's state.
     private(set) var registeredReaders: [ScreenStateReadable] = []
@@ -39,22 +42,37 @@ final class JeevesOrchestrator {
     /// Resolve user text into a navigation directive.
     /// Returns nil if the message is purely conversational.
     ///
-    /// Priority: structured command ("jeeves verb target") → NL classification → nil.
+    /// Priority: structured command → follow-up → NL classification → nil.
     func resolve(
         text: String,
         readers: [ScreenStateReadable]
     ) -> JeevesDirective? {
+        // Record the question in session memory
+        session.recordQuestion(text)
+
         // Merge passed readers with registered readers (passed take precedence)
         let allReaders = mergedReaders(passed: readers)
+        let ctx = session.context()
 
         // 1. Try structured command parse first
         if let command = JeevesCommandParser.parse(text),
            let directive = JeevesCommandRouter.route(command, readers: allReaders) {
+            session.recordDirective(directive)
             return directive
         }
 
         // 2. Fall back to natural language classification
         let intent = classifyIntent(text)
+
+        // 3. If conversational, try follow-up resolution using session context
+        if intent.isConversational, ctx.hasContext {
+            if let followUp = resolveFollowUp(text: text, context: ctx, readers: allReaders) {
+                session.recordDirective(followUp)
+                return followUp
+            }
+            return nil
+        }
+
         guard !intent.isConversational else { return nil }
 
         let destination = bestScreen(for: intent)
@@ -70,7 +88,7 @@ final class JeevesOrchestrator {
             summary: stateSummary
         )
 
-        return JeevesDirective(
+        let directive = JeevesDirective(
             intent: describeIntent(intent),
             destination: destination,
             section: section,
@@ -79,10 +97,13 @@ final class JeevesOrchestrator {
             reason: "Matched intent to \(destination.title)",
             confidence: 0.9
         )
+        session.recordDirective(directive)
+        return directive
     }
 
     /// Navigate to a directive. Sets activeDirective so ContentView reacts.
     func navigate(to directive: JeevesDirective) {
+        session.recordDirective(directive)
         activeDirective = directive
     }
 
@@ -407,5 +428,51 @@ final class JeevesOrchestrator {
             byScreen[reader.screenId] = reader
         }
         return Array(byScreen.values)
+    }
+
+    // MARK: - Follow-up Resolution
+
+    /// Patterns that indicate the operator wants more detail on the current context.
+    private let followUpPatterns: [String] = [
+        "meer details", "more detail", "vertel meer", "tell me more",
+        "explain", "leg uit", "meer info", "more info",
+        "ga door", "continue", "en nu", "what now",
+        "wat nu", "volgende", "next"
+    ]
+
+    /// Resolve a follow-up message using session context.
+    /// Only triggers when:
+    /// 1. The message matches a follow-up pattern
+    /// 2. There is a previous directive to continue from
+    private func resolveFollowUp(
+        text: String,
+        context: JeevesConversationContext,
+        readers: [ScreenStateReadable]
+    ) -> JeevesDirective? {
+        let lower = text.lowercased()
+        guard followUpPatterns.contains(where: { lower.contains($0) }) else { return nil }
+        guard let previous = context.lastDirective else { return nil }
+
+        let reader = readers.first { $0.screenId == previous.destination }
+        let summary = reader?.summary()
+
+        var explanation = "Ik toon meer over \(previous.destination.title)"
+        if let section = previous.section {
+            explanation += " → \(section)"
+        }
+        explanation += "."
+        if let summary, !summary.isEmpty {
+            explanation += " " + summary.headline
+        }
+
+        return JeevesDirective(
+            intent: "followUp:\(previous.intent)",
+            destination: previous.destination,
+            section: previous.section,
+            statePreset: previous.statePreset,
+            explanation: explanation,
+            reason: "Follow-up on previous directive",
+            confidence: 0.85
+        )
     }
 }
