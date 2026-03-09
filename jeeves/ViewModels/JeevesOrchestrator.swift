@@ -8,17 +8,52 @@ final class JeevesOrchestrator {
     /// The most recent directive. ContentView observes this to switch tabs.
     var activeDirective: JeevesDirective?
 
+    /// Registered screen state readers for Mission Control.
+    /// Screens register here so the orchestrator can inspect any screen's state.
+    private(set) var registeredReaders: [ScreenStateReadable] = []
+
     /// Minimum confidence to trigger navigation. Below this, stay in chat.
     private let confidenceThreshold: Double = 0.5
+
+    /// Register a screen state reader. Replaces any existing reader for the same screenId.
+    func register(_ reader: ScreenStateReadable) {
+        registeredReaders.removeAll { $0.screenId == reader.screenId }
+        registeredReaders.append(reader)
+    }
+
+    /// Aggregate summaries from all registered readers into one system overview.
+    func systemSummary() -> String {
+        guard !registeredReaders.isEmpty else { return "Geen schermdata beschikbaar." }
+
+        var lines: [String] = []
+        for reader in registeredReaders.sorted(by: { $0.screenId.rawValue < $1.screenId.rawValue }) {
+            let s = reader.summary()
+            let status = s.isEmpty ? "leeg" : s.headline
+            lines.append("[\(s.screen.title)] \(status)")
+        }
+        return lines.joined(separator: "\n")
+    }
 
     // MARK: - Public API
 
     /// Resolve user text into a navigation directive.
     /// Returns nil if the message is purely conversational.
+    ///
+    /// Priority: structured command ("jeeves verb target") → NL classification → nil.
     func resolve(
         text: String,
         readers: [ScreenStateReadable]
     ) -> JeevesDirective? {
+        // Merge passed readers with registered readers (passed take precedence)
+        let allReaders = mergedReaders(passed: readers)
+
+        // 1. Try structured command parse first
+        if let command = JeevesCommandParser.parse(text),
+           let directive = JeevesCommandRouter.route(command, readers: allReaders) {
+            return directive
+        }
+
+        // 2. Fall back to natural language classification
         let intent = classifyIntent(text)
         guard !intent.isConversational else { return nil }
 
@@ -27,7 +62,7 @@ final class JeevesOrchestrator {
 
         let statePreset = buildPreset(for: intent)
         let section = targetSection(for: intent, in: destination)
-        let reader = readers.first { $0.screenId == destination }
+        let reader = allReaders.first { $0.screenId == destination }
         let stateSummary = reader?.summary()
         let explanation = buildExplanation(
             intent: intent,
@@ -360,5 +395,17 @@ final class JeevesOrchestrator {
         if text.contains("signal") || text.contains("signaal") || text.contains("signalen") { return .signals }
         if text.contains("emergence") || text.contains("emergentie") { return .emergence }
         return .health
+    }
+
+    /// Merge passed readers with registered readers. Passed readers take precedence per screenId.
+    private func mergedReaders(passed: [ScreenStateReadable]) -> [ScreenStateReadable] {
+        var byScreen: [AppScreen: ScreenStateReadable] = [:]
+        for reader in registeredReaders {
+            byScreen[reader.screenId] = reader
+        }
+        for reader in passed {
+            byScreen[reader.screenId] = reader
+        }
+        return Array(byScreen.values)
     }
 }

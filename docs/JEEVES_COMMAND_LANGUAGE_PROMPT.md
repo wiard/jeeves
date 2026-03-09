@@ -1,1 +1,85 @@
-Read AGENTS.md and docs first. Read docs/JEEVES_ORCHESTRATOR.md and docs/JEEVES_COMMAND_LANGUAGE.md first. Extend Jeeves from a natural-language screen orchestrator into a lightweight AI Command Language. Do not redesign the app. Add a command mode that activates when a user message starts with “jeeves “. Parse commands in the form “verb target arg=value arg=value”. Support a minimal first command set with read-only commands only: open, show, inspect, explain. Commands must map into the existing JeevesDirective and ScreenStatePreset flows, so the command system remains fully additive to the current orchestrator architecture. Preserve existing natural-language routing as fallback when command parsing does not apply. Do not explain Palantir AIP, Tesla Autonomy UI, or Apple operator consoles; only use them implicitly as implementation inspiration for operator-grade command routing and screen control. Jeeves is not a chatbot. Jeeves is the operator interface and control shell of the app. The command layer must stay fully aligned with the hardened Jeeves gateway model: one active endpoint, one token flow, one route contract, one authorized request builder, and no parallel gateway resolution paths. The command system must not bypass governance, must not introduce direct backend shortcuts, and must remain compatible with the system flow: Human Intent → Jeeves Orchestrator → Screen Directive → Gateway Action → Kernel → Knowledge. Design the command layer so it can later control screens, inspect live screen state, and trigger governed actions, but in this first phase implement read-only command behavior only. Integrate cleanly with AppScreen, JeevesDirective, ScreenStatePreset, ScreenStateReadable, and the current orchestration flow. Prefer a small, testable architecture: command parser, command model, command-to-directive mapper, and fallback to natural-language intent routing. Output: architecture concept, Swift types to add, parser design, integration points, first supported commands, minimal implementation plan, explicit guardrails that keep routing, tokens, web surfaces, and backend links aligned and stable, and the exact files to create or modify.
+Read AGENTS.md and docs first.
+
+Read:
+
+docs/JEEVES_SYSTEM_CONTEXT.md
+docs/JEEVES_ORCHESTRATOR.md
+docs/JEEVES_COMMAND_LANGUAGE.md
+
+Goal:
+
+Extend Jeeves from a natural-language screen orchestrator into a lightweight AI Command Language.
+
+Jeeves is not a chatbot.
+
+Jeeves is the operator interface and control shell of the app.
+
+The chat layer acts as the command interface.
+
+Command Mode
+
+Command mode activates when a message begins with:
+
+"jeeves "
+
+Example:
+
+jeeves open browser domain=financial
+jeeves show radar
+jeeves inspect system
+jeeves explain signals
+
+Command Format
+
+verb target arg=value arg=value
+
+Example:
+
+open browser domain=financial
+show radar
+inspect system
+explain signals
+
+First Command Set (read-only)
+
+open
+show
+inspect
+explain
+
+Commands must map into existing flows:
+
+JeevesDirective
+ScreenStatePreset
+AppScreen
+ScreenStateReadable
+
+The command layer must remain additive.
+
+Natural language routing must remain the fallback.
+
+Architecture rules:
+
+• Commands never bypass governance
+• Commands never call backend routes directly
+• Commands only produce directives
+• Directives trigger UI navigation or gateway requests
+• Gateway requests go through AuthorizedRequestBuilder
+
+The command system must remain compatible with:
+
+Human Intent
+→ Jeeves Orchestrator
+→ Screen Directive
+→ Gateway Action
+→ Kernel
+→ Knowledge
+
+Output:
+
+• command parser design
+• command model
+• command-to-directive mapper
+• integration with JeevesOrchestrator
+• minimal Swift types
+• minimal implementation plan

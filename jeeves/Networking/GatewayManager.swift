@@ -1029,3 +1029,50 @@ z=2 (cells 18–26)
         )
     }
 }
+
+// MARK: - ScreenStateReadable
+
+extension GatewayManager: ScreenStateReadable {
+    var screenId: AppScreen { .house }
+
+    func summary() -> ScreenStateSummary {
+        var highlights: [String] = []
+
+        switch connectionState {
+        case .connected:    highlights.append("Verbonden")
+        case .connecting:   highlights.append("Verbinden…")
+        case .reconnecting: highlights.append("Herverbinden…")
+        case .failed:       highlights.append("Verbinding mislukt")
+        case .disconnected: highlights.append("Niet verbonden")
+        }
+
+        if let ms = latencyMs { highlights.append("Latency: \(ms)ms") }
+
+        if let status = currentStatus {
+            if status.killSwitch.active { highlights.append("Kill switch actief") }
+            let pending = status.consent.pending
+            if pending > 0 { highlights.append("\(pending) consent wachtend") }
+            let budgetRatio = status.budget.daily.ratio
+            if budgetRatio > 0.8 {
+                highlights.append("Budget \(Int(budgetRatio * 100))% gebruikt")
+            }
+        }
+
+        let headline: String
+        if isConnected, let status = currentStatus {
+            headline = "Verbonden. Budget \(Int(status.budget.daily.ratio * 100))%, \(status.consent.pending) consent wachtend."
+        } else if isConnected {
+            headline = "Verbonden met gateway."
+        } else {
+            headline = "Niet verbonden met gateway."
+        }
+
+        return ScreenStateSummary(
+            screen: .house,
+            headline: headline,
+            itemCount: currentStatus?.channels.count ?? 0,
+            highlights: highlights,
+            isEmpty: !isConnected
+        )
+    }
+}

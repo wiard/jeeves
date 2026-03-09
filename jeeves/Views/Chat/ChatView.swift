@@ -124,7 +124,8 @@ struct ChatView: View {
         modelContext.insert(userMessage)
 
         // Ask orchestrator first — navigate if it recognises a screen intent
-        if let directive = orchestrator.resolve(text: text, readers: [poller]) {
+        let lobbyReader = LobbyStateReader(poller: poller)
+        if let directive = orchestrator.resolve(text: text, readers: [poller, gateway, lobbyReader]) {
             let explanation = ChatMessage(text: directive.explanation, sender: .jeeves)
             modelContext.insert(explanation)
             orchestrator.navigate(to: directive)
