@@ -47,9 +47,6 @@ final class JeevesOrchestrator {
         text: String,
         readers: [ScreenStateReadable]
     ) -> JeevesDirective? {
-        // Record the question in session memory
-        session.recordQuestion(text)
-
         // Merge passed readers with registered readers (passed take precedence)
         let allReaders = mergedReaders(passed: readers)
         let ctx = session.context()
@@ -57,17 +54,16 @@ final class JeevesOrchestrator {
         // 1. Try structured command parse first
         if let command = JeevesCommandParser.parse(text),
            let directive = JeevesCommandRouter.route(command, readers: allReaders) {
-            session.recordDirective(directive)
             return directive
         }
 
         // 2. Fall back to natural language classification
         let intent = classifyIntent(text)
 
-        // 3. If conversational, try follow-up resolution using session context
-        if intent.isConversational, ctx.hasContext {
+        // 3. If conversational but we have a previous directive, check for
+        //    narrow screen-based follow-up ("meer details", "vertel meer")
+        if intent.isConversational, ctx.hasDirectiveContext {
             if let followUp = resolveFollowUp(text: text, context: ctx, readers: allReaders) {
-                session.recordDirective(followUp)
                 return followUp
             }
             return nil
@@ -88,7 +84,7 @@ final class JeevesOrchestrator {
             summary: stateSummary
         )
 
-        let directive = JeevesDirective(
+        return JeevesDirective(
             intent: describeIntent(intent),
             destination: destination,
             section: section,
@@ -97,8 +93,6 @@ final class JeevesOrchestrator {
             reason: "Matched intent to \(destination.title)",
             confidence: 0.9
         )
-        session.recordDirective(directive)
-        return directive
     }
 
     /// Navigate to a directive. Sets activeDirective so ContentView reacts.
@@ -432,24 +426,22 @@ final class JeevesOrchestrator {
 
     // MARK: - Follow-up Resolution
 
-    /// Patterns that indicate the operator wants more detail on the current context.
+    /// Narrow patterns for screen-based follow-up.
+    /// Only explicit "show me more" phrases — no broad conversational words.
     private let followUpPatterns: [String] = [
-        "meer details", "more detail", "vertel meer", "tell me more",
-        "explain", "leg uit", "meer info", "more info",
-        "ga door", "continue", "en nu", "what now",
-        "wat nu", "volgende", "next"
+        "meer details", "more details", "vertel meer", "tell me more",
+        "meer info", "more info"
     ]
 
-    /// Resolve a follow-up message using session context.
-    /// Only triggers when:
-    /// 1. The message matches a follow-up pattern
-    /// 2. There is a previous directive to continue from
+    /// Resolve a screen-based follow-up using the previous directive.
+    /// Only triggers when the message is an explicit "show me more" phrase
+    /// and there is a previous directive to continue from.
     private func resolveFollowUp(
         text: String,
-        context: JeevesConversationContext,
+        context: JeevesSessionContext,
         readers: [ScreenStateReadable]
     ) -> JeevesDirective? {
-        let lower = text.lowercased()
+        let lower = text.lowercased().trimmingCharacters(in: .whitespaces)
         guard followUpPatterns.contains(where: { lower.contains($0) }) else { return nil }
         guard let previous = context.lastDirective else { return nil }
 

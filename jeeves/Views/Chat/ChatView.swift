@@ -128,7 +128,6 @@ struct ChatView: View {
         if let directive = orchestrator.resolve(text: text, readers: [poller, gateway, lobbyReader]) {
             let explanation = ChatMessage(text: directive.explanation, sender: .jeeves)
             modelContext.insert(explanation)
-            orchestrator.session.recordExplanation(directive.explanation)
             orchestrator.navigate(to: directive)
             return
         }
