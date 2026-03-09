@@ -11,10 +11,25 @@ enum JeevesIntent: Sendable {
     case viewFabric
     case viewKnowledge
     case manageExtensions
+    case seekGuidance(kind: GuidanceKind)
     case conversational(text: String)
 
     enum SystemAspect: String, Sendable {
         case pressure, health, budget, consent, killSwitch, signals, emergence
+    }
+
+    /// The kind of operator guidance the user is requesting.
+    enum GuidanceKind: String, Sendable {
+        /// "what deserves attention" — assess urgency, recommend focus
+        case attention
+        /// "where should I go" — recommend next screen
+        case nextScreen
+        /// "what can I inspect" — list inspectable items for current context
+        case inspect
+        /// "what can I do here" — list available capabilities with policy status
+        case available
+        /// "guide me" — full assessment + recommendation
+        case full
     }
 
     var isConversational: Bool {

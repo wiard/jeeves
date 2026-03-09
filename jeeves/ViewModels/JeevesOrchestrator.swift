@@ -53,15 +53,29 @@ final class JeevesOrchestrator {
         let ctx = session.context()
 
         // 1. Try structured command parse first
-        if let command = JeevesCommandParser.parse(text),
-           let directive = JeevesCommandRouter.route(command, readers: allReaders) {
-            return applyPolicy(to: directive)
+        if let command = JeevesCommandParser.parse(text) {
+            // Check if this is a guidance command targeting the Operator Brain
+            if let guidanceKind = guidanceCommandKind(for: command) {
+                return applyPolicy(
+                    to: resolveGuidance(kind: guidanceKind, context: ctx, readers: allReaders)
+                )
+            }
+            if let directive = JeevesCommandRouter.route(command, readers: allReaders) {
+                return applyPolicy(to: directive)
+            }
         }
 
         // 2. Fall back to natural language classification
         let intent = classifyIntent(text)
 
-        // 3. If conversational but we have a previous directive, check for
+        // 3. Handle guidance intents via the Operator Brain
+        if case .seekGuidance(let kind) = intent {
+            return applyPolicy(
+                to: resolveGuidance(kind: kind, context: ctx, readers: allReaders)
+            )
+        }
+
+        // 4. If conversational but we have a previous directive, check for
         //    narrow screen-based follow-up ("meer details", "vertel meer")
         if intent.isConversational, ctx.hasDirectiveContext {
             if let followUp = resolveFollowUp(text: text, context: ctx, readers: allReaders) {
@@ -195,6 +209,11 @@ final class JeevesOrchestrator {
             return .manageExtensions
         }
 
+        // Operator guidance patterns (Operator Brain)
+        if let kind = classifyGuidanceKind(lower) {
+            return .seekGuidance(kind: kind)
+        }
+
         return .conversational(text: text)
     }
 
@@ -214,6 +233,7 @@ final class JeevesOrchestrator {
         case .reviewPending:    return .stream
         case .searchAudit:      return .logbook
         case .manageExtensions: return .lobby
+        case .seekGuidance:     return .chat   // handled before this point
         case .conversational:   return .chat
         }
     }
@@ -250,7 +270,8 @@ final class JeevesOrchestrator {
         case .searchAudit:
             preset.auditPeriod = "daily"
 
-        default:
+        case .reviewPending, .manageExtensions,
+             .seekGuidance, .conversational:
             break
         }
 
@@ -269,7 +290,9 @@ final class JeevesOrchestrator {
             case .consent:   return "kernel"
             default: return nil
             }
-        default: return nil
+        case .browse, .reviewPending, .searchAudit,
+             .manageExtensions, .seekGuidance, .conversational:
+            return nil
         }
     }
 
@@ -317,6 +340,9 @@ final class JeevesOrchestrator {
         case .manageExtensions:
             base = "Ik open de Lobby voor extensies en challenges."
 
+        case .seekGuidance:
+            base = ""  // handled by resolveGuidance before this point
+
         case .conversational:
             base = ""
         }
@@ -339,6 +365,7 @@ final class JeevesOrchestrator {
         case .viewFabric:         return "viewFabric"
         case .viewKnowledge:      return "viewKnowledge"
         case .manageExtensions:   return "manageExtensions"
+        case .seekGuidance(let k): return "guidance:\(k.rawValue)"
         case .conversational:     return "conversational"
         }
     }
@@ -511,5 +538,151 @@ final class JeevesOrchestrator {
             reason: "Follow-up on previous directive",
             confidence: 0.85
         )
+    }
+
+    // MARK: - Operator Brain Integration
+
+    /// Guidance keyword patterns for the Operator Brain.
+    /// These are checked after all specific screen-targeted patterns.
+    private let attentionPatterns: [String] = [
+        "wat verdient aandacht", "what deserves attention",
+        "wat is belangrijk nu", "what matters now",
+        "wat is urgent", "what is urgent",
+        "prioriteit", "priority"
+    ]
+
+    private let nextScreenPatterns: [String] = [
+        "waar moet ik heen", "waar ga ik heen", "where should i go",
+        "welk scherm", "which screen", "volgende scherm", "next screen"
+    ]
+
+    private let inspectPatterns: [String] = [
+        "wat kan ik inspecteren", "what can i inspect",
+        "wat kan ik bekijken", "what can i view here",
+        "wat is er te zien", "what is there to see"
+    ]
+
+    private let availablePatterns: [String] = [
+        "wat kan ik hier doen", "what can i do here",
+        "welke mogelijkheden", "which capabilities",
+        "wat is beschikbaar", "what is available"
+    ]
+
+    private let fullGuidancePatterns: [String] = [
+        "guide me", "begeleid me", "geef advies", "give guidance",
+        "geef een overzicht", "give an overview",
+        "wat raad je aan", "what do you recommend"
+    ]
+
+    /// Classify NL text into a guidance kind, or nil if not a guidance request.
+    private func classifyGuidanceKind(_ text: String) -> JeevesIntent.GuidanceKind? {
+        if matchesAny(text, patterns: attentionPatterns)     { return .attention }
+        if matchesAny(text, patterns: nextScreenPatterns)    { return .nextScreen }
+        if matchesAny(text, patterns: inspectPatterns)       { return .inspect }
+        if matchesAny(text, patterns: availablePatterns)     { return .available }
+        if matchesAny(text, patterns: fullGuidancePatterns)  { return .full }
+        return nil
+    }
+
+    /// Map a structured command to a guidance kind for the Operator Brain.
+    /// Supports: `jeeves explain focus`, `jeeves show guidance`, `jeeves inspect here`.
+    private func guidanceCommandKind(for command: JeevesCommand) -> JeevesIntent.GuidanceKind? {
+        switch command.target {
+        case "focus", "attention", "aandacht":
+            return .attention
+        case "guidance", "begeleiding", "advies":
+            return .full
+        case "here", "hier":
+            return command.verb == .inspect ? .inspect : .available
+        case "capabilities", "mogelijkheden":
+            return .available
+        default:
+            return nil
+        }
+    }
+
+    /// Resolve a guidance request via the Operator Brain.
+    /// The brain assesses current state and produces a grounded recommendation.
+    private func resolveGuidance(
+        kind: JeevesIntent.GuidanceKind,
+        context: JeevesSessionContext,
+        readers: [ScreenStateReadable]
+    ) -> JeevesDirective {
+        switch kind {
+        case .attention, .nextScreen:
+            let rec = JeevesOperatorBrain.guide(session: context, readers: readers)
+            return JeevesDirective(
+                intent: "guidance:\(kind.rawValue)",
+                destination: rec.suggestedScreen,
+                section: rec.suggestedSection,
+                statePreset: .empty,
+                explanation: rec.explanation,
+                reason: rec.reason,
+                confidence: 0.95
+            )
+
+        case .inspect:
+            let items = JeevesOperatorBrain.inspectableFromScreen(
+                context.currentScreen,
+                readers: readers
+            )
+            let list = items.isEmpty
+                ? "Geen inspectiepunten beschikbaar."
+                : items.joined(separator: ", ")
+            return JeevesDirective(
+                intent: "guidance:inspect",
+                destination: .chat,
+                section: nil,
+                statePreset: .empty,
+                explanation: "Vanuit \(context.currentScreen.title) kun je inspecteren: \(list).",
+                reason: "inspectable_items",
+                confidence: 1.0
+            )
+
+        case .available:
+            let caps = JeevesOperatorBrain.capabilitiesWithPolicy(
+                for: context.currentScreen
+            )
+            let list = caps.isEmpty
+                ? "Geen mogelijkheden beschikbaar."
+                : caps.map { "\($0.title) (\($0.status))" }.joined(separator: ", ")
+            return JeevesDirective(
+                intent: "guidance:available",
+                destination: .chat,
+                section: nil,
+                statePreset: .empty,
+                explanation: "Beschikbare mogelijkheden op \(context.currentScreen.title): \(list).",
+                reason: "available_capabilities",
+                confidence: 1.0
+            )
+
+        case .full:
+            let assessment = JeevesOperatorBrain.assess(
+                session: context,
+                readers: readers
+            )
+            let rec = JeevesOperatorBrain.recommend(assessment: assessment)
+
+            var lines: [String] = []
+            lines.append("Systeem: \(assessment.gatewayConnected ? "verbonden" : "niet verbonden"). Urgentie: \(assessment.urgency.label).")
+            lines.append(assessment.primaryFocus)
+            if let secondary = assessment.secondaryFocus {
+                lines.append(secondary)
+            }
+            lines.append("Aanbeveling: \(rec.suggestedScreen.title).")
+            if let section = rec.suggestedSection {
+                lines.append("Sectie: \(section).")
+            }
+
+            return JeevesDirective(
+                intent: "guidance:full",
+                destination: rec.suggestedScreen,
+                section: rec.suggestedSection,
+                statePreset: .empty,
+                explanation: lines.joined(separator: " "),
+                reason: rec.reason,
+                confidence: 0.95
+            )
+        }
     }
 }

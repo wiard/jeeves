@@ -54,6 +54,7 @@ enum JeevesCapabilityRegistry {
         "reviewPending":     "inspect_approvals",
         "searchAudit":       "inspect_audit",
         "manageExtensions":  "open_lobby",
+        "guidance:":         "explain_focus",
     ]
 
     // MARK: - Catalog
@@ -207,6 +208,26 @@ enum JeevesCapabilityRegistry {
             requiresGovernance: false,
             mode: .readOnly,
             commandAliases: ["explain system"]
+        ),
+        JeevesCapability(
+            id: "explain_focus",
+            title: "Verklaar Focus",
+            kind: .explanation,
+            targetScreen: nil,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["focus", "guidance", "attention", "advies"]
+        ),
+        JeevesCapability(
+            id: "inspect_here",
+            title: "Inspecteer Hier",
+            kind: .explanation,
+            targetScreen: nil,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["here", "hier", "capabilities", "mogelijkheden"]
         ),
 
         // — Governed Actions (planned) —
