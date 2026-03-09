@@ -130,6 +130,97 @@ final class GatewayManager {
         }
     }
 
+    // MARK: - Canonical Endpoint Resolution
+
+    /// Resolve the current gateway endpoint, including local discovery if applicable.
+    /// This is the ONLY place endpoint + token resolution should happen.
+    func resolveEndpoint(connection: GatewayConnection? = nil) async -> ResolvedGatewayEndpoint {
+        let baseHost = resolveHostInternal(connection: connection)
+        let basePort = resolvePortInternal(connection: connection)
+        let baseToken = resolveTokenInternal(host: baseHost, port: basePort)
+
+        if Self.isLocalDevelopmentHost(baseHost) {
+            let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
+            let discovery = await resolveLocalDevelopmentGateway(
+                host: baseHost,
+                preferredPort: basePort,
+                preferredToken: baseToken,
+                allowPortFallback: !hasRuntimePortOverride
+            )
+            let discoveredToken = discovery.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ResolvedGatewayEndpoint(
+                host: discovery.host,
+                port: discovery.port,
+                token: (discoveredToken?.isEmpty == false) ? discoveredToken : baseToken
+            )
+        }
+
+        return ResolvedGatewayEndpoint(host: baseHost, port: basePort, token: baseToken)
+    }
+
+    private func resolveHostInternal(connection: GatewayConnection?) -> String {
+        let runtimeHost = RuntimeConfig.shared.host?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let runtimeHost, !runtimeHost.isEmpty {
+            return runtimeHost
+        }
+        if let connectionHost = connection?.host.trimmingCharacters(in: .whitespacesAndNewlines),
+           !connectionHost.isEmpty {
+            return connectionHost
+        }
+        let gatewayHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !gatewayHost.isEmpty, gatewayHost.lowercased() != "mock" {
+            return gatewayHost
+        }
+        return "localhost"
+    }
+
+    private func resolvePortInternal(connection: GatewayConnection?) -> Int {
+        if let runtimePort = RuntimeConfig.shared.port, runtimePort > 0 {
+            return runtimePort
+        }
+        if let connectionPort = connection?.port, connectionPort > 0 {
+            return connectionPort
+        }
+        return port > 0 ? port : Self.localDefaultPort
+    }
+
+    private func resolveTokenInternal(host: String, port: Int) -> String? {
+        if let runtimeToken = RuntimeConfig.shared.token?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !runtimeToken.isEmpty {
+            return runtimeToken
+        }
+        if let stored = KeychainHelper.load(for: "\(host):\(port)"), !stored.isEmpty {
+            return stored
+        }
+        let normalizedHost = host.lowercased()
+        if Self.isLocalDevelopmentHost(normalizedHost) {
+            for loopbackHost in [host, "localhost", "127.0.0.1"] {
+                for candidatePort in Self.localDiscoveryPorts {
+                    if let candidate = KeychainHelper.load(for: "\(loopbackHost):\(candidatePort)"),
+                       !candidate.isEmpty {
+                        return candidate
+                    }
+                }
+            }
+            if let discoveredToken = loadDiscoveredGatewayToken(), !discoveredToken.isEmpty {
+                return discoveredToken
+            }
+        }
+        if let gatewayToken = token?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !gatewayToken.isEmpty {
+            return gatewayToken
+        }
+        return nil
+    }
+
+    /// Get an AuthorizedRequestBuilder for the current connection or throw 401.
+    func requireBuilder() throws -> AuthorizedRequestBuilder {
+        let token = try requireToken()
+        return AuthorizedRequestBuilder(host: host, port: port, token: token)
+    }
+
+    // MARK: - Message Handler
+
     func onMessage(_ handler: @escaping (IncomingMessage) -> Void) {
         messageHandler = handler
     }
@@ -359,8 +450,8 @@ final class GatewayManager {
             return status
         }
 
-        let token = try requireToken()
-        let state = try await ConductorAPI.state(host: host, port: port, token: token)
+        let builder = try requireBuilder()
+        let state = try await ConductorAPI.state(builder: builder)
 
         let status = GatewayStatus(
             budget: BudgetStatus(
@@ -387,8 +478,8 @@ final class GatewayManager {
             return status
         }
 
-        let token = try requireToken()
-        let status = try await ConductorAPI.knowledgeStatus(host: host, port: port, token: token)
+        let builder = try requireBuilder()
+        let status = try await ConductorAPI.knowledgeStatus(builder: builder)
         currentKnowledgeStatus = status
         return status
     }
@@ -400,13 +491,13 @@ final class GatewayManager {
             return mock
         }
 
-        let token = try requireToken()
-        async let clock = ConductorAPI.fabricClock(host: host, port: port, token: token)
-        async let emergence = ConductorAPI.fabricEmergence(host: host, port: port, token: token)
-        async let fabricState = ConductorAPI.fabricState(host: host, port: port, token: token)
-        async let challenges = ConductorAPI.lobbyChallenges(host: host, port: port, token: token)
-        async let openclaw = ConductorAPI.openclawSkillsSummary(host: host, port: port, token: token)
-        async let alerts = ConductorAPI.observatoryAlerts(host: host, port: port, token: token)
+        let builder = try requireBuilder()
+        async let clock = ConductorAPI.fabricClock(builder: builder)
+        async let emergence = ConductorAPI.fabricEmergence(builder: builder)
+        async let fabricState = ConductorAPI.fabricState(builder: builder)
+        async let challenges = ConductorAPI.lobbyChallenges(builder: builder)
+        async let openclaw = ConductorAPI.openclawSkillsSummary(builder: builder)
+        async let alerts = ConductorAPI.observatoryAlerts(builder: builder)
 
         let bundle = try await ObservatoryGatewayBundle(
             clock: clock,
@@ -426,7 +517,7 @@ final class GatewayManager {
             return mock.mockAuditEntries()
         }
 
-        let token = try requireToken()
+        let builder = try requireBuilder()
         let remotePeriod: String
         switch period {
         case .today:
@@ -437,7 +528,7 @@ final class GatewayManager {
             remotePeriod = "monthly"
         }
 
-        let events = try await ConductorAPI.audit(host: host, port: port, token: token, period: remotePeriod)
+        let events = try await ConductorAPI.audit(builder: builder, period: remotePeriod)
 
         return events.enumerated().map { index, event in
             let timestampString = event.timestamp ?? ""
@@ -477,8 +568,8 @@ final class GatewayManager {
             return
         }
 
-        let token = try requireToken()
-        try await ConductorAPI.killActivate(host: host, port: port, token: token, reason: reason)
+        let builder = try requireBuilder()
+        try await ConductorAPI.killActivate(builder: builder, reason: reason)
         _ = try? await fetchStatus()
     }
 
@@ -490,8 +581,8 @@ final class GatewayManager {
             return
         }
 
-        let token = try requireToken()
-        try await ConductorAPI.killDeactivate(host: host, port: port, token: token)
+        let builder = try requireBuilder()
+        try await ConductorAPI.killDeactivate(builder: builder)
         _ = try? await fetchStatus()
     }
 
@@ -502,8 +593,8 @@ final class GatewayManager {
             return
         }
 
-        let token = try requireToken()
-        let response = try await ConductorAPI.postMessage(host: host, port: port, token: token, text: text, peerId: "owner")
+        let builder = try requireBuilder()
+        let response = try await ConductorAPI.postMessage(builder: builder, text: text, peerId: "owner")
 
         if let incoming = IncomingMessageDecoder.decode(from: response) {
             handleIncoming(incoming)
@@ -518,9 +609,9 @@ final class GatewayManager {
             return
         }
 
-        let token = try requireToken()
+        let builder = try requireBuilder()
         let body = try JSONEncoder().encode(ConsentResponseMessage(id: id, approved: approved))
-        let response = try await ConductorAPI.postIntent(host: host, port: port, token: token, body: body)
+        let response = try await ConductorAPI.postIntent(builder: builder, body: body)
 
         if let incoming = IncomingMessageDecoder.decode(from: response) {
             handleIncoming(incoming)
@@ -529,9 +620,10 @@ final class GatewayManager {
 
     private func refreshConnectivityAndStatus(host: String, port: Int, token: String) async {
         let startedNs = DispatchTime.now().uptimeNanoseconds
+        let builder = AuthorizedRequestBuilder(host: host, port: port, token: token)
 
         do {
-            let health = try await ConductorAPI.health(host: host, port: port, token: token)
+            let health = try await ConductorAPI.health(builder: builder)
             let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - startedNs) / 1_000_000)
             latencyMs = health.responseTimeMs ?? elapsedMs
             connectionState = health.ok ? .connected : .failed
@@ -580,24 +672,12 @@ final class GatewayManager {
     }
 
     private func probeConductorHealth(host: String, port: Int, token: String?) async -> ConductorProbeStatus {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = host
-        components.port = port
-        components.path = "/api/conductor/health"
-        if let token, !token.isEmpty {
-            components.queryItems = [URLQueryItem(name: "token", value: token)]
-        }
-
-        guard let url = components.url else { return .unavailable }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 1.2
-        if let token, !token.isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        guard let token, !token.isEmpty else { return .unavailable }
+        let builder = AuthorizedRequestBuilder(host: host, port: port, token: token)
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let req = try builder.request(for: RouteContract.Conductor.health, timeoutInterval: 1.2)
+            let (data, response) = try await URLSession.shared.data(for: req)
             guard let http = response as? HTTPURLResponse else { return .unavailable }
             if http.statusCode == 200 {
                 if let decoded = try? JSONDecoder().decode(ConductorHealth.self, from: data) {

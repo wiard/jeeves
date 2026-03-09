@@ -79,7 +79,7 @@ final class ProposalPoller {
             return
         }
 
-        let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
+        let resolvedEndpoint = await gateway.resolveEndpoint()
         guard let token = resolvedEndpoint.token, !token.isEmpty else {
             #if DEBUG
             print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
@@ -320,71 +320,6 @@ final class ProposalPoller {
         hasLoadedOnce = true
     }
 
-    private struct ResolvedEndpoint {
-        let host: String
-        let port: Int
-        let token: String?
-    }
-
-    private func resolveGatewayEndpoint(gateway: GatewayManager) async -> ResolvedEndpoint {
-        var host = gateway.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        if host.isEmpty {
-            host = RuntimeConfig.shared.host?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "localhost"
-        }
-
-        var port = gateway.port > 0 ? gateway.port : 19001
-        if let runtimePort = RuntimeConfig.shared.port, runtimePort > 0 {
-            port = runtimePort
-        }
-        let normalizedEndpoint = GatewayManager.normalizeEndpoint(host: host, port: port)
-        host = normalizedEndpoint.host
-        port = normalizedEndpoint.port
-
-        let initialToken = resolveToken(host: host, port: port, gateway: gateway)
-        if GatewayManager.isLocalDevelopmentHost(host) {
-            let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
-            let discovery = await gateway.resolveLocalDevelopmentGateway(
-                host: host,
-                preferredPort: port,
-                preferredToken: initialToken,
-                allowPortFallback: !hasRuntimePortOverride
-            )
-            let discoveredToken = discovery.token?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return ResolvedEndpoint(
-                host: discovery.host,
-                port: discovery.port,
-                token: (discoveredToken?.isEmpty == false) ? discoveredToken : initialToken
-            )
-        }
-
-        return ResolvedEndpoint(host: host, port: port, token: initialToken)
-    }
-
-    private func resolveToken(host: String, port: Int, gateway: GatewayManager) -> String? {
-        if let runtimeToken = RuntimeConfig.shared.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !runtimeToken.isEmpty {
-            return runtimeToken
-        }
-        if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !gatewayToken.isEmpty {
-            return gatewayToken
-        }
-        if let stored = KeychainHelper.load(for: "\(host):\(port)"),
-           !stored.isEmpty {
-            return stored
-        }
-        if GatewayManager.isLocalDevelopmentHost(host) {
-            for loopbackHost in ["localhost", "127.0.0.1"] {
-                for candidatePort in GatewayManager.localDiscoveryPorts {
-                    if let candidate = KeychainHelper.load(for: "\(loopbackHost):\(candidatePort)"),
-                       !candidate.isEmpty {
-                        return candidate
-                    }
-                }
-            }
-        }
-        return nil
-    }
 
     func decide(
         proposalId: String,
@@ -397,7 +332,7 @@ final class ProposalPoller {
             return .success
         }
 
-        let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
+        let resolvedEndpoint = await gateway.resolveEndpoint()
         guard let token = resolvedEndpoint.token, !token.isEmpty else {
             return .failure(message: "Geen token beschikbaar. Voeg een token toe in Instellingen.")
         }
@@ -460,7 +395,7 @@ final class ProposalPoller {
             return
         }
 
-        let resolvedEndpoint = await resolveGatewayEndpoint(gateway: gateway)
+        let resolvedEndpoint = await gateway.resolveEndpoint()
         guard let token = resolvedEndpoint.token, !token.isEmpty else { return }
 
         isSeeding = true

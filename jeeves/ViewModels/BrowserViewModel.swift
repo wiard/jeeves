@@ -211,7 +211,7 @@ final class BrowserViewModel {
 
         Task {
             do {
-                let client = makeSafeClashClient(gateway: gateway)
+                let client = await makeSafeClashClient(gateway: gateway)
 
                 if let browserFeed = try? await client.fetchBrowserFeed() {
                     var cache: [String: AIConfigurationAtom] = [:]
@@ -268,7 +268,7 @@ final class BrowserViewModel {
 
             let searchTask = Task {
                 do {
-                    let client = makeSafeClashClient(gateway: gateway)
+                    let client = await makeSafeClashClient(gateway: gateway)
 
                     if let browserFeed = try? await client.fetchBrowserFeed(
                         domain: domain,
@@ -326,7 +326,7 @@ final class BrowserViewModel {
         guard configurationCache[configId] == nil else { return }
 
         Task {
-            let client = makeSafeClashClient(gateway: gateway)
+            let client = await makeSafeClashClient(gateway: gateway)
             if let config = try? await client.getConfiguration(configId: configId) {
                 configurationCache[configId] = config
             }
@@ -379,15 +379,14 @@ final class BrowserViewModel {
         deploymentError = nil
 
         Task {
-            let host = gateway.host.isEmpty ? "localhost" : gateway.host
-            let port = gateway.port > 0 ? gateway.port : 19001
-            guard let token = gateway.token, !token.isEmpty else {
+            let endpoint = await gateway.resolveEndpoint()
+            guard let token = endpoint.token, !token.isEmpty else {
                 deployingConfigId = nil
                 deploymentError = "No token available. Add a token in Settings."
                 return
             }
 
-            let client = GatewayClient(host: host, port: port, token: token)
+            let client = GatewayClient(host: endpoint.host, port: endpoint.port, token: token)
             do {
                 let response = try await client.deployCertifiedConfiguration(deployment: request)
                 await poller.refresh(gateway: gateway)
@@ -420,37 +419,26 @@ final class BrowserViewModel {
 
     // MARK: - Private
 
-    private func makeSafeClashClient(gateway: GatewayManager) -> SafeClashClient {
-        let token = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return SafeClashClient(
-            baseURL: resolveSafeClashBaseURL(gateway: gateway),
-            token: (token?.isEmpty == false) ? token : nil
-        )
-    }
-
-    private func resolveSafeClashBaseURL(gateway: GatewayManager) -> URL {
+    private func makeSafeClashClient(gateway: GatewayManager) async -> SafeClashClient {
         let env = ProcessInfo.processInfo.environment
+        // Allow explicit SafeClash URL override via environment
         if let raw = env["SAFECLASH_BASE_URL"] ?? env["SAFECLASH_URL"],
            let url = URL(string: raw),
            let scheme = url.scheme,
            (scheme == "http" || scheme == "https"),
            url.host != nil {
-            return url
+            let token = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SafeClashClient(baseURL: url, token: (token?.isEmpty == false) ? token : nil)
         }
 
+        let endpoint = await gateway.resolveEndpoint()
         var components = URLComponents()
         components.scheme = "http"
-        if !gateway.host.isEmpty, gateway.host.lowercased() != "mock" {
-            components.host = gateway.host
-            components.port = gateway.port > 0 ? gateway.port : 19001
-        } else if let runtimeHost = RuntimeConfig.shared.host {
-            components.host = runtimeHost
-            components.port = RuntimeConfig.shared.port ?? 19001
-        } else {
-            components.host = "localhost"
-            components.port = 19001
-        }
-        return components.url ?? URL(string: "http://localhost:19001")!
+        components.host = endpoint.host
+        components.port = endpoint.port
+        let baseURL = components.url ?? URL(string: "http://localhost:19001")!
+        let token = endpoint.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return SafeClashClient(baseURL: baseURL, token: (token?.isEmpty == false) ? token : nil)
     }
 
     private func describeError(_ error: Error, gateway: GatewayManager) -> String {

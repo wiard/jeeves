@@ -334,7 +334,7 @@ struct CubeOracleView: View {
     }
 
     private func refreshAll() async {
-        vm.configure(gateway: gateway, connection: connections.first)
+        await vm.configure(gateway: gateway, connection: connections.first)
         await vm.loadTopics()
         await vm.loadCards()
         if vm.currentCard == nil {

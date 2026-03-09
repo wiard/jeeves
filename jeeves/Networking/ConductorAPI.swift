@@ -175,14 +175,8 @@ private struct ConductorAuditEnvelope: Decodable {
 }
 
 enum ConductorAPI {
-    static func health(host: String, port: Int, token: String) async throws -> ConductorHealth {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/conductor/health",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func health(builder: AuthorizedRequestBuilder) async throws -> ConductorHealth {
+        let req = try builder.request(for: RouteContract.Conductor.health)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
 
@@ -195,27 +189,15 @@ enum ConductorAPI {
         return health
     }
 
-    static func state(host: String, port: Int, token: String) async throws -> ConductorState {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/conductor/state",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func state(builder: AuthorizedRequestBuilder) async throws -> ConductorState {
+        let req = try builder.request(for: RouteContract.Conductor.state)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return try JSONDecoder().decode(ConductorState.self, from: data)
     }
 
-    static func knowledgeStatus(host: String, port: Int, token: String) async throws -> KnowledgeStatus {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/knowledge/status",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func knowledgeStatus(builder: AuthorizedRequestBuilder) async throws -> KnowledgeStatus {
+        let req = try builder.request(for: RouteContract.Knowledge.status)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
 
@@ -232,53 +214,29 @@ enum ConductorAPI {
         return .empty
     }
 
-    static func fabricClock(host: String, port: Int, token: String) async throws -> FabricClockState {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/fabric/clock",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func fabricClock(builder: AuthorizedRequestBuilder) async throws -> FabricClockState {
+        let req = try builder.request(for: RouteContract.Fabric.clock)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return (try? JSONDecoder().decode(FabricClockState.self, from: data)) ?? .empty
     }
 
-    static func fabricEmergence(host: String, port: Int, token: String) async throws -> FabricEmergenceResponse {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/fabric/emergence",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func fabricEmergence(builder: AuthorizedRequestBuilder) async throws -> FabricEmergenceResponse {
+        let req = try builder.request(for: RouteContract.Fabric.emergence)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return (try? JSONDecoder().decode(FabricEmergenceResponse.self, from: data)) ?? .empty
     }
 
-    static func fabricState(host: String, port: Int, token: String) async throws -> FabricStateSummaryResponse {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/fabric/state",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func fabricState(builder: AuthorizedRequestBuilder) async throws -> FabricStateSummaryResponse {
+        let req = try builder.request(for: RouteContract.Fabric.state)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return (try? JSONDecoder().decode(FabricStateSummaryResponse.self, from: data)) ?? .empty
     }
 
-    static func lobbyChallenges(host: String, port: Int, token: String) async throws -> [LobbyChallengeItem] {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/lobby/challenges",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func lobbyChallenges(builder: AuthorizedRequestBuilder) async throws -> [LobbyChallengeItem] {
+        let req = try builder.request(for: RouteContract.Lobby.challenges)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
 
@@ -292,14 +250,8 @@ enum ConductorAPI {
         return []
     }
 
-    static func openclawSkillsSummary(host: String, port: Int, token: String) async throws -> OpenclawSkillsSummary {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/openclaw/skills/summary",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func openclawSkillsSummary(builder: AuthorizedRequestBuilder) async throws -> OpenclawSkillsSummary {
+        let req = try builder.request(for: RouteContract.openclawSkillsSummary)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
 
@@ -314,115 +266,49 @@ enum ConductorAPI {
         return .empty
     }
 
-    static func observatoryAlerts(host: String, port: Int, token: String) async throws -> ObservatoryAlertsResponse {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/observatory/alerts",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func observatoryAlerts(builder: AuthorizedRequestBuilder) async throws -> ObservatoryAlertsResponse {
+        let req = try builder.request(for: RouteContract.Observatory.alerts)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return (try? JSONDecoder().decode(ObservatoryAlertsResponse.self, from: data)) ?? .empty
     }
 
-    static func postMessage(host: String, port: Int, token: String, text: String, peerId: String) async throws -> Data {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/message",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONEncoder().encode(["text": text, "peerId": peerId])
-
+    static func postMessage(builder: AuthorizedRequestBuilder, text: String, peerId: String) async throws -> Data {
+        let body = try JSONEncoder().encode(["text": text, "peerId": peerId])
+        let req = try builder.request(for: RouteContract.message, body: body)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return data
     }
 
-    static func postIntent(host: String, port: Int, token: String, body: Data) async throws -> Data {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/conductor/intent",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = body
-
+    static func postIntent(builder: AuthorizedRequestBuilder, body: Data) async throws -> Data {
+        let req = try builder.request(for: RouteContract.Conductor.intent, body: body)
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return data
     }
 
-    static func audit(host: String, port: Int, token: String, period: String) async throws -> [ConductorAuditEvent] {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/conductor/audit",
-            queryItems: [
-                URLQueryItem(name: "token", value: token),
-                URLQueryItem(name: "period", value: period)
-            ]
-        ))
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    static func audit(builder: AuthorizedRequestBuilder, period: String) async throws -> [ConductorAuditEvent] {
+        let req = try builder.request(
+            for: RouteContract.Conductor.audit,
+            additionalQuery: [URLQueryItem(name: "period", value: period)]
+        )
         let (data, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
         return try decodeAuditEvents(from: data)
     }
 
-    static func killActivate(host: String, port: Int, token: String, reason: String) async throws {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/conductor/kill/activate",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONEncoder().encode(["reason": reason])
-
+    static func killActivate(builder: AuthorizedRequestBuilder, reason: String) async throws {
+        let body = try JSONEncoder().encode(["reason": reason])
+        let req = try builder.request(for: RouteContract.Conductor.killActivate, body: body)
         let (_, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
     }
 
-    static func killDeactivate(host: String, port: Int, token: String) async throws {
-        var req = URLRequest(url: try endpointURL(
-            host: host,
-            port: port,
-            path: "/api/conductor/kill/deactivate",
-            queryItems: [URLQueryItem(name: "token", value: token)]
-        ))
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
+    static func killDeactivate(builder: AuthorizedRequestBuilder) async throws {
+        let req = try builder.request(for: RouteContract.Conductor.killDeactivate)
         let (_, response) = try await URLSession.shared.data(for: req)
         try ensureHTTP2xx(response)
-    }
-
-    private static func endpointURL(host: String,
-                                    port: Int,
-                                    path: String,
-                                    queryItems: [URLQueryItem]) throws -> URL {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = host
-        components.port = port
-        components.path = path
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw URLError(.badURL)
-        }
-        return url
     }
 
     private static func ensureHTTP2xx(_ response: URLResponse) throws {

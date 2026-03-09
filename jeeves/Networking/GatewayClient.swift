@@ -3,16 +3,15 @@ import Foundation
 actor GatewayClient {
     let baseURL: URL
     let token: String
+    private let builder: AuthorizedRequestBuilder
 
     private let maxRetries = 2
 
     init(host: String, port: Int, token: String) {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = host
-        components.port = port
-        self.baseURL = components.url ?? URL(string: "http://localhost:19001")!
+        let b = AuthorizedRequestBuilder(host: host, port: port, token: token)
+        self.baseURL = b.baseURL
         self.token = token
+        self.builder = b
     }
 
     func get<T: Decodable>(_ path: String) async throws -> T {
@@ -428,23 +427,14 @@ actor GatewayClient {
         body: Data? = nil,
         queryItems: [URLQueryItem] = []
     ) async throws -> (Data, HTTPURLResponse) {
-        let url = try buildURL(path: path, queryItems: queryItems)
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = body
-        }
+        let request = try builder.request(path: path, method: method, body: body, queryItems: queryItems)
 
         var attempt = 0
         var lastError: Error?
 
         while attempt <= maxRetries {
             do {
-                debugRequest(path: path, url: url, hasAuthorization: request.value(forHTTPHeaderField: "Authorization") != nil)
+                debugRequest(path: path, url: request.url!, hasAuthorization: request.value(forHTTPHeaderField: "Authorization") != nil)
                 let (data, response) = try await URLSession.shared.data(for: request)
 
                 guard let http = response as? HTTPURLResponse else {
@@ -478,18 +468,6 @@ actor GatewayClient {
         throw lastError ?? GatewayClientError.unknown
     }
 
-    private func buildURL(path: String, queryItems: [URLQueryItem] = []) throws -> URL {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw URLError(.badURL)
-        }
-        components.path = path
-        components.queryItems = [URLQueryItem(name: "token", value: token)] + queryItems
-
-        guard let url = components.url else {
-            throw URLError(.badURL)
-        }
-        return url
-    }
 
     private func shouldRetry(statusCode: Int) -> Bool {
         statusCode == 408 || statusCode == 429 || (500...599).contains(statusCode)

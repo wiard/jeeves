@@ -50,12 +50,13 @@ enum DemoSeed {
         let pending = existing.filter(\.isPending)
         guard pending.isEmpty else { return false }
 
+        let builder = AuthorizedRequestBuilder(host: host, port: port, token: token)
         for (index, proposal) in seedProposals.enumerated() {
             if index > 0 {
                 try? await Task.sleep(for: .milliseconds(500))
             }
             do {
-                try await postProposal(proposal, host: host, port: port, token: token)
+                try await postProposal(proposal, builder: builder)
             } catch {
                 continue
             }
@@ -64,25 +65,10 @@ enum DemoSeed {
         return true
     }
 
-    private static func postProposal(_ proposal: [String: Any], host: String, port: Int, token: String) async throws {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = host
-        components.port = port
-        components.path = "/api/agents/propose"
-        components.queryItems = [URLQueryItem(name: "token", value: token)]
-
-        guard let url = components.url else {
-            throw URLError(.badURL)
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: proposal)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
+    private static func postProposal(_ proposal: [String: Any], builder: AuthorizedRequestBuilder) async throws {
+        let body = try JSONSerialization.data(withJSONObject: proposal)
+        let req = try builder.request(for: RouteContract.Agents.propose, body: body)
+        let (_, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse,
               (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)

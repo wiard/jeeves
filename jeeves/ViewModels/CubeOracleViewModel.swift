@@ -2,7 +2,6 @@ import Foundation
 
 @MainActor
 final class CubeOracleViewModel: ObservableObject {
-    private static let localDefaultPort = 19001
     @Published var cards: [CubeCard] = []
     @Published var currentCard: CubeCard?
     @Published var soundProfile: SoundProfile?
@@ -16,25 +15,23 @@ final class CubeOracleViewModel: ObservableObject {
     @Published var error: String?
 
     private struct ResolvedGateway {
-        let host: String
-        let port: Int
-        let token: String
+        let builder: AuthorizedRequestBuilder
         let useFixture: Bool
     }
 
     private var resolved: ResolvedGateway?
 
-    func configure(gateway: GatewayManager, connection: GatewayConnection?) {
-        let host = resolveHost(gateway: gateway, connection: connection)
-        let port = resolvePort(gateway: gateway, connection: connection)
+    func configure(gateway: GatewayManager, connection: GatewayConnection?) async {
+        let endpoint = await gateway.resolveEndpoint(connection: connection)
 
-        if gateway.useMock || host.lowercased() == "mock" {
-            resolved = ResolvedGateway(host: host, port: port, token: "mock", useFixture: true)
+        if gateway.useMock || endpoint.host.lowercased() == "mock" {
+            let builder = AuthorizedRequestBuilder(host: endpoint.host, port: endpoint.port, token: "mock")
+            resolved = ResolvedGateway(builder: builder, useFixture: true)
             return
         }
 
-        if let token = resolveToken(host: host, port: port, gateway: gateway), !token.isEmpty {
-            resolved = ResolvedGateway(host: host, port: port, token: token, useFixture: false)
+        if let builder = endpoint.makeRequestBuilder() {
+            resolved = ResolvedGateway(builder: builder, useFixture: false)
         } else {
             resolved = nil
         }
@@ -60,7 +57,7 @@ final class CubeOracleViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let loaded = try await CubeOracleAPI.cards(host: cfg.host, port: cfg.port, token: cfg.token)
+            let loaded = try await CubeOracleAPI.cards(builder: cfg.builder)
             cards = loaded.sorted { lhs, rhs in
                 if lhs.cellIndex != rhs.cellIndex { return lhs.cellIndex < rhs.cellIndex }
                 return lhs.id < rhs.id
@@ -95,7 +92,7 @@ final class CubeOracleViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let loaded = try await CubeOracleAPI.topics(host: cfg.host, port: cfg.port, token: cfg.token)
+            let loaded = try await CubeOracleAPI.topics(builder: cfg.builder)
             topics = loaded.sorted {
                 if $0.category != $1.category { return $0.category < $1.category }
                 return $0.title < $1.title
@@ -130,7 +127,7 @@ final class CubeOracleViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let response = try await CubeOracleAPI.draw(host: cfg.host, port: cfg.port, token: cfg.token, mode: mode, topic: topic)
+            let response = try await CubeOracleAPI.draw(builder: cfg.builder, mode: mode, topic: topic)
             currentCard = response.card
             soundProfile = response.soundProfile
             hotspots = response.hotspots.sorted {
@@ -172,7 +169,7 @@ final class CubeOracleViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let response = try await CubeOracleAPI.selectTopic(host: cfg.host, port: cfg.port, token: cfg.token, topicId: topicId)
+            let response = try await CubeOracleAPI.selectTopic(builder: cfg.builder, topicId: topicId)
             selectedTopic = response.topic
             hotspots = response.hotspots.sorted {
                 if $0.residue != $1.residue { return $0.residue > $1.residue }
@@ -258,59 +255,6 @@ contentHash: \(card.ordinal.contentHash)
     private func applyFixtureTopicSelection(topicId: String) {
         selectedTopic = topics.first(where: { $0.id == topicId })
         drawFixtureCard(mode: "block", topic: topicId)
-    }
-
-    private func resolveHost(gateway: GatewayManager, connection: GatewayConnection?) -> String {
-        let runtimeHost = RuntimeConfig.shared.host?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let runtimeHost, !runtimeHost.isEmpty {
-            return runtimeHost
-        }
-
-        if let host = connection?.host.trimmingCharacters(in: .whitespacesAndNewlines), !host.isEmpty {
-            return host
-        }
-
-        let gatewayHost = gateway.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !gatewayHost.isEmpty {
-            return gatewayHost
-        }
-        return "localhost"
-    }
-
-    private func resolvePort(gateway: GatewayManager, connection: GatewayConnection?) -> Int {
-        if let runtimePort = RuntimeConfig.shared.port, runtimePort > 0 {
-            return runtimePort
-        }
-        if let p = connection?.port, p > 0 {
-            return p
-        }
-        return gateway.port > 0 ? gateway.port : Self.localDefaultPort
-    }
-
-    private func resolveToken(host: String, port: Int, gateway: GatewayManager) -> String? {
-        if let runtimeToken = RuntimeConfig.shared.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !runtimeToken.isEmpty {
-            return runtimeToken
-        }
-
-        if let stored = KeychainHelper.load(for: "\(host):\(port)"), !stored.isEmpty {
-            return stored
-        }
-
-        let normalizedHost = host.lowercased()
-        if GatewayManager.isLocalDevelopmentHost(normalizedHost) {
-            for candidatePort in GatewayManager.localDiscoveryPorts {
-                if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
-                    return candidate
-                }
-            }
-        }
-
-        if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines), !gatewayToken.isEmpty {
-            return gatewayToken
-        }
-
-        return nil
     }
 
     private func fixtureCards() -> [CubeCard] {

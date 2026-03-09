@@ -3,10 +3,17 @@ import Foundation
 actor SafeClashClient {
     let baseURL: URL
     let token: String?
+    private let builder: AuthorizedRequestBuilder?
 
     init(baseURL: URL, token: String? = nil) {
         self.baseURL = baseURL
-        self.token = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.token = trimmed
+        if let trimmed, !trimmed.isEmpty {
+            self.builder = AuthorizedRequestBuilder(baseURL: baseURL, token: trimmed)
+        } else {
+            self.builder = nil
+        }
     }
 
     func searchIntentions(
@@ -172,15 +179,27 @@ actor SafeClashClient {
         method: String,
         queryItems: [URLQueryItem] = []
     ) async throws -> (Data, HTTPURLResponse) {
-        let url = try buildURL(path: path, queryItems: queryItems)
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token, !token.isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let req: URLRequest
+        if let builder {
+            // Builder handles Bearer header + token query param
+            req = try builder.request(path: path, method: method, queryItems: queryItems, includeTokenQuery: token != nil)
+        } else {
+            // No token — build request manually without auth
+            guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+                throw URLError(.badURL)
+            }
+            components.path = path
+            components.queryItems = queryItems.isEmpty ? nil : queryItems
+            guard let url = components.url else {
+                throw URLError(.badURL)
+            }
+            var r = URLRequest(url: url)
+            r.httpMethod = method
+            r.setValue("application/json", forHTTPHeaderField: "Accept")
+            req = r
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
@@ -188,19 +207,6 @@ actor SafeClashClient {
             throw SafeClashClientError.httpStatus(http.statusCode)
         }
         return (data, http)
-    }
-
-    private func buildURL(path: String, queryItems: [URLQueryItem]) throws -> URL {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw URLError(.badURL)
-        }
-        components.path = path
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw URLError(.badURL)
-        }
-        return url
     }
 }
 

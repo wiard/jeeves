@@ -3,7 +3,6 @@ import Combine
 
 @MainActor
 final class ObservatoryViewModel: ObservableObject, ScreenStateReadable {
-    private static let localDefaultPort = 19001
     enum Section: CaseIterable {
         case loop
         case fabric
@@ -54,16 +53,13 @@ final class ObservatoryViewModel: ObservableObject, ScreenStateReadable {
             return
         }
 
-        let endpoint = await resolveGatewayEndpoint(gateway: gateway, connection: connection)
-        let resolvedHost = endpoint.host
-        let resolvedPort = endpoint.port
-        let resolvedToken = endpoint.token
+        let endpoint = await gateway.resolveEndpoint(connection: connection)
 
         #if DEBUG
-        print("[Jeeves][ObservatoryVM] refresh host=\(resolvedHost) port=\(resolvedPort) token=\((resolvedToken?.isEmpty == false) ? "present" : "missing")")
+        print("[Jeeves][ObservatoryVM] refresh host=\(endpoint.host) port=\(endpoint.port) token=\((endpoint.token?.isEmpty == false) ? "present" : "missing")")
         #endif
 
-        guard let token = resolvedToken, !token.isEmpty else {
+        guard let builder = endpoint.makeRequestBuilder() else {
             snapshot = nil
             markAllUnavailable()
             errorText = "Missing token"
@@ -100,95 +96,95 @@ final class ObservatoryViewModel: ObservableObject, ScreenStateReadable {
         var hasDiscovery = false
 
         do {
-            conductor = try await ObservatoryAPI.conductorState(host: resolvedHost, port: resolvedPort, token: token)
+            conductor = try await ObservatoryAPI.conductorState(builder: builder)
             hasConductor = true
         } catch {}
 
         do {
-            alerts = try await ObservatoryAPI.observatoryAlerts(host: resolvedHost, port: resolvedPort, token: token)
+            alerts = try await ObservatoryAPI.observatoryAlerts(builder: builder)
             hasAlerts = true
         } catch {}
 
         do {
-            fabricClock = try await ObservatoryAPI.fabricClock(host: resolvedHost, port: resolvedPort, token: token)
+            fabricClock = try await ObservatoryAPI.fabricClock(builder: builder)
             hasFabric = true
         } catch {}
 
         do {
-            fabricEmergence = try await ObservatoryAPI.fabricEmergence(host: resolvedHost, port: resolvedPort, token: token)
+            fabricEmergence = try await ObservatoryAPI.fabricEmergence(builder: builder)
             hasFabric = true
         } catch {}
 
         do {
-            challenges = try await ObservatoryAPI.lobbyChallenges(host: resolvedHost, port: resolvedPort, token: token)
+            challenges = try await ObservatoryAPI.lobbyChallenges(builder: builder)
             hasLobby = true
         } catch {}
 
         do {
-            signals = try await ObservatoryAPI.signalsState(host: resolvedHost, port: resolvedPort, token: token)
+            signals = try await ObservatoryAPI.signalsState(builder: builder)
             hasSignals = true
         } catch {}
 
         do {
-            signalsRuntime = try await ObservatoryAPI.signalsRuntime(host: resolvedHost, port: resolvedPort, token: token)
+            signalsRuntime = try await ObservatoryAPI.signalsRuntime(builder: builder)
             hasSignals = true
             hasDiscovery = true
         } catch {}
 
         do {
-            knowledgeStatus = try await ObservatoryAPI.knowledgeStatus(host: resolvedHost, port: resolvedPort, token: token)
+            knowledgeStatus = try await ObservatoryAPI.knowledgeStatus(builder: builder)
             hasKnowledge = true
         } catch {}
 
         do {
-            knowledgeEmergence = try await ObservatoryAPI.knowledgeEmergence(host: resolvedHost, port: resolvedPort, token: token)
+            knowledgeEmergence = try await ObservatoryAPI.knowledgeEmergence(builder: builder)
             hasKnowledge = true
         } catch {}
 
         do {
-            stream = try await ObservatoryAPI.observatoryStream(host: resolvedHost, port: resolvedPort, token: token, limit: 60)
+            stream = try await ObservatoryAPI.observatoryStream(builder: builder, limit: 60)
             hasDiscovery = true
         } catch {}
 
         do {
-            radarStatus = try await ObservatoryAPI.radarStatus(host: resolvedHost, port: resolvedPort, token: token)
+            radarStatus = try await ObservatoryAPI.radarStatus(builder: builder)
             hasRadar = true
         } catch {}
 
         do {
-            radarActivations = try await ObservatoryAPI.radarActivations(host: resolvedHost, port: resolvedPort, token: token, limit: 40)
+            radarActivations = try await ObservatoryAPI.radarActivations(builder: builder, limit: 40)
             hasRadar = true
         } catch {}
 
         do {
-            radarCollisions = try await ObservatoryAPI.radarCollisions(host: resolvedHost, port: resolvedPort, token: token)
-            hasRadar = true
-            hasDiscovery = true
-        } catch {}
-
-        do {
-            radarEmergence = try await ObservatoryAPI.radarEmergence(host: resolvedHost, port: resolvedPort, token: token)
+            radarCollisions = try await ObservatoryAPI.radarCollisions(builder: builder)
             hasRadar = true
             hasDiscovery = true
         } catch {}
 
         do {
-            radarClusters = try await ObservatoryAPI.radarClusters(host: resolvedHost, port: resolvedPort, token: token)
-            hasRadar = true
-        } catch {}
-
-        do {
-            radarSources = try await ObservatoryAPI.radarSources(host: resolvedHost, port: resolvedPort, token: token)
-            hasRadar = true
-        } catch {}
-        do {
-            radarGravity = try await ObservatoryAPI.radarGravity(host: resolvedHost, port: resolvedPort, token: token)
+            radarEmergence = try await ObservatoryAPI.radarEmergence(builder: builder)
             hasRadar = true
             hasDiscovery = true
         } catch {}
 
         do {
-            radarDiscoveries = try await ObservatoryAPI.radarDiscoveries(host: resolvedHost, port: resolvedPort, token: token)
+            radarClusters = try await ObservatoryAPI.radarClusters(builder: builder)
+            hasRadar = true
+        } catch {}
+
+        do {
+            radarSources = try await ObservatoryAPI.radarSources(builder: builder)
+            hasRadar = true
+        } catch {}
+        do {
+            radarGravity = try await ObservatoryAPI.radarGravity(builder: builder)
+            hasRadar = true
+            hasDiscovery = true
+        } catch {}
+
+        do {
+            radarDiscoveries = try await ObservatoryAPI.radarDiscoveries(builder: builder)
             hasRadar = true
             hasDiscovery = true
         } catch {}
@@ -251,35 +247,6 @@ final class ObservatoryViewModel: ObservableObject, ScreenStateReadable {
         isLoading = false
     }
 
-    private struct ResolvedEndpoint {
-        let host: String
-        let port: Int
-        let token: String?
-    }
-
-    private func resolveGatewayEndpoint(gateway: GatewayManager, connection: GatewayConnection?) async -> ResolvedEndpoint {
-        let baseHost = resolveHost(gateway: gateway, connection: connection)
-        let basePort = resolvePort(gateway: gateway, connection: connection)
-        let baseToken = resolveToken(host: baseHost, port: basePort, gateway: gateway)
-
-        if GatewayManager.isLocalDevelopmentHost(baseHost) {
-            let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
-            let discovery = await gateway.resolveLocalDevelopmentGateway(
-                host: baseHost,
-                preferredPort: basePort,
-                preferredToken: baseToken,
-                allowPortFallback: !hasRuntimePortOverride
-            )
-            let discoveredToken = discovery.token?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return ResolvedEndpoint(
-                host: discovery.host,
-                port: discovery.port,
-                token: (discoveredToken?.isEmpty == false) ? discoveredToken : baseToken
-            )
-        }
-
-        return ResolvedEndpoint(host: baseHost, port: basePort, token: baseToken)
-    }
 
     nonisolated static func sortAlerts(_ alerts: [ObservatoryAlert]) -> [ObservatoryAlert] {
         alerts.sorted { lhs, rhs in
@@ -395,65 +362,6 @@ final class ObservatoryViewModel: ObservableObject, ScreenStateReadable {
         }
     }
 
-
-    private func resolveHost(gateway: GatewayManager, connection: GatewayConnection?) -> String {
-        let runtimeHost = RuntimeConfig.shared.host?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let runtimeHost, !runtimeHost.isEmpty {
-            return runtimeHost
-        }
-
-        if let connectionHost = connection?.host.trimmingCharacters(in: .whitespacesAndNewlines),
-           !connectionHost.isEmpty {
-            return connectionHost
-        }
-
-        let gatewayHost = gateway.host.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !gatewayHost.isEmpty, gatewayHost.lowercased() != "mock" {
-            return gatewayHost
-        }
-
-        return "localhost"
-    }
-
-    private func resolvePort(gateway: GatewayManager, connection: GatewayConnection?) -> Int {
-        if let runtimePort = RuntimeConfig.shared.port, runtimePort > 0 {
-            return runtimePort
-        }
-        if let connectionPort = connection?.port, connectionPort > 0 {
-            return connectionPort
-        }
-        if gateway.port > 0 {
-            return gateway.port
-        }
-        return Self.localDefaultPort
-    }
-
-    private func resolveToken(host: String, port: Int, gateway: GatewayManager) -> String? {
-        if let runtimeToken = RuntimeConfig.shared.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !runtimeToken.isEmpty {
-            return runtimeToken
-        }
-
-        if let stored = KeychainHelper.load(for: "\(host):\(port)"), !stored.isEmpty {
-            return stored
-        }
-
-        let normalizedHost = host.lowercased()
-        if GatewayManager.isLocalDevelopmentHost(normalizedHost) {
-            for candidatePort in GatewayManager.localDiscoveryPorts {
-                if let candidate = KeychainHelper.load(for: "\(host):\(candidatePort)"), !candidate.isEmpty {
-                    return candidate
-                }
-            }
-        }
-
-        if let gatewayToken = gateway.token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !gatewayToken.isEmpty {
-            return gatewayToken
-        }
-
-        return nil
-    }
 
     private func markAllUnavailable() {
         for section in Section.allCases {

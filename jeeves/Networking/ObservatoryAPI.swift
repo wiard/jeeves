@@ -1,12 +1,12 @@
 import Foundation
 
 enum ObservatoryAPI {
-    static func conductorState(host: String, port: Int, token: String) async throws -> ConductorState {
-        try await ConductorAPI.state(host: host, port: port, token: token)
+    static func conductorState(builder: AuthorizedRequestBuilder) async throws -> ConductorState {
+        try await ConductorAPI.state(builder: builder)
     }
 
-    static func observatoryAlerts(host: String, port: Int, token: String) async throws -> [ObservatoryAlert] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/observatory/alerts")
+    static func observatoryAlerts(builder: AuthorizedRequestBuilder) async throws -> [ObservatoryAlert] {
+        let data = try await get(builder: builder, path: "/api/observatory/alerts")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([ObservatoryAlert].self, from: data) {
@@ -18,8 +18,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func fabricClock(host: String, port: Int, token: String) async throws -> FabricClockState {
-        let data = try await get(host: host, port: port, token: token, path: "/api/fabric/clock")
+    static func fabricClock(builder: AuthorizedRequestBuilder) async throws -> FabricClockState {
+        let data = try await get(builder: builder, path: "/api/fabric/clock")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(FabricClockState.self, from: data) {
@@ -33,8 +33,8 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func fabricEmergence(host: String, port: Int, token: String) async throws -> FabricEmergence {
-        let data = try await get(host: host, port: port, token: token, path: "/api/fabric/emergence")
+    static func fabricEmergence(builder: AuthorizedRequestBuilder) async throws -> FabricEmergence {
+        let data = try await get(builder: builder, path: "/api/fabric/emergence")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(FabricEmergence.self, from: data) {
@@ -48,8 +48,8 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func lobbyChallenges(host: String, port: Int, token: String) async throws -> [LobbyChallenge] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/lobby/challenges")
+    static func lobbyChallenges(builder: AuthorizedRequestBuilder) async throws -> [LobbyChallenge] {
+        let data = try await get(builder: builder, path: "/api/lobby/challenges")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([LobbyChallenge].self, from: data) {
@@ -62,9 +62,9 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func signalsState(host: String, port: Int, token: String) async throws -> SignalsState {
+    static func signalsState(builder: AuthorizedRequestBuilder) async throws -> SignalsState {
         let path = "/api/signals/state"
-        let data = try await get(host: host, port: port, token: token, path: "/api/signals/state")
+        let data = try await get(builder: builder, path: path)
         let decoder = JSONDecoder()
 
         if let wrapped = try? decoder.decode(SignalsStateEnvelope.self, from: data),
@@ -81,9 +81,9 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func signalsRuntime(host: String, port: Int, token: String) async throws -> SignalsRuntimeSnapshot {
+    static func signalsRuntime(builder: AuthorizedRequestBuilder) async throws -> SignalsRuntimeSnapshot {
         let path = "/api/signals/state"
-        let data = try await get(host: host, port: port, token: token, path: "/api/signals/state")
+        let data = try await get(builder: builder, path: path)
         let decoder = JSONDecoder()
 
         if let wrapped = try? decoder.decode(SignalsRuntimeEnvelope.self, from: data),
@@ -100,8 +100,8 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func knowledgeStatus(host: String, port: Int, token: String) async throws -> KnowledgeStatus {
-        let data = try await get(host: host, port: port, token: token, path: "/api/knowledge/status")
+    static func knowledgeStatus(builder: AuthorizedRequestBuilder) async throws -> KnowledgeStatus {
+        let data = try await get(builder: builder, path: "/api/knowledge/status")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(KnowledgeStatus.self, from: data) {
@@ -115,8 +115,8 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func knowledgeEmergence(host: String, port: Int, token: String) async throws -> KnowledgeEmergence {
-        let data = try await get(host: host, port: port, token: token, path: "/api/knowledge/emergence")
+    static func knowledgeEmergence(builder: AuthorizedRequestBuilder) async throws -> KnowledgeEmergence {
+        let data = try await get(builder: builder, path: "/api/knowledge/emergence")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(KnowledgeEmergence.self, from: data) {
@@ -133,14 +133,12 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func observatoryStream(host: String, port: Int, token: String, limit: Int = 60) async throws -> ObservatoryStreamFeed {
+    static func observatoryStream(builder: AuthorizedRequestBuilder, limit: Int = 60) async throws -> ObservatoryStreamFeed {
         let boundedLimit = max(1, min(limit, 240))
         let path = "/api/observatory/stream"
         let data = try await get(
-            host: host,
-            port: port,
-            token: token,
-            path: "/api/observatory/stream",
+            builder: builder,
+            path: path,
             queryItems: [URLQueryItem(name: "limit", value: "\(boundedLimit)")]
         )
         let decoder = JSONDecoder()
@@ -167,9 +165,9 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func radarStatus(host: String, port: Int, token: String) async throws -> RadarStatusSnapshot {
+    static func radarStatus(builder: AuthorizedRequestBuilder) async throws -> RadarStatusSnapshot {
         let path = "/api/radar/status"
-        let data = try await get(host: host, port: port, token: token, path: path)
+        let data = try await get(builder: builder, path: path)
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode(RadarStatusSnapshot.self, from: data) {
@@ -186,12 +184,10 @@ enum ObservatoryAPI {
         throw URLError(.cannotParseResponse)
     }
 
-    static func radarActivations(host: String, port: Int, token: String, limit: Int = 40) async throws -> [RadarActivation] {
+    static func radarActivations(builder: AuthorizedRequestBuilder, limit: Int = 40) async throws -> [RadarActivation] {
         let boundedLimit = max(1, min(limit, 200))
         let data = try await get(
-            host: host,
-            port: port,
-            token: token,
+            builder: builder,
             path: "/api/radar/activations",
             queryItems: [URLQueryItem(name: "limit", value: "\(boundedLimit)")]
         )
@@ -207,8 +203,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func radarCollisions(host: String, port: Int, token: String) async throws -> [RadarCollision] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/collisions")
+    static func radarCollisions(builder: AuthorizedRequestBuilder) async throws -> [RadarCollision] {
+        let data = try await get(builder: builder, path: "/api/radar/collisions")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([RadarCollision].self, from: data) {
@@ -221,8 +217,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func radarEmergence(host: String, port: Int, token: String) async throws -> [RadarCollision] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/emergence")
+    static func radarEmergence(builder: AuthorizedRequestBuilder) async throws -> [RadarCollision] {
+        let data = try await get(builder: builder, path: "/api/radar/emergence")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([RadarCollision].self, from: data) {
@@ -235,8 +231,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func radarClusters(host: String, port: Int, token: String) async throws -> [RadarClusterSummary] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/clusters")
+    static func radarClusters(builder: AuthorizedRequestBuilder) async throws -> [RadarClusterSummary] {
+        let data = try await get(builder: builder, path: "/api/radar/clusters")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([RadarClusterSummary].self, from: data) {
@@ -249,8 +245,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func radarSources(host: String, port: Int, token: String) async throws -> [RadarSourceStats] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/sources")
+    static func radarSources(builder: AuthorizedRequestBuilder) async throws -> [RadarSourceStats] {
+        let data = try await get(builder: builder, path: "/api/radar/sources")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([RadarSourceStats].self, from: data) {
@@ -263,8 +259,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func radarGravity(host: String, port: Int, token: String) async throws -> [RadarGravityHotspot] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/gravity")
+    static func radarGravity(builder: AuthorizedRequestBuilder) async throws -> [RadarGravityHotspot] {
+        let data = try await get(builder: builder, path: "/api/radar/gravity")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([RadarGravityHotspot].self, from: data) {
@@ -277,8 +273,8 @@ enum ObservatoryAPI {
         return []
     }
 
-    static func radarDiscoveries(host: String, port: Int, token: String) async throws -> [RadarDiscoveryCandidate] {
-        let data = try await get(host: host, port: port, token: token, path: "/api/radar/discoveries")
+    static func radarDiscoveries(builder: AuthorizedRequestBuilder) async throws -> [RadarDiscoveryCandidate] {
+        let data = try await get(builder: builder, path: "/api/radar/discoveries")
         let decoder = JSONDecoder()
 
         if let direct = try? decoder.decode([RadarDiscoveryCandidate].self, from: data) {
@@ -290,50 +286,23 @@ enum ObservatoryAPI {
 
         return []
     }
+
     private static func get(
-        host: String,
-        port: Int,
-        token: String,
+        builder: AuthorizedRequestBuilder,
         path: String,
         queryItems: [URLQueryItem] = []
     ) async throws -> Data {
-        let url = try endpointURL(host: host, port: port, path: path, token: token, queryItems: queryItems)
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        debugRequest(path: path, url: url, hasAuthorization: request.value(forHTTPHeaderField: "Authorization") != nil)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let req = try builder.request(path: path, method: "GET", queryItems: queryItems)
+        debugRequest(path: path, url: req.url!, hasAuthorization: req.value(forHTTPHeaderField: "Authorization") != nil)
+        let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse {
             debugResponse(path: path, status: http.statusCode, bytes: data.count)
         }
-        try ensureHTTP2xx(response)
-        return data
-    }
-
-    private static func endpointURL(
-        host: String,
-        port: Int,
-        path: String,
-        token: String,
-        queryItems: [URLQueryItem]
-    ) throws -> URL {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = host
-        components.port = port
-        components.path = path
-        components.queryItems = [URLQueryItem(name: "token", value: token)] + queryItems
-
-        guard let url = components.url else {
-            throw URLError(.badURL)
-        }
-        return url
-    }
-
-    private static func ensureHTTP2xx(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse,
               (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
+        return data
     }
 
     private static func debugRequest(path: String, url: URL, hasAuthorization: Bool) {
