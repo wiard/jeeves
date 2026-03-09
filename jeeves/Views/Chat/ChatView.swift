@@ -5,6 +5,7 @@ struct ChatView: View {
     private static let localDefaultPort = 19001
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
+    @Environment(JeevesOrchestrator.self) private var orchestrator
     @Query(sort: \ChatMessage.timestamp) private var messages: [ChatMessage]
     @State private var streamingText: String = ""
     @State private var isStreaming = false
@@ -121,6 +122,15 @@ struct ChatView: View {
         let userMessage = ChatMessage(text: text, sender: .user)
         modelContext.insert(userMessage)
 
+        // Ask orchestrator first — navigate if it recognises a screen intent
+        if let directive = orchestrator.resolve(text: text, readers: []) {
+            let explanation = ChatMessage(text: directive.explanation, sender: .jeeves)
+            modelContext.insert(explanation)
+            orchestrator.navigate(to: directive)
+            return
+        }
+
+        // No navigation intent — send to gateway as normal chat
         Task {
             do {
                 try await gateway.send(text: text)

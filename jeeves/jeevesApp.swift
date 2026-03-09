@@ -5,6 +5,7 @@ import SwiftData
 struct JeevesApp: App {
     @State private var gatewayManager = GatewayManager()
     @State private var proposalPoller = ProposalPoller()
+    @State private var orchestrator = JeevesOrchestrator()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -25,6 +26,7 @@ struct JeevesApp: App {
             ContentView()
                 .environment(gatewayManager)
                 .environment(proposalPoller)
+                .environment(orchestrator)
                 .onAppear {
                     NotificationManager.shared.requestPermission()
                 }

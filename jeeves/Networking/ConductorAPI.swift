@@ -327,6 +327,23 @@ enum ConductorAPI {
         return (try? JSONDecoder().decode(ObservatoryAlertsResponse.self, from: data)) ?? .empty
     }
 
+    static func postMessage(host: String, port: Int, token: String, text: String, peerId: String) async throws -> Data {
+        var req = URLRequest(url: try endpointURL(
+            host: host,
+            port: port,
+            path: "/api/message",
+            queryItems: [URLQueryItem(name: "token", value: token)]
+        ))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONEncoder().encode(["text": text, "peerId": peerId])
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try ensureHTTP2xx(response)
+        return data
+    }
+
     static func postIntent(host: String, port: Int, token: String, body: Data) async throws -> Data {
         var req = URLRequest(url: try endpointURL(
             host: host,

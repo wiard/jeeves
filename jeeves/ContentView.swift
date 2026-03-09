@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
+    @Environment(JeevesOrchestrator.self) private var orchestrator
     @Query private var connections: [GatewayConnection]
     @State private var hasBootstrappedStartupConnection = false
     @State private var isBootstrappingConnection = true
@@ -37,11 +38,15 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenObservatoryTab)) { _ in
-            selectedTab = 3
+            selectedTab = .observatory
+        }
+        .onChange(of: orchestrator.activeDirective) {
+            guard let directive = orchestrator.activeDirective else { return }
+            selectedTab = directive.destination
         }
     }
 
-    @State private var selectedTab = 0
+    @State private var selectedTab: AppScreen = .stream
 
     @MainActor
     private func bootstrapStartupConnection() async {
@@ -114,45 +119,35 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $selectedTab) {
                 Section("Mission Control") {
-                    Label(TextKeys.Stream.header, systemImage: "list.bullet").tag(0)
-                    Label(TextKeys.Lobby.header, systemImage: "tray.full").tag(1)
-                    Label("Jeeves", systemImage: "bubble.left.fill").tag(2)
-                    Label(TextKeys.Observatory.header, systemImage: "binoculars").tag(3)
-                    Label("Huis", systemImage: "house.fill").tag(4)
-                    Label("Logboek", systemImage: "scroll.fill").tag(5)
-                    Label(TextKeys.Settings.header, systemImage: "gearshape.fill").tag(6)
+                    Label(TextKeys.Stream.header, systemImage: AppScreen.stream.icon).tag(AppScreen.stream)
+                    Label(TextKeys.Lobby.header, systemImage: AppScreen.lobby.icon).tag(AppScreen.lobby)
+                    Label("Jeeves", systemImage: AppScreen.chat.icon).tag(AppScreen.chat)
+                    Label(TextKeys.Observatory.header, systemImage: AppScreen.observatory.icon).tag(AppScreen.observatory)
+                    Label("Huis", systemImage: AppScreen.house.icon).tag(AppScreen.house)
+                    Label("Logboek", systemImage: AppScreen.logbook.icon).tag(AppScreen.logbook)
+                    Label(TextKeys.Settings.header, systemImage: AppScreen.settings.icon).tag(AppScreen.settings)
                 }
                 Section("AI Browser") {
-                    Label("AI Browser", systemImage: "sparkle.magnifyingglass").tag(7)
+                    Label("AI Browser", systemImage: AppScreen.aiBrowser.icon).tag(AppScreen.aiBrowser)
                 }
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 160, ideal: 180)
         } detail: {
-            switch selectedTab {
-            case 0: StreamView()
-            case 1: LobbyView()
-            case 2: ChatView()
-            case 3: ObservatoryView()
-            case 4: HouseView()
-            case 5: LogbookView()
-            case 6: SettingsView()
-            case 7: AIBrowserView()
-            default: StreamView()
-            }
+            screenView(for: selectedTab)
         }
         .tint(Color.jeevesGold)
         #else
-        TabView {
-            Tab(TextKeys.Stream.header, systemImage: "list.bullet") { StreamView() }
-            Tab(TextKeys.Lobby.header, systemImage: "tray.full") { LobbyView() }
+        TabView(selection: $selectedTab) {
+            Tab(TextKeys.Stream.header, systemImage: AppScreen.stream.icon, value: .stream) { StreamView() }
+            Tab(TextKeys.Lobby.header, systemImage: AppScreen.lobby.icon, value: .lobby) { LobbyView() }
                 .badge(poller.pendingCount)
-            Tab("Jeeves", systemImage: "bubble.left.fill") { ChatView() }
-            Tab(TextKeys.Observatory.header, systemImage: "binoculars") { ObservatoryView() }
-            Tab("Huis", systemImage: "house.fill") { HouseView() }
-            Tab("Logboek", systemImage: "scroll.fill") { LogbookView() }
-            Tab("AI Browser", systemImage: "sparkle.magnifyingglass") { AIBrowserView() }
-            Tab(TextKeys.Settings.header, systemImage: "gearshape.fill") { SettingsView() }
+            Tab("Jeeves", systemImage: AppScreen.chat.icon, value: .chat) { ChatView() }
+            Tab(TextKeys.Observatory.header, systemImage: AppScreen.observatory.icon, value: .observatory) { ObservatoryView() }
+            Tab("Huis", systemImage: AppScreen.house.icon, value: .house) { HouseView() }
+            Tab("Logboek", systemImage: AppScreen.logbook.icon, value: .logbook) { LogbookView() }
+            Tab("AI Browser", systemImage: AppScreen.aiBrowser.icon, value: .aiBrowser) { AIBrowserView() }
+            Tab(TextKeys.Settings.header, systemImage: AppScreen.settings.icon, value: .settings) { SettingsView() }
         }
         .tint(.jeevesGold)
         .overlay(alignment: .top) {
@@ -170,5 +165,19 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: poller.seedToastMessage)
         #endif
+    }
+
+    @ViewBuilder
+    private func screenView(for screen: AppScreen) -> some View {
+        switch screen {
+        case .stream:      StreamView()
+        case .lobby:       LobbyView()
+        case .chat:        ChatView()
+        case .observatory: ObservatoryView()
+        case .house:       HouseView()
+        case .logbook:     LogbookView()
+        case .aiBrowser:   AIBrowserView()
+        case .settings:    SettingsView()
+        }
     }
 }

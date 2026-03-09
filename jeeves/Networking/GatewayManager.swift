@@ -503,8 +503,7 @@ final class GatewayManager {
         }
 
         let token = try requireToken()
-        let body = try JSONEncoder().encode(OutgoingMessage.chat(text: text, channelId: channelId))
-        let response = try await ConductorAPI.postIntent(host: host, port: port, token: token, body: body)
+        let response = try await ConductorAPI.postMessage(host: host, port: port, token: token, text: text, peerId: "owner")
 
         if let incoming = IncomingMessageDecoder.decode(from: response) {
             handleIncoming(incoming)

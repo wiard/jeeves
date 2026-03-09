@@ -463,3 +463,23 @@ final class BrowserViewModel {
         return error.localizedDescription
     }
 }
+
+// MARK: - ScreenStateReadable
+
+extension BrowserViewModel: ScreenStateReadable {
+    var screenId: AppScreen { .aiBrowser }
+
+    func summary() -> ScreenStateSummary {
+        let certified = certifiedCards.count
+        let emerging = filteredEmergingIntentions.count
+        let highlights = featuredCards.prefix(3).map { $0.title }
+
+        return ScreenStateSummary(
+            screen: .aiBrowser,
+            headline: "\(certified) certified, \(emerging) emerging configuraties beschikbaar.",
+            itemCount: certified + emerging,
+            highlights: Array(highlights),
+            isEmpty: certified == 0 && emerging == 0
+        )
+    }
+}
