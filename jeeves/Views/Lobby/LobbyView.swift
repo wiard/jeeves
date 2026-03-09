@@ -6,6 +6,8 @@ struct LobbyView: View {
         case radar
         case incomingTools
         case aiBrowser
+        case marketplace
+        case deployments
         case decisions
         case knowledge
 
@@ -15,6 +17,8 @@ struct LobbyView: View {
             case .radar: return "RADAR"
             case .incomingTools: return "INCOMING TOOLS"
             case .aiBrowser: return "AI BROWSER"
+            case .marketplace: return "MARKETPLACE"
+            case .deployments: return "DEPLOYMENTS"
             case .decisions: return "DECISIONS"
             case .knowledge: return "KNOWLEDGE"
             }
@@ -26,6 +30,8 @@ struct LobbyView: View {
             case .radar: return "Radar — Emerging Signals"
             case .incomingTools: return "Forensic intake workbench"
             case .aiBrowser: return "Intention catalog — certified + emerging"
+            case .marketplace: return "Featured shelf + category browse"
+            case .deployments: return "Proposal-to-knowledge deployment trail"
             case .decisions: return "Governed approvals"
             case .knowledge: return "Resulting knowledge"
             }
@@ -37,6 +43,8 @@ struct LobbyView: View {
             case .radar: return .cyan
             case .incomingTools: return .cyan
             case .aiBrowser: return .blue
+            case .marketplace: return .cyan
+            case .deployments: return .consentGreen
             case .decisions: return .jeevesGold
             case .knowledge: return .consentGreen
             }
@@ -48,6 +56,8 @@ struct LobbyView: View {
             case .radar: return "dot.radiowaves.left.and.right"
             case .incomingTools: return "shippingbox"
             case .aiBrowser: return "magnifyingglass.circle"
+            case .marketplace: return "storefront"
+            case .deployments: return "shippingbox.circle"
             case .decisions: return "checkmark.shield"
             case .knowledge: return "book.closed"
             }
@@ -59,6 +69,8 @@ struct LobbyView: View {
             case .radar: return "zone-radar"
             case .incomingTools: return "zone-incoming-tools"
             case .aiBrowser: return "zone-ai-browser"
+            case .marketplace: return "zone-marketplace"
+            case .deployments: return "zone-deployments"
             case .decisions: return "zone-decisions"
             case .knowledge: return "zone-knowledge"
             }
@@ -216,6 +228,7 @@ struct LobbyView: View {
     @State private var extensionDecisions: [String: ExtensionDecision] = [:]
     @State private var expandedClusterIDs: Set<String> = []
     @State private var shouldScrollToDecisions = false
+    @State private var requestedZoneAnchor: String?
 
     private struct TriageReviewItem: Identifiable {
         enum Kind {
@@ -267,6 +280,10 @@ struct LobbyView: View {
                                 .id(MissionZone.incomingTools.anchorId)
                             aiBrowserZoneSection
                                 .id(MissionZone.aiBrowser.anchorId)
+                            marketplaceZoneSection
+                                .id(MissionZone.marketplace.anchorId)
+                            deploymentsZoneSection
+                                .id(MissionZone.deployments.anchorId)
                             decisionsZoneSection
                                 .id(MissionZone.decisions.anchorId)
                             knowledgeZoneSection
@@ -278,10 +295,15 @@ struct LobbyView: View {
                     }
                     .onChange(of: shouldScrollToDecisions) { _, requested in
                         guard requested else { return }
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            proxy.scrollTo(MissionZone.decisions.anchorId, anchor: .top)
-                        }
+                        requestedZoneAnchor = MissionZone.decisions.anchorId
                         shouldScrollToDecisions = false
+                    }
+                    .onChange(of: requestedZoneAnchor) { _, anchor in
+                        guard let anchor else { return }
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            proxy.scrollTo(anchor, anchor: .top)
+                        }
+                        requestedZoneAnchor = nil
                     }
                 }
             }
@@ -447,6 +469,7 @@ struct LobbyView: View {
         VStack(alignment: .leading, spacing: 12) {
             zoneHeader(.system)
             topStatusBar
+            browserSurfaceNavigationPanel
         }
     }
 
@@ -496,6 +519,20 @@ struct LobbyView: View {
             if !browserHasExecutedQuery {
                 runSafeClashSearch()
             }
+        }
+    }
+
+    private var marketplaceZoneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            zoneHeader(.marketplace)
+            marketplaceOverviewPanel
+        }
+    }
+
+    private var deploymentsZoneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            zoneHeader(.deployments)
+            deploymentsOverviewPanel
         }
     }
 
@@ -4064,6 +4101,217 @@ struct LobbyView: View {
             return poller.lastRefreshError ?? "Geen actieve verbinding met de echte backend."
         }
         return nil
+    }
+
+    private var browserSurfaceNavigationPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Browser Extensions")
+                .font(.jeevesHeadline)
+                .foregroundStyle(.white)
+            Text("Mission Control remains the cockpit. AI Browser, Deployments, and Marketplace are added as companion surfaces.")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                browserSurfaceButton(
+                    title: "AI Browser",
+                    subtitle: "Discovery",
+                    icon: "sparkle.magnifyingglass",
+                    tint: .blue,
+                    zone: .aiBrowser
+                )
+                browserSurfaceButton(
+                    title: "Deployments",
+                    subtitle: "Governed flow",
+                    icon: "shippingbox.circle",
+                    tint: .consentGreen,
+                    zone: .deployments
+                )
+                browserSurfaceButton(
+                    title: "Marketplace",
+                    subtitle: "Certified shelf",
+                    icon: "storefront",
+                    tint: .cyan,
+                    zone: .marketplace
+                )
+            }
+        }
+        .controlRoomPanel(padding: 12)
+    }
+
+    private func browserSurfaceButton(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        zone: MissionZone
+    ) -> some View {
+        Button {
+            requestedZoneAnchor = zone.anchorId
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Image(systemName: icon)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+                Text(title)
+                    .font(.jeevesCaption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(Color.white.opacity(0.04))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(tint.opacity(0.35), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var marketplaceOverviewPanel: some View {
+        let featured = featuredCertifiedCards
+        let categories = browserFeedCategories
+        let certifiedCount = certifiedCatalogCards.count
+        let emergingCount = filteredEmergingIntentions.count
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                marketplaceMetric(label: "Featured", value: "\(featured.count)")
+                marketplaceMetric(label: "Categories", value: "\(categories.count)")
+                marketplaceMetric(label: "Certified", value: "\(certifiedCount)")
+                marketplaceMetric(label: "Emerging", value: "\(emergingCount)")
+            }
+
+            if featured.isEmpty {
+                Text("No featured shelf loaded yet. Run a category search in AI Browser to populate Marketplace.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(featured.prefix(3)) { card in
+                        HStack(spacing: 8) {
+                            Image(systemName: card.deployReady ? "checkmark.seal.fill" : "clock")
+                                .foregroundStyle(card.deployReady ? Color.consentGreen : Color.consentOrange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(card.title)
+                                    .font(.jeevesCaption.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                Text("\(card.domain) / \(card.subdomain)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Text(String(format: "%.2f", card.rankingScore))
+                                .font(.jeevesMono)
+                                .foregroundStyle(.cyan)
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("Open AI Browser") {
+                    requestedZoneAnchor = MissionZone.aiBrowser.anchorId
+                }
+                .buttonStyle(.bordered)
+
+                Button("Refresh Marketplace") {
+                    runSafeClashSearch()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .controlRoomPanel(padding: 12)
+    }
+
+    private func marketplaceMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.jeevesMono.weight(.semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var deploymentsOverviewPanel: some View {
+        let recent = Array(poller.decidedProposals.prefix(5))
+        let approved = poller.decidedProposals.filter(\.isApproved).count
+        let denied = poller.decidedProposals.filter(\.isDenied).count
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                marketplaceMetric(label: "Pending", value: "\(queueSize)")
+                marketplaceMetric(label: "Approved", value: "\(approved)")
+                marketplaceMetric(label: "Denied", value: "\(denied)")
+                marketplaceMetric(label: "Today", value: "\(decisionsToday)")
+            }
+
+            if recent.isEmpty {
+                Text("No deployment decisions yet. Governed actions will appear here after proposal decisions.")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(recent) { decision in
+                        HStack(spacing: 8) {
+                            Image(systemName: decision.isApproved ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundStyle(decision.isApproved ? Color.consentGreen : Color.consentRed)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(decision.title)
+                                    .font(.jeevesCaption.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                Text(decision.proposalId)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(relativeDateLabel(iso: decision.decidedAtIso))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("Open Decisions") {
+                    requestedZoneAnchor = MissionZone.decisions.anchorId
+                }
+                .buttonStyle(.bordered)
+
+                Button("Open Knowledge") {
+                    requestedZoneAnchor = MissionZone.knowledge.anchorId
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .controlRoomPanel(padding: 12)
+    }
+
+    private func relativeDateLabel(iso: String?) -> String {
+        guard let iso, let date = parseISODate(iso) else {
+            return "unknown"
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     private func openObservatory() {
