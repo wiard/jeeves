@@ -194,6 +194,7 @@ struct LobbyView: View {
     @State private var browserLoading = false
     @State private var browserHasExecutedQuery = false
     @State private var browserHasPrimedEmergingFeed = false
+    @State private var browserGuideModeEnabled = true
     @State private var browserErrorMessage: String?
     @State private var browserStatusMessage: String?
     @State private var selectedBrowserCard: BrowserCard?
@@ -2007,8 +2008,30 @@ struct LobbyView: View {
         let emergingCards = filteredEmergingIntentions
         let hasCertified = !certifiedCards.isEmpty
         let hasEmerging = !emergingCards.isEmpty
+        let guidance = browserGuidance(
+            certifiedCards: certifiedCards,
+            emergingCards: emergingCards,
+            sourceLabel: browserFeed == nil ? "SafeClash search fallback" : "SafeClash browser feed"
+        )
 
         return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(BrowserGuidanceContract.modeTitle)
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Toggle("Guide", isOn: $browserGuideModeEnabled)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+
+                if browserGuideModeEnabled {
+                    BrowserGuidancePanel(brief: guidance)
+                }
+            }
+            .controlRoomPanel(padding: 12)
+
             VStack(alignment: .leading, spacing: 10) {
                 sectionHeader(
                     title: "FEATURED / RECOMMENDED",
@@ -2186,6 +2209,107 @@ struct LobbyView: View {
                 }
             }
         }
+    }
+
+    private func browserGuidance(
+        certifiedCards: [BrowserCard],
+        emergingCards: [EmergingIntentionProfile],
+        sourceLabel: String
+    ) -> BrowserGuidanceBrief {
+        let sortedCertified = certifiedCards.sorted {
+            if $0.rankingScore == $1.rankingScore {
+                return $0.id < $1.id
+            }
+            return $0.rankingScore > $1.rankingScore
+        }
+        let sortedEmerging = emergingCards.sorted {
+            if $0.confidenceScore == $1.confidenceScore {
+                return $0.id < $1.id
+            }
+            return $0.confidenceScore > $1.confidenceScore
+        }
+
+        let leadCertified = sortedCertified.first
+        let leadEmerging = sortedEmerging.first
+
+        let state: BrowserUncertaintyState = {
+            if let leadCertified {
+                return leadCertified.uncertaintyState
+            }
+            if let leadEmerging {
+                return leadEmerging.uncertaintyState
+            }
+            return .unknown
+        }()
+
+        var clear: [String] = []
+        if !sortedCertified.isEmpty {
+            clear.append("Certified options are available in \(browserDomain) / \(browserSubdomain).")
+        }
+        if sortedCertified.contains(where: \.deployReady) {
+            clear.append("At least one certified option is deploy-ready through proposal.")
+        }
+        if !sortedEmerging.isEmpty {
+            clear.append("Emerging intentions are visible from CLASHD27 and SafeClash feeds.")
+        }
+        if clear.isEmpty {
+            clear.append("Current feed source: \(sourceLabel).")
+        }
+
+        var uncertain: [String] = []
+        if sortedCertified.isEmpty {
+            uncertain.append("No certified configuration is currently available for this focus.")
+        } else if let leadCertified, !leadCertified.deployReady {
+            uncertain.append("Top certified option is not deploy-ready yet.")
+        }
+        if let leadEmerging, leadEmerging.confidenceScore < 0.75 {
+            uncertain.append("Emerging confidence is below confirmation level.")
+        }
+        if uncertain.isEmpty {
+            uncertain.append("Deployment still requires proposal and human approval.")
+        }
+
+        var options: [String] = []
+        if let leadCertified {
+            options.append("Inspect \"\(leadCertified.title)\" and validate constraints.")
+        }
+        if let leadEmerging {
+            options.append("Inspect emerging intention \"\(leadEmerging.title)\" for related tools.")
+        }
+        if options.isEmpty {
+            options.append("Run category search and gather stronger candidates.")
+        }
+
+        var why: [String] = []
+        if let leadCertified {
+            why.append("Ranking \(String(format: "%.2f", leadCertified.rankingScore)) with \(leadCertified.bestConfiguration.certificationLevel) certification.")
+        }
+        if let leadEmerging {
+            why.append("Emerging confidence \(String(format: "%.2f", leadEmerging.confidenceScore)) from linked source clusters.")
+        }
+        why.append("Source path: \(sourceLabel).")
+
+        var next: [String] = []
+        if let leadCertified, leadCertified.deployReady {
+            next.append("If appropriate, create a governed deployment proposal.")
+        } else {
+            next.append("Compare certified alternatives before requesting deployment.")
+        }
+        if !sortedEmerging.isEmpty {
+            next.append("Inspect related incoming tools and lineage before narrowing intention scope.")
+        }
+        if next.isEmpty {
+            next.append("Wait for additional evidence before action.")
+        }
+
+        return BrowserGuidanceBrief(
+            state: state,
+            clear: clear,
+            uncertain: uncertain,
+            options: options,
+            why: why,
+            next: next
+        )
     }
 
     private var aiBrowserQueryPanel: some View {
@@ -4163,6 +4287,64 @@ private struct RadarSignalDetailSheet: View {
     }
 }
 
+private struct BrowserGuidancePanel: View {
+    let brief: BrowserGuidanceBrief
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Browser Guidance")
+                    .font(.jeevesHeadline)
+                    .foregroundStyle(.white)
+                Spacer()
+                Text(brief.state.rawValue.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(stateTint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(stateTint.opacity(0.18))
+                    .clipShape(Capsule())
+            }
+
+            Text("Not knowing → compare evidence → explain → propose next step.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            section(title: "What seems clear", rows: brief.clear)
+            section(title: "What is still uncertain", rows: brief.uncertain)
+            section(title: "Best current options", rows: brief.options)
+            section(title: "Why these options appear", rows: brief.why)
+            section(title: "What should happen next", rows: brief.next)
+        }
+    }
+
+    private var stateTint: Color {
+        switch brief.state {
+        case .confirmed:
+            return .consentGreen
+        case .strongCandidate:
+            return .cyan
+        case .exploratory:
+            return .consentOrange
+        case .unknown:
+            return .secondary
+        }
+    }
+
+    private func section(title: String, rows: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.jeevesCaption.weight(.semibold))
+                .foregroundStyle(.white)
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                Text("• \(row)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 private struct FeaturedAICard: View {
     let card: BrowserCard
     let isDeploying: Bool
@@ -4189,6 +4371,13 @@ private struct FeaturedAICard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.cyan)
                 Spacer()
+                Text(card.uncertaintyState.rawValue.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(uncertaintyTint)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(uncertaintyTint.opacity(0.16))
+                    .clipShape(Capsule())
                 Text(card.bestConfiguration.certificationLevel.uppercased())
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(certificationColor)
@@ -4215,6 +4404,11 @@ private struct FeaturedAICard: View {
 
             Text(card.whyRecommended)
                 .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(card.uncertaintyNarrative)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
@@ -4248,6 +4442,19 @@ private struct FeaturedAICard: View {
             }
         }
         .controlRoomPanel(padding: 14)
+    }
+
+    private var uncertaintyTint: Color {
+        switch card.uncertaintyState {
+        case .confirmed:
+            return .consentGreen
+        case .strongCandidate:
+            return .cyan
+        case .exploratory:
+            return .consentOrange
+        case .unknown:
+            return .secondary
+        }
     }
 
     private func statChip(text: String, tint: Color) -> some View {
@@ -4295,6 +4502,7 @@ private struct AIBrowserResultCard: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                capsule(text: card.uncertaintyState.rawValue, tint: uncertaintyTint)
                 capsule(text: card.bestConfiguration.certificationLevel, tint: certificationColor)
                 capsule(text: card.deployReady ? "READY" : "PENDING", tint: card.deployReady ? .consentGreen : .consentOrange)
             }
@@ -4306,6 +4514,11 @@ private struct AIBrowserResultCard: View {
 
             Text(card.whyRecommended)
                 .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Text(card.uncertaintyNarrative)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
@@ -4348,6 +4561,19 @@ private struct AIBrowserResultCard: View {
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture {
             onOpen()
+        }
+    }
+
+    private var uncertaintyTint: Color {
+        switch card.uncertaintyState {
+        case .confirmed:
+            return .consentGreen
+        case .strongCandidate:
+            return .cyan
+        case .exploratory:
+            return .consentOrange
+        case .unknown:
+            return .secondary
         }
     }
 
@@ -4401,6 +4627,7 @@ private struct AIBrowserDetailSheet: View {
                             .foregroundStyle(.secondary)
 
                         metadataRow(label: "Intention path", value: card.intentionPath)
+                        metadataRow(label: "Evidence state", value: card.uncertaintyState.rawValue)
 
                         metadataRow(label: "Config ID", value: configuration.configId)
                         metadataRow(label: "Model", value: configuration.model)
@@ -4430,6 +4657,17 @@ private struct AIBrowserDetailSheet: View {
                             .font(.jeevesHeadline)
                             .foregroundStyle(.white)
                         Text(card.whyRecommended)
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        Text("Uncertainty")
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                        Text(card.uncertaintyNarrative)
                             .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                             .padding(10)
@@ -4692,6 +4930,7 @@ private struct EmergingIntentionCard: View {
                         .lineLimit(2)
                     Spacer()
                     capsule(text: stateLabel, tint: stateTint)
+                    capsule(text: intention.uncertaintyState.rawValue, tint: uncertaintyTint)
                 }
 
                 Text("\(intention.domain) / \(intention.subdomain)")
@@ -4701,6 +4940,11 @@ private struct EmergingIntentionCard: View {
 
                 Text(intention.description)
                     .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                Text(intention.uncertaintyNarrative)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
@@ -4751,6 +4995,19 @@ private struct EmergingIntentionCard: View {
             .background(tint.opacity(0.15))
             .clipShape(Capsule())
     }
+
+    private var uncertaintyTint: Color {
+        switch intention.uncertaintyState {
+        case .confirmed:
+            return .consentGreen
+        case .strongCandidate:
+            return .cyan
+        case .exploratory:
+            return .consentOrange
+        case .unknown:
+            return .secondary
+        }
+    }
 }
 
 private struct EmergingIntentionDetailSheet: View {
@@ -4787,6 +5044,19 @@ private struct EmergingIntentionDetailSheet: View {
         String(format: "%.2f", intention.confidenceScore)
     }
 
+    private var uncertaintyTint: Color {
+        switch intention.uncertaintyState {
+        case .confirmed:
+            return .consentGreen
+        case .strongCandidate:
+            return .cyan
+        case .exploratory:
+            return .consentOrange
+        case .unknown:
+            return .secondary
+        }
+    }
+
     private var certificationText: String {
         if intention.hasCertifiedConfiguration == true || certifiedMatch != nil {
             return "Certified configuration available."
@@ -4813,6 +5083,7 @@ private struct EmergingIntentionDetailSheet: View {
                             .foregroundStyle(.secondary)
 
                         metadataRow(label: "State", value: stateLabel, tint: stateTint)
+                        metadataRow(label: "Evidence state", value: intention.uncertaintyState.rawValue, tint: uncertaintyTint)
                         metadataRow(label: "Confidence", value: confidenceText)
                         if let risk = intention.riskProfile, !risk.isEmpty {
                             metadataRow(label: "Risk profile", value: risk)
@@ -4828,6 +5099,17 @@ private struct EmergingIntentionDetailSheet: View {
                             .foregroundStyle(.white)
                         Text(intention.description)
                             .font(.jeevesBody)
+                            .foregroundStyle(.secondary)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        Text("Uncertainty")
+                            .font(.jeevesHeadline)
+                            .foregroundStyle(.white)
+                        Text(intention.uncertaintyNarrative)
+                            .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)

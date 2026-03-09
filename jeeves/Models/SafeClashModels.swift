@@ -259,6 +259,79 @@ struct BrowserCard: Identifiable, Hashable {
     }
 }
 
+enum BrowserUncertaintyState: String, Codable, CaseIterable, Hashable {
+    case confirmed = "Confirmed"
+    case strongCandidate = "Strong candidate"
+    case exploratory = "Exploratory"
+    case unknown = "Unknown"
+
+    var rank: Int {
+        switch self {
+        case .confirmed: return 0
+        case .strongCandidate: return 1
+        case .exploratory: return 2
+        case .unknown: return 3
+        }
+    }
+}
+
+struct BrowserGuidanceBrief: Hashable {
+    let state: BrowserUncertaintyState
+    let clear: [String]
+    let uncertain: [String]
+    let options: [String]
+    let why: [String]
+    let next: [String]
+}
+
+enum BrowserGuidanceContract {
+    static let modeTitle = "Uncertainty-first Browser"
+    static let systemPrompt = """
+    You are Jeeves Browser in uncertainty-first mode.
+    Start from not knowing, then investigate, compare, explain, and propose a next step.
+    Always separate known, inferred, uncertain, and missing.
+    Never present uncertainty as certainty.
+    Prefer language such as: current evidence suggests, appears related, not enough evidence yet, strongest candidates, should be checked before deployment.
+    Avoid definitive claims unless evidence is strong and grounded.
+    Output sections:
+    What seems clear
+    What is still uncertain
+    Best current options
+    Why these options appear
+    What should happen next
+    """
+}
+
+extension BrowserCard {
+    var uncertaintyState: BrowserUncertaintyState {
+        let level = bestConfiguration.certificationLevel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let certified = !level.isEmpty && level != "uncertified" && level != "unknown"
+        if deployReady && rankingScore >= 0.85 && (level == "gold" || level == "platinum") {
+            return .confirmed
+        }
+        if certified || (deployReady && rankingScore >= 0.65) {
+            return .strongCandidate
+        }
+        if rankingScore >= 0.35 {
+            return .exploratory
+        }
+        return .unknown
+    }
+
+    var uncertaintyNarrative: String {
+        switch uncertaintyState {
+        case .confirmed:
+            return "Current evidence is stable across certification, ranking, and deploy readiness."
+        case .strongCandidate:
+            return "Current evidence suggests this is a strong option, but validate constraints before deployment."
+        case .exploratory:
+            return "This appears related, but evidence is still exploratory."
+        case .unknown:
+            return "There is not enough evidence yet to rank this confidently."
+        }
+    }
+}
+
 enum IntentionCatalogState: String, Codable, Hashable {
     case emerging
     case certified
@@ -382,6 +455,32 @@ struct EmergingIntentionProfile: Decodable, Identifiable, Hashable {
         hasCertifiedConfiguration = container.decodeFirstBool(for: [.hasCertifiedConfiguration, .has_certified_configuration, .certifiedConfigurationExists, .certified_configuration_exists])
         candidateConfigurationAvailable = container.decodeFirstBool(for: [.candidateConfigurationAvailable, .candidate_configuration_available])
         relatedIncomingToolCount = container.decodeFirstInt(for: [.relatedIncomingToolCount, .related_incoming_tool_count, .relatedToolsCount, .related_tools_count])
+    }
+
+    var uncertaintyState: BrowserUncertaintyState {
+        if state == .certified && (hasCertifiedConfiguration == true || candidateConfigurationAvailable == true) {
+            return .strongCandidate
+        }
+        if confidenceScore >= 0.55 {
+            return .exploratory
+        }
+        if confidenceScore > 0 {
+            return .unknown
+        }
+        return .unknown
+    }
+
+    var uncertaintyNarrative: String {
+        switch uncertaintyState {
+        case .confirmed:
+            return "This is stable and confirmed."
+        case .strongCandidate:
+            return "Current evidence suggests this intention is maturing toward certification."
+        case .exploratory:
+            return "This intention is exploratory and should remain in investigation mode."
+        case .unknown:
+            return "Evidence is limited; treat this as unknown until more signals arrive."
+        }
     }
 }
 

@@ -97,4 +97,106 @@ struct SafeClashBrowserFeedTests {
         #expect(emerging.title == "Quantum Incident Watch")
         #expect(emerging.sourceClusters == ["openalex.security", "arxiv.crypto"])
     }
+
+    @Test
+    func uncertaintyStatesAreDeterministic() throws {
+        let confirmedJson = """
+        {
+          "configId": "cfg-confirmed",
+          "intentionId": "intent.confirmed",
+          "title": "Confirmed AI",
+          "description": "Confirmed",
+          "domain": "research",
+          "subdomain": "literature",
+          "riskProfile": "low",
+          "certificationLevel": "gold",
+          "rankingScore": 0.91,
+          "benchmarkScore": 0.88,
+          "model": "gpt-5-mini",
+          "deployReady": true
+        }
+        """.data(using: .utf8)!
+
+        let strongJson = """
+        {
+          "configId": "cfg-strong",
+          "intentionId": "intent.strong",
+          "title": "Strong AI",
+          "description": "Strong",
+          "domain": "operations",
+          "subdomain": "workflow",
+          "riskProfile": "medium",
+          "certificationLevel": "silver",
+          "rankingScore": 0.74,
+          "benchmarkScore": 0.70,
+          "model": "gpt-5-mini",
+          "deployReady": false
+        }
+        """.data(using: .utf8)!
+
+        let exploratoryJson = """
+        {
+          "configId": "cfg-exploratory",
+          "intentionId": "intent.exploratory",
+          "title": "Exploratory AI",
+          "description": "Exploratory",
+          "domain": "security",
+          "subdomain": "incident-response",
+          "riskProfile": "high",
+          "certificationLevel": "unknown",
+          "rankingScore": 0.41,
+          "benchmarkScore": 0.39,
+          "model": "gpt-5-mini",
+          "deployReady": false
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        let confirmed = BrowserCard(certified: try decoder.decode(SafeClashCertifiedIntention.self, from: confirmedJson))
+        let strong = BrowserCard(certified: try decoder.decode(SafeClashCertifiedIntention.self, from: strongJson))
+        let exploratory = BrowserCard(certified: try decoder.decode(SafeClashCertifiedIntention.self, from: exploratoryJson))
+
+        #expect(confirmed.uncertaintyState == .confirmed)
+        #expect(strong.uncertaintyState == .strongCandidate)
+        #expect(exploratory.uncertaintyState == .exploratory)
+
+        let emergingStrong = EmergingIntentionProfile(
+            intentionId: "intent.emerging.strong",
+            title: "Emerging Strong",
+            domain: "research",
+            subdomain: "hypothesis",
+            description: "Emerging",
+            riskProfile: "medium",
+            confidenceScore: 0.82,
+            sourceClusters: ["c1"],
+            linkedCells: ["architecture|external|emerging"],
+            clashdSignalSummary: "signal",
+            state: .certified,
+            discoveredAtIso: nil,
+            hasCertifiedConfiguration: true,
+            candidateConfigurationAvailable: true,
+            relatedIncomingToolCount: 2
+        )
+
+        let emergingUnknown = EmergingIntentionProfile(
+            intentionId: "intent.emerging.unknown",
+            title: "Emerging Unknown",
+            domain: "research",
+            subdomain: "hypothesis",
+            description: "Emerging",
+            riskProfile: "medium",
+            confidenceScore: 0.22,
+            sourceClusters: ["c1"],
+            linkedCells: ["architecture|external|emerging"],
+            clashdSignalSummary: "signal",
+            state: .emerging,
+            discoveredAtIso: nil,
+            hasCertifiedConfiguration: false,
+            candidateConfigurationAvailable: false,
+            relatedIncomingToolCount: 0
+        )
+
+        #expect(emergingStrong.uncertaintyState == .strongCandidate)
+        #expect(emergingUnknown.uncertaintyState == .unknown)
+    }
 }
