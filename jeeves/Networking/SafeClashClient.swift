@@ -79,6 +79,8 @@ actor SafeClashClient {
                     return feed
                 }
                 lastError = SafeClashClientError.cannotParseResponse
+            } catch SafeClashClientError.httpStatus(let status) where status == 429 {
+                throw SafeClashClientError.httpStatus(429)
             } catch SafeClashClientError.httpStatus(let status) where status == 404 {
                 continue
             } catch {

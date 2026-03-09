@@ -9,6 +9,10 @@ struct BrowserMarketplaceView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 searchBar
 
+                if viewModel.usingStaleFallbackFeed {
+                    fallbackIndicator
+                }
+
                 if !viewModel.featuredCards.isEmpty {
                     featuredSection
                 }
@@ -286,6 +290,25 @@ struct BrowserMarketplaceView: View {
                 .font(.jeevesMono)
                 .foregroundStyle(tint)
         }
+    }
+
+    // MARK: - Fallback Indicator
+
+    private var fallbackIndicator: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .foregroundStyle(Color.consentOrange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Using cached data")
+                    .font(.jeevesCaption.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("Latest request failed. Showing saved browser feed.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .browserPanel(padding: 10)
     }
 
     // MARK: - Error

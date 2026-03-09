@@ -67,6 +67,10 @@ final class BrowserViewModel {
     var searchResults: [IntentionProfile] = []
     var emergingIntentions: [EmergingIntentionProfile] = []
     var configurationCache: [String: AIConfigurationAtom] = [:]
+    
+    private var cachedFallbackFeed: SafeClashBrowserFeed?
+    private var inflight: [String: Task<Void, Never>] = [:]
+    private var pendingSearchCategoryTask: Task<Void, Never>?
 
     // MARK: - Loading State
 
@@ -74,6 +78,7 @@ final class BrowserViewModel {
     var hasLoaded = false
     var errorMessage: String?
     var statusMessage: String?
+    var usingStaleFallbackFeed = false
 
     // MARK: - Deployment
 
@@ -202,6 +207,7 @@ final class BrowserViewModel {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
+        usingStaleFallbackFeed = false
 
         Task {
             do {
@@ -213,6 +219,7 @@ final class BrowserViewModel {
                         cache[item.configId] = item.configurationAtom
                     }
                     feed = browserFeed
+                    cachedFallbackFeed = browserFeed
                     searchResults = browserFeed.certified.map(\.profile)
                     emergingIntentions = browserFeed.emerging.map(\.profile)
                     configurationCache.merge(cache) { _, new in new }
@@ -226,52 +233,86 @@ final class BrowserViewModel {
                 isLoading = false
             } catch {
                 isLoading = false
-                errorMessage = describeError(error, gateway: gateway)
+                if let fallback = cachedFallbackFeed, !fallback.certified.isEmpty {
+                    usingStaleFallbackFeed = true
+                    feed = fallback
+                    statusMessage = "Showing cached browser feed (latest request failed)."
+                } else {
+                    errorMessage = describeError(error, gateway: gateway)
+                }
             }
         }
     }
 
     func searchCategory(domain: String, subdomain: String, risk: String, gateway: GatewayManager) {
-        isLoading = true
-        errorMessage = nil
-
-        Task {
+        pendingSearchCategoryTask?.cancel()
+        
+        pendingSearchCategoryTask = Task {
             do {
-                let client = makeSafeClashClient(gateway: gateway)
-
-                if let browserFeed = try? await client.fetchBrowserFeed(
-                    domain: domain,
-                    subdomain: subdomain,
-                    risk: risk
-                ) {
-                    var cache: [String: AIConfigurationAtom] = [:]
-                    for item in browserFeed.certified {
-                        cache[item.configId] = item.configurationAtom
-                    }
-                    feed = browserFeed
-                    searchResults = browserFeed.certified.map(\.profile)
-                    emergingIntentions = browserFeed.emerging.map(\.profile)
-                    configurationCache.merge(cache) { _, new in new }
-                    isLoading = false
+                try await Task.sleep(nanoseconds: 300_000_000)
+                
+                let requestKey = "\(domain):\(subdomain):\(risk)"
+                if let existing = inflight[requestKey] {
+                    await existing.value
                     return
                 }
+                
+                isLoading = true
+                errorMessage = nil
+                usingStaleFallbackFeed = false
 
-                let results = try await client.searchIntentions(
-                    domain: domain,
-                    subdomain: subdomain,
-                    risk: risk
-                )
-                let emerging = try? await client.fetchEmergingIntentions(
-                    domain: domain,
-                    subdomain: subdomain,
-                    risk: risk
-                )
-                searchResults = results
-                emergingIntentions = emerging ?? []
-                isLoading = false
+                let searchTask = Task {
+                    let client = makeSafeClashClient(gateway: gateway)
+
+                    if let browserFeed = try? await client.fetchBrowserFeed(
+                        domain: domain,
+                        subdomain: subdomain,
+                        risk: risk
+                    ) {
+                        var cache: [String: AIConfigurationAtom] = [:]
+                        for item in browserFeed.certified {
+                            cache[item.configId] = item.configurationAtom
+                        }
+                        feed = browserFeed
+                        cachedFallbackFeed = browserFeed
+                        searchResults = browserFeed.certified.map(\.profile)
+                        emergingIntentions = browserFeed.emerging.map(\.profile)
+                        configurationCache.merge(cache) { _, new in new }
+                        isLoading = false
+                        inflight.removeValue(forKey: requestKey)
+                        return
+                    }
+
+                    let results = try await client.searchIntentions(
+                        domain: domain,
+                        subdomain: subdomain,
+                        risk: risk
+                    )
+                    let emerging = try? await client.fetchEmergingIntentions(
+                        domain: domain,
+                        subdomain: subdomain,
+                        risk: risk
+                    )
+                    searchResults = results
+                    emergingIntentions = emerging ?? []
+                    isLoading = false
+                    inflight.removeValue(forKey: requestKey)
+                }
+                
+                inflight[requestKey] = searchTask
+                await searchTask.value
             } catch {
                 isLoading = false
-                errorMessage = describeError(error, gateway: gateway)
+                let requestKey = "\(domain):\(subdomain):\(risk)"
+                inflight.removeValue(forKey: requestKey)
+                
+                if let fallback = cachedFallbackFeed, !fallback.certified.isEmpty {
+                    usingStaleFallbackFeed = true
+                    feed = fallback
+                    statusMessage = "Showing cached results (latest request failed)."
+                } else {
+                    errorMessage = describeError(error, gateway: gateway)
+                }
             }
         }
     }
