@@ -33,6 +33,12 @@ enum RouteContract {
         static let killDeactivate = Route.post("/api/conductor/kill/deactivate")
     }
 
+    // MARK: - Briefing
+
+    enum Briefing {
+        static let daily = Route.get("/api/briefing/daily")
+    }
+
     // MARK: - Fabric
 
     enum Fabric {

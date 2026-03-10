@@ -49,10 +49,49 @@ struct IncomingMessageDecoder {
     }()
 
     static func decode(from data: Data) -> IncomingMessage? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = json["type"] as? String else {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
+
+        // Some gateway chat handlers return compact payloads without a "type" field.
+        // Accept common plain-chat shapes so successful 2xx responses are never dropped.
+        if json["type"] == nil {
+            if let ok = json["ok"] as? Bool, ok {
+                return .response(
+                    text: (json["message"] as? String)
+                        ?? (json["status"] as? String)
+                        ?? "Bericht ontvangen. Antwoordverwerking gestart.",
+                    agent: json["agent"] as? String ?? "gateway",
+                    cost: nil,
+                    timestamp: Date()
+                )
+            }
+            if let text = (json["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !text.isEmpty {
+                return .response(
+                    text: text,
+                    agent: json["agent"] as? String ?? "jeeves",
+                    cost: json["cost"] as? Double,
+                    timestamp: Date()
+                )
+            }
+            if let text = (json["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !text.isEmpty {
+                return .response(
+                    text: text,
+                    agent: json["agent"] as? String ?? "jeeves",
+                    cost: json["cost"] as? Double,
+                    timestamp: Date()
+                )
+            }
+            if let error = (json["error"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !error.isEmpty {
+                return .error(message: error)
+            }
+            return nil
+        }
+
+        guard let type = json["type"] as? String else { return nil }
 
         let timestamp = (json["timestamp"] as? String).flatMap { dateFormatter.date(from: $0) } ?? Date()
 

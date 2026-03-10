@@ -145,6 +145,10 @@ enum JeevesCommandRouter {
             base = "Ik toon \(destination.title)"
             if let section { base += " → \(section)" }
             base += "."
+        case .recent:
+            base = "Ik toon recente informatie in \(destination.title)"
+            if let section { base += " → \(section)" }
+            base += "."
         case .inspect:
             base = "Ik inspecteer \(destination.title)"
             if let section { base += " → \(section)" }

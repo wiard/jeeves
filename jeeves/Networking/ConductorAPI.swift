@@ -277,7 +277,20 @@ enum ConductorAPI {
         let body = try JSONEncoder().encode(["text": text, "peerId": peerId])
         let req = try builder.request(for: RouteContract.message, body: body)
         let (data, response) = try await URLSession.shared.data(for: req)
-        try ensureHTTP2xx(response)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let backendReason = decodeErrorReason(from: data)
+            let suffix = backendReason.map { ": \($0)" } ?? ""
+            throw NSError(
+                domain: "Gateway",
+                code: http.statusCode,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Chat request failed (HTTP \(http.statusCode))\(suffix)"
+                ]
+            )
+        }
         return data
     }
 
@@ -344,5 +357,20 @@ enum ConductorAPI {
         }
 
         return []
+    }
+
+    private static func decodeErrorReason(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        for key in ["reason", "error", "message"] {
+            if let value = object[key] as? String {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed
+                }
+            }
+        }
+        return nil
     }
 }

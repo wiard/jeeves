@@ -5,6 +5,7 @@ struct JeevesCommand: Sendable, Equatable {
     enum Verb: String, CaseIterable, Sendable {
         case open
         case show
+        case recent
         case inspect
         case explain
         case why

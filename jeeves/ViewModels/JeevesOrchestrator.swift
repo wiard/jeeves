@@ -57,19 +57,20 @@ final class JeevesOrchestrator {
         if let command = JeevesCommandParser.parse(text) {
             let commandLabel = commandDescriptor(command)
 
-            if let explainability = explainabilityCommand(for: command) {
+            if let inspectorRequest = inspectorCommand(for: command) {
                 let explanation = JeevesExplainabilityInspector.inspect(
-                    request: explainability,
+                    request: inspectorRequest,
                     session: ctx,
                     readers: allReaders
                 )
+                let intentPrefix = inspectorIntentPrefix(for: inspectorRequest)
                 let directive = JeevesDirective(
-                    intent: "explainability:\(explainability.rawValue)",
+                    intent: "\(intentPrefix):\(inspectorRequest.rawValue)",
                     destination: .chat,
                     section: nil,
                     statePreset: .empty,
                     explanation: explanation.text,
-                    reason: "explainability_\(explainability.rawValue)",
+                    reason: "\(intentPrefix)_\(inspectorRequest.rawValue)",
                     confidence: 1.0
                 )
                 return applyPolicyResult(to: directive).directive
@@ -230,6 +231,22 @@ final class JeevesOrchestrator {
             readers: readers
         )
         session.recordDecisionTrace(trace)
+        let timelineEntry = JeevesTimelineEntry(
+            eventKind: timelineEventKind(
+                matchedCommand: matchedCommand,
+                matchedGuidanceKind: matchedGuidanceKind,
+                directiveIntent: policyApplied.directive.intent
+            ),
+            originalInput: trace.originalInput,
+            matchedCapabilityId: trace.matchedCapabilityId,
+            policyMode: trace.policyMode,
+            policyReason: trace.policyReason,
+            recommendationReason: trace.recommendationReason,
+            finalDirectiveIntent: trace.finalDirectiveIntent,
+            finalScreen: trace.finalScreen,
+            resultSummary: timelineResultSummary(from: policyApplied.directive)
+        )
+        session.recordTimelineEntry(timelineEntry)
         return policyApplied.directive
     }
 
@@ -733,7 +750,7 @@ final class JeevesOrchestrator {
         return "\(command.verb.rawValue) \(phrase)"
     }
 
-    private func explainabilityCommand(for command: JeevesCommand) -> JeevesExplainabilityRequest? {
+    private func inspectorCommand(for command: JeevesCommand) -> JeevesExplainabilityRequest? {
         switch command.verb {
         case .explain:
             switch command.targetPhrase {
@@ -745,12 +762,34 @@ final class JeevesOrchestrator {
                 return nil
             }
 
+        case .show:
+            switch command.targetPhrase {
+            case "timeline":
+                return .timeline
+            case "recent matches":
+                return .recentMatches
+            case "recent policy checks":
+                return .recentPolicyChecks
+            default:
+                return nil
+            }
+
+        case .recent:
+            switch command.targetPhrase {
+            case "decisions":
+                return .recentDecisions
+            default:
+                return nil
+            }
+
         case .why:
             switch command.targetPhrase {
             case "this screen":
                 return .whyScreen
             case "this suggestion":
                 return .whySuggestion
+            case "do you recommend this":
+                return .whyRecommendThis
             default:
                 return nil
             }
@@ -759,6 +798,24 @@ final class JeevesOrchestrator {
             switch command.targetPhrase {
             case "matched":
                 return .matched
+            case "can i do":
+                return .whatCanIDo
+            case "is allowed":
+                return .whatIsAllowed
+            case "requires approval":
+                return .whatRequiresApproval
+            case "is blocked":
+                return .whatIsBlocked
+            case "is destructive":
+                return .whatIsDestructive
+            case "touches money":
+                return .whatTouchesMoney
+            case "is security-related", "is security related":
+                return .whatIsSecurityRelated
+            case "evidence supports this":
+                return .whatEvidenceSupportsThis
+            case "happened":
+                return .whatHappened
             default:
                 return nil
             }
@@ -766,6 +823,53 @@ final class JeevesOrchestrator {
         default:
             return nil
         }
+    }
+
+    private func inspectorIntentPrefix(for request: JeevesExplainabilityRequest) -> String {
+        switch request {
+        case .context, .decision, .whyScreen, .whySuggestion, .matched:
+            return "explainability"
+        case .timeline, .recentDecisions, .whatHappened, .recentMatches, .recentPolicyChecks:
+            return "timeline"
+        case .whatCanIDo, .whatIsAllowed, .whatRequiresApproval,
+             .whatIsBlocked, .whatIsDestructive, .whatTouchesMoney,
+             .whatIsSecurityRelated, .whyRecommendThis, .whatEvidenceSupportsThis:
+            return "execution_awareness"
+        }
+    }
+
+    private func timelineEventKind(
+        matchedCommand: String?,
+        matchedGuidanceKind: String?,
+        directiveIntent: String
+    ) -> JeevesTimelineEventKind {
+        if directiveIntent == "command:unrecognized" {
+            return .unknownCommand
+        }
+        if directiveIntent.hasPrefix("followUp:") {
+            return .followUp
+        }
+        if matchedGuidanceKind != nil {
+            return .guidance
+        }
+        if matchedCommand != nil {
+            return .command
+        }
+        return .routing
+    }
+
+    private func timelineResultSummary(from directive: JeevesDirective) -> String {
+        let firstLine = directive.explanation
+            .split(whereSeparator: \.isNewline)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = directive.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = (firstLine?.isEmpty == false) ? firstLine! : fallback
+        if summary.count <= 140 {
+            return summary
+        }
+        return String(summary.prefix(140))
     }
 
     /// Resolve a guidance request via the Operator Brain.

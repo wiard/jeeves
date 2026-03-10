@@ -161,6 +161,23 @@ actor GatewayClient {
         return envelope.actions ?? []
     }
 
+    func fetchDailyBriefing() async throws -> DailyBriefing {
+        let path = "/api/briefing/daily"
+        let (data, _) = try await request(path: path, method: "GET")
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(DailyBriefing.self, from: data) {
+            return direct
+        }
+        if let wrapped = try? decoder.decode(DailyBriefingEnvelope.self, from: data),
+           let briefing = wrapped.briefing ?? wrapped.data {
+            return briefing
+        }
+
+        debugDecode(path: path, result: "decode failed", itemCount: nil)
+        throw URLError(.cannotParseResponse)
+    }
+
     func fetchRecentKnowledgeObjects(limit: Int = 20) async throws -> [KnowledgeObject] {
         let envelope: KnowledgeObjectsEnvelope = try await get("/api/knowledge/objects/recent?limit=\(limit)")
         return envelope.objects ?? []

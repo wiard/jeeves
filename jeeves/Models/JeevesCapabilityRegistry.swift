@@ -43,6 +43,28 @@ enum JeevesCapabilityRegistry {
     /// All registered capabilities.
     static var allCapabilities: [JeevesCapability] { catalog }
 
+    /// Operator-facing capability summaries enriched with policy and
+    /// execution-awareness metadata. Uses local deterministic rules only.
+    static func capabilitySummaries() -> [JeevesCapabilitySummary] {
+        catalog
+            .map { capability in
+                let policy = JeevesPolicyLayer.evaluate(capability: capability)
+                let execution = executionAwareness(for: capability, policy: policy)
+                return JeevesCapabilitySummary(
+                    capability: capability,
+                    policyDecision: policy,
+                    execution: execution,
+                    evidence: evidenceHints(for: capability, policy: policy, execution: execution),
+                    nextAction: nextActionHint(for: capability, policy: policy)
+                )
+            }
+            .sorted { $0.capability.id < $1.capability.id }
+    }
+
+    static func capabilitySummary(for id: String) -> JeevesCapabilitySummary? {
+        capabilitySummaries().first(where: { $0.capability.id == id })
+    }
+
     // MARK: - Intent → Capability mapping
 
     private static let intentMap: [String: String] = [
@@ -60,7 +82,135 @@ enum JeevesCapabilityRegistry {
         "explainability:why_screen":    "explain_screen_route",
         "explainability:why_suggestion":"explain_suggestion",
         "explainability:matched":       "explain_match",
+        "timeline:timeline":            "timeline_show",
+        "timeline:recent_decisions":    "timeline_recent_decisions",
+        "timeline:what_happened":       "timeline_what_happened",
+        "timeline:recent_matches":      "timeline_recent_matches",
+        "timeline:recent_policy_checks":"timeline_recent_policy_checks",
+        "execution_awareness:what_can_i_do":          "capabilities_available",
+        "execution_awareness:what_is_allowed":        "capabilities_allowed",
+        "execution_awareness:what_requires_approval": "capabilities_requires_approval",
+        "execution_awareness:what_is_blocked":        "capabilities_blocked",
+        "execution_awareness:what_is_destructive":    "capabilities_destructive",
+        "execution_awareness:what_touches_money":     "capabilities_touches_money",
+        "execution_awareness:what_is_security_related":"capabilities_security_related",
+        "execution_awareness:why_recommend_this":     "explain_recommendation_reason",
+        "execution_awareness:what_evidence_supports_this":"explain_evidence_context",
     ]
+
+    private static let moneyCapabilityIds: Set<String> = [
+        "propose_deployment",
+        "approve_proposal",
+        "reject_proposal",
+    ]
+
+    private static let securityCapabilityIds: Set<String> = [
+        "inspect_radar",
+        "inspect_fabric",
+        "inspect_system",
+        "open_observatory",
+        "activate_kill_switch",
+    ]
+
+    private static func executionAwareness(
+        for capability: JeevesCapability,
+        policy: JeevesPolicyDecision
+    ) -> JeevesExecutionAwareness {
+        let executionClass: JeevesExecutionClass
+        if capability.kind == .governedAction {
+            executionClass = .destructive
+        } else if policy.mode == .requiresApproval || policy.mode == .proposalOnly {
+            executionClass = .governed
+        } else {
+            executionClass = .readOnly
+        }
+
+        return JeevesExecutionAwareness(
+            executionClass: executionClass,
+            touchesMoney: moneyCapabilityIds.contains(capability.id),
+            securityRelated: securityCapabilityIds.contains(capability.id)
+        )
+    }
+
+    private static func evidenceHints(
+        for capability: JeevesCapability,
+        policy: JeevesPolicyDecision,
+        execution: JeevesExecutionAwareness
+    ) -> [JeevesEvidenceHint] {
+        var hints: [JeevesEvidenceHint] = [
+            JeevesEvidenceHint(
+                source: "policy_layer",
+                detail: "policy reason: \(policy.reason)"
+            )
+        ]
+
+        if let screen = capability.targetScreen {
+            hints.append(
+                JeevesEvidenceHint(
+                    source: "screen_state",
+                    detail: "targets \(screen.title)"
+                )
+            )
+        }
+
+        if capability.requiresGateway {
+            hints.append(
+                JeevesEvidenceHint(
+                    source: "gateway_contract",
+                    detail: "requires governed gateway path"
+                )
+            )
+        }
+
+        if execution.touchesMoney {
+            hints.append(
+                JeevesEvidenceHint(
+                    source: "safeclash_context",
+                    detail: "value settlement relevance"
+                )
+            )
+        }
+
+        if execution.securityRelated {
+            hints.append(
+                JeevesEvidenceHint(
+                    source: "clashd27_context",
+                    detail: "security and anomaly relevance"
+                )
+            )
+        }
+
+        return hints
+    }
+
+    private static func nextActionHint(
+        for capability: JeevesCapability,
+        policy: JeevesPolicyDecision
+    ) -> JeevesOperatorActionHint {
+        let alias = capability.commandAliases.first ?? capability.id
+        switch policy.mode {
+        case .allowed, .readOnlyOnly:
+            return JeevesOperatorActionHint(
+                action: "jeeves show \(alias)",
+                reason: "allowed now"
+            )
+        case .requiresApproval, .proposalOnly:
+            return JeevesOperatorActionHint(
+                action: "review governance queue",
+                reason: "requires approval"
+            )
+        case .blocked:
+            return JeevesOperatorActionHint(
+                action: "inspect policy constraints",
+                reason: "currently blocked"
+            )
+        case .planned:
+            return JeevesOperatorActionHint(
+                action: "track planned capability rollout",
+                reason: "not implemented"
+            )
+        }
+    }
 
     // MARK: - Catalog
 
@@ -283,6 +433,146 @@ enum JeevesCapabilityRegistry {
             requiresGovernance: false,
             mode: .readOnly,
             commandAliases: ["what matched"]
+        ),
+        JeevesCapability(
+            id: "timeline_show",
+            title: "Toon Operator Timeline",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["show timeline"]
+        ),
+        JeevesCapability(
+            id: "timeline_recent_decisions",
+            title: "Toon Recente Beslissingen",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["recent decisions"]
+        ),
+        JeevesCapability(
+            id: "timeline_what_happened",
+            title: "Wat Gebeurde Er",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what happened"]
+        ),
+        JeevesCapability(
+            id: "timeline_recent_matches",
+            title: "Toon Recente Matches",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["show recent matches"]
+        ),
+        JeevesCapability(
+            id: "timeline_recent_policy_checks",
+            title: "Toon Recente Policy Checks",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["show recent policy checks"]
+        ),
+        JeevesCapability(
+            id: "capabilities_available",
+            title: "Toon Beschikbare Mogelijkheden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what can i do"]
+        ),
+        JeevesCapability(
+            id: "capabilities_allowed",
+            title: "Toon Toegestane Mogelijkheden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what is allowed"]
+        ),
+        JeevesCapability(
+            id: "capabilities_requires_approval",
+            title: "Toon Goedkeuringspaden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what requires approval"]
+        ),
+        JeevesCapability(
+            id: "capabilities_blocked",
+            title: "Toon Geblokkeerde Mogelijkheden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what is blocked"]
+        ),
+        JeevesCapability(
+            id: "capabilities_destructive",
+            title: "Toon Destructieve Mogelijkheden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what is destructive"]
+        ),
+        JeevesCapability(
+            id: "capabilities_touches_money",
+            title: "Toon Waardepaden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what touches money"]
+        ),
+        JeevesCapability(
+            id: "capabilities_security_related",
+            title: "Toon Security-Relevante Mogelijkheden",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what is security-related"]
+        ),
+        JeevesCapability(
+            id: "explain_recommendation_reason",
+            title: "Verklaar Aanbeveling",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["why do you recommend this"]
+        ),
+        JeevesCapability(
+            id: "explain_evidence_context",
+            title: "Verklaar Evidentiecontext",
+            kind: .explanation,
+            targetScreen: .chat,
+            requiresGateway: false,
+            requiresGovernance: false,
+            mode: .readOnly,
+            commandAliases: ["what evidence supports this"]
         ),
 
         // — Governed Actions (planned) —

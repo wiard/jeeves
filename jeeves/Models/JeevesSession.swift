@@ -52,6 +52,7 @@ struct JeevesSessionContext: Sendable {
     let lastDirective: JeevesDirective?
     let lastOperatorInput: String?
     let lastDecisionTrace: JeevesDecisionTrace?
+    let timelineEntries: [JeevesTimelineEntry]
     let currentMissionFocus: String?
     let currentBrowserPreset: ScreenStatePreset?
     let recentScreens: [AppScreen]
@@ -66,6 +67,7 @@ struct JeevesSessionContext: Sendable {
         lastDirective: nil,
         lastOperatorInput: nil,
         lastDecisionTrace: nil,
+        timelineEntries: [],
         currentMissionFocus: nil,
         currentBrowserPreset: nil,
         recentScreens: []
@@ -114,6 +116,7 @@ final class JeevesSession {
     private(set) var lastDirective: JeevesDirective?
     private(set) var lastOperatorInput: String?
     private(set) var lastDecisionTrace: JeevesDecisionTrace?
+    private(set) var timeline = JeevesTimelineStore()
     private(set) var currentMissionFocus: String?
     private(set) var currentBrowserPreset: ScreenStatePreset?
     private(set) var memory = JeevesMemoryStore()
@@ -139,6 +142,10 @@ final class JeevesSession {
         lastDecisionTrace = trace
     }
 
+    func recordTimelineEntry(_ entry: JeevesTimelineEntry) {
+        timeline.append(entry)
+    }
+
     func recordDirective(_ directive: JeevesDirective) {
         lastDirective = directive
         currentScreen = directive.destination
@@ -161,6 +168,7 @@ final class JeevesSession {
             lastDirective: lastDirective,
             lastOperatorInput: lastOperatorInput,
             lastDecisionTrace: lastDecisionTrace,
+            timelineEntries: timeline.entries,
             currentMissionFocus: currentMissionFocus,
             currentBrowserPreset: currentBrowserPreset,
             recentScreens: memory.recentScreens
@@ -186,6 +194,7 @@ final class JeevesSession {
         lastDirective = nil
         lastOperatorInput = nil
         lastDecisionTrace = nil
+        timeline.reset()
         currentMissionFocus = nil
         currentBrowserPreset = nil
         memory.reset()

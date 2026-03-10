@@ -1,26 +1,30 @@
+
 import SwiftUI
 
 struct StreamView: View {
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
+    @State private var knowledgeGraphData: KnowledgeGraphResponse?
+    @State private var showKnowledgeGraph = false
+    @State private var loadingKnowledgeGraph = false
 
     var body: some View {
         NavigationStack {
             Group {
                 if !poller.hasLoadedOnce {
-                    ProgressView("Verbinding maken...")
+                    ProgressView("Mission Control laden...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if hasNoRenderableContent {
                     ContentUnavailableView(
                         TextKeys.Stream.empty,
-                        systemImage: "leaf",
-                        description: Text(poller.lastRefreshError ?? "Er zijn nog geen gebeurtenissen.")
+                        systemImage: "list.bullet.rectangle",
+                        description: Text(poller.lastRefreshError ?? "Mission Control heeft nog geen operationele signalen.")
                     )
                 } else {
-                    streamList
+                    missionControlContent
                 }
             }
-            .navigationTitle(TextKeys.Stream.header)
+            .navigationTitle("Mission Control")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             #endif
@@ -28,9 +32,7 @@ struct StreamView: View {
                 await poller.refresh(gateway: gateway)
             }
             .task {
-                if poller.proposals.isEmpty
-                    && poller.streamEvents.isEmpty
-                    && poller.emergenceClusters.isEmpty {
+                if !poller.hasLoadedOnce {
                     await poller.refresh(gateway: gateway)
                 }
             }
@@ -41,96 +43,462 @@ struct StreamView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showKnowledgeGraph) {
+                DailyBriefingKnowledgeGraphSheet(
+                    graphData: knowledgeGraphData,
+                    isLoading: loadingKnowledgeGraph
+                )
+            }
         }
     }
 
-    private var streamList: some View {
+    private var missionControlContent: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
-                if let radarStore = poller.radarStatus?.store {
+            VStack(alignment: .leading, spacing: 16) {
+                MissionControlHeroPanel(
+                    pendingCount: poller.pendingProposals.count,
+                    emergenceCount: poller.emergenceClusters.count,
+                    knowledgeCount: poller.recentKnowledgeObjects.count,
+                    lastSuccessfulRefreshAt: poller.lastSuccessfulRefreshAt,
+                    warning: poller.lastRefreshError
+                )
+
+                if let store = poller.radarStatus?.store {
+                    DailyBriefingSectionHeader(
+                        title: "Radar status",
+                        subtitle: "Operational signal volume across the collector."
+                    )
                     RadarSummaryRow(
-                        activations: radarStore.activationCount,
-                        collisions: radarStore.collisionCount,
-                        emergence: radarStore.emergenceCount
+                        activations: store.activationCount,
+                        collisions: store.collisionCount,
+                        emergence: store.emergenceCount
                     )
                 }
 
-                ForEach(poller.emergenceClusters) { cluster in
-                    EmergenceRow(cluster: cluster)
-                }
-
-                ForEach(Array(poller.radarEmergence.prefix(5))) { collision in
-                    RadarCollisionRow(collision: collision)
-                }
-
-                ForEach(sortedStreamEvents) { event in
-                    if event.isGravityHotspot {
-                        GravityHotspotRow(event: event)
-                    } else if event.isDiscoveryCandidate {
-                        DiscoveryCandidateRow(event: event)
-                    } else if event.type == "signal_detected" {
-                        PaperSignalRow(event: event)
-                    } else {
-                        StreamEventRow(event: event)
+                if !pendingProposalItems.isEmpty {
+                    DailyBriefingSectionHeader(
+                        title: "Pending approvals",
+                        subtitle: "Operator decisions waiting in the queue."
+                    )
+                    ForEach(pendingProposalItems) { proposal in
+                        ProposalRow(proposal: proposal)
                     }
                 }
 
-                ForEach(sortedProposals) { proposal in
-                    ProposalRow(proposal: proposal)
+                if !emergenceItems.isEmpty {
+                    DailyBriefingSectionHeader(
+                        title: "Emergence",
+                        subtitle: "Escalated structural patterns seen by the runtime."
+                    )
+                    ForEach(emergenceItems) { cluster in
+                        EmergenceRow(cluster: cluster)
+                    }
                 }
 
                 if let action = poller.lastActionReceipt {
+                    DailyBriefingSectionHeader(
+                        title: "Last action receipt",
+                        subtitle: "Most recent governed execution result."
+                    )
                     ActionReceiptRow(action: action)
                 }
 
-                ForEach(poller.recentKnowledgeObjects.prefix(10)) { object in
-                    KnowledgeObjectRow(object: object)
+                if !recentKnowledgeItems.isEmpty {
+                    DailyBriefingSectionHeader(
+                        title: "Recent knowledge",
+                        subtitle: "Fresh evidence and knowledge objects entering the kernel."
+                    )
+                    ForEach(recentKnowledgeItems) { object in
+                        Button {
+                            fetchAndShowKnowledgeGraph(objectId: object.objectId)
+                        } label: {
+                            KnowledgeObjectRow(object: object)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if !recentSignalEvents.isEmpty {
+                    DailyBriefingSectionHeader(
+                        title: "Recent activity",
+                        subtitle: "Mission-level runtime activity, not the operator briefing."
+                    )
+                    ForEach(recentSignalEvents) { event in
+                        eventRow(for: event)
+                    }
                 }
             }
             .padding()
         }
     }
 
-    private var sortedProposals: [Proposal] {
-        poller.proposals.sorted { a, b in
-            (a.createdAt ?? .distantPast) > (b.createdAt ?? .distantPast)
-        }
+    private var pendingProposalItems: [Proposal] {
+        Array(poller.pendingProposals.prefix(4))
+    }
+
+    private var emergenceItems: [EmergenceCluster] {
+        Array(poller.emergenceClusters.prefix(3))
+    }
+
+    private var recentKnowledgeItems: [KnowledgeObject] {
+        Array(poller.recentKnowledgeObjects.prefix(5))
+    }
+
+    private var recentSignalEvents: [ObservatoryStreamEvent] {
+        Array(poller.streamEvents.prefix(6))
     }
 
     private var hasNoRenderableContent: Bool {
-        let radarCounts = (poller.radarStatus?.store?.activationCount ?? 0)
-            + (poller.radarStatus?.store?.collisionCount ?? 0)
-            + (poller.radarStatus?.store?.emergenceCount ?? 0)
-
-        return poller.proposals.isEmpty
-            && poller.emergenceClusters.isEmpty
+        poller.pendingProposals.isEmpty
             && poller.streamEvents.isEmpty
-            && poller.radarCollisions.isEmpty
-            && poller.radarEmergence.isEmpty
-            && poller.radarActivations.isEmpty
-            && poller.radarClusters.isEmpty
-            && poller.radarSources.isEmpty
-            && poller.radarGravityHotspots.isEmpty
-            && poller.radarDiscoveryCandidates.isEmpty
+            && poller.emergenceClusters.isEmpty
             && poller.recentKnowledgeObjects.isEmpty
             && poller.lastActionReceipt == nil
-            && radarCounts == 0
     }
 
-    private var sortedStreamEvents: [ObservatoryStreamEvent] {
-        poller.streamEvents.sorted { lhs, rhs in
-            let lDate = parseIso(lhs.timestampIso)
-            let rDate = parseIso(rhs.timestampIso)
-            if lDate != rDate {
-                return lDate > rDate
-            }
-            return lhs.id < rhs.id
+    @ViewBuilder
+    private func eventRow(for event: ObservatoryStreamEvent) -> some View {
+        switch event.type {
+        case "paper_signal", "signal_detected":
+            PaperSignalRow(event: event)
+        case "gravity_hotspot":
+            GravityHotspotRow(event: event)
+        case "discovery_candidate":
+            DiscoveryCandidateRow(event: event)
+        default:
+            StreamEventRow(event: event)
         }
     }
 
-    private func parseIso(_ value: String?) -> Date {
-        guard let value else { return .distantPast }
-        return ISO8601DateFormatter().date(from: value) ?? .distantPast
+    private func fetchAndShowKnowledgeGraph(objectId: String) {
+        loadingKnowledgeGraph = true
+        knowledgeGraphData = nil
+        showKnowledgeGraph = true
+
+        Task {
+            if gateway.useMock || gateway.host.lowercased() == "mock" {
+                await MainActor.run {
+                    knowledgeGraphData = KnowledgeGraphResponse(
+                        ok: true,
+                        root: KnowledgeObject(
+                            objectId: objectId,
+                            kind: "evidence",
+                            createdAtIso: ISO8601DateFormatter().string(from: Date()),
+                            title: "Demo evidence object",
+                            summary: "Structured evidence shown from the local demo knowledge state.",
+                            sourceRefs: nil,
+                            linkedObjectIds: ["demo-linked-1"],
+                            metadata: nil
+                        ),
+                        linked: [
+                            KnowledgeObject(
+                                objectId: "demo-linked-1",
+                                kind: "discovery",
+                                createdAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-300)),
+                                title: "Related discovery",
+                                summary: "A linked discovery candidate grounded in the same evidence.",
+                                sourceRefs: nil,
+                                linkedObjectIds: nil,
+                                metadata: nil
+                            )
+                        ],
+                        edges: nil
+                    )
+                    loadingKnowledgeGraph = false
+                }
+                return
+            }
+
+            let resolved = await gateway.resolveEndpoint()
+            guard let token = resolved.token, !token.isEmpty else {
+                await MainActor.run {
+                    loadingKnowledgeGraph = false
+                }
+                return
+            }
+
+            let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
+            do {
+                let graph = try await client.fetchKnowledgeGraph(objectId: objectId)
+                await MainActor.run {
+                    knowledgeGraphData = graph
+                    loadingKnowledgeGraph = false
+                }
+            } catch {
+                await MainActor.run {
+                    loadingKnowledgeGraph = false
+                }
+            }
+        }
+    }
+}
+
+private struct MissionControlHeroPanel: View {
+    let pendingCount: Int
+    let emergenceCount: Int
+    let knowledgeCount: Int
+    let lastSuccessfulRefreshAt: Date?
+    let warning: String?
+
+    private var refreshLabel: String {
+        guard let lastSuccessfulRefreshAt else { return "Nog geen succesvolle refresh." }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return "Laatste refresh om \(formatter.string(from: lastSuccessfulRefreshAt))."
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Mission Control")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+
+            Text("Operationele staat van het systeem")
+                .font(.jeevesHeadline)
+
+            Text(refreshLabel)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                metricCell(label: "Approvals", value: pendingCount, tint: .orange)
+                metricCell(label: "Emergence", value: emergenceCount, tint: .purple)
+                metricCell(label: "Knowledge", value: knowledgeCount, tint: .indigo)
+            }
+
+            if let warning, !warning.isEmpty {
+                Text(warning)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .briefingPanel()
+    }
+
+    private func metricCell(label: String, value: Int, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.jeevesMono)
+                .fontWeight(.semibold)
+                .foregroundStyle(tint)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct DailyBriefingHeroCard: View {
+    let briefing: DailyBriefing
+    let warning: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Daily Briefing")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+
+                    Text(briefing.headline)
+                        .font(.jeevesMono)
+                        .fontWeight(.semibold)
+
+                    Text(briefing.statusLine)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                if briefing.quiet {
+                    Text("quiet")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.green)
+                } else if briefing.counts.stale {
+                    Text("stale")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            HStack(spacing: 8) {
+                briefingMetric(label: "Approvals", value: briefing.counts.pendingApprovals, tint: .orange)
+                briefingMetric(label: "Signals", value: briefing.counts.groupedSignals, tint: .cyan)
+                briefingMetric(label: "Evidence", value: briefing.counts.recentEvidence, tint: .indigo)
+            }
+
+            if !briefing.overview.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(briefing.overview, id: \.self) { line in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("•")
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                            Text(line)
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
+            if let warning, !warning.isEmpty {
+                Text(warning)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [Color.jeevesGold.opacity(0.18), Color.blue.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func briefingMetric(label: String, value: Int, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.jeevesMono)
+                .fontWeight(.semibold)
+                .foregroundStyle(tint)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct DailyBriefingSectionHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.jeevesMono)
+                .fontWeight(.semibold)
+            Text(subtitle)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+    }
+}
+
+private struct DailyBriefingAttentionRow: View {
+    let item: DailyBriefingItem
+
+    private var icon: String {
+        switch item.kind {
+        case "approval":
+            return "checkmark.shield"
+        case "discovery":
+            return "sparkle.magnifyingglass"
+        case "emergence":
+            return "waveform.path.ecg"
+        default:
+            return "doc.text.magnifyingglass"
+        }
+    }
+
+    private var tint: Color {
+        switch item.kind {
+        case "approval":
+            return .orange
+        case "discovery":
+            return .cyan
+        case "emergence":
+            return .purple
+        default:
+            return .indigo
+        }
+    }
+
+    private var timeString: String {
+        guard let date = item.createdAt else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var scoreText: String {
+        item.score >= 1 ? String(format: "%.0f", item.score) : String(format: "%.2f", item.score)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(timeString)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
+
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.jeevesMono)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+
+                Text(item.summary)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+
+                Text("Why this matters: \(item.why)")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+
+                HStack(spacing: 8) {
+                    Text(item.kind)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(tint)
+                    Text("score \(scoreText)")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text("\(item.sourceCount) bron\(item.sourceCount == 1 ? "" : "nen")")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct DailyBriefingWarningRow: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.jeevesCaption)
+            .foregroundStyle(.orange)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color.orange.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
