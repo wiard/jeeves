@@ -138,6 +138,9 @@ final class GatewayManager {
         let baseHost = resolveHostInternal(connection: connection)
         let basePort = resolvePortInternal(connection: connection)
         let baseToken = resolveTokenInternal(host: baseHost, port: basePort)
+        #if DEBUG
+        print("[Jeeves][GatewayManager] resolveEndpoint base host=\(baseHost) port=\(basePort) tokenPresent=\((baseToken?.isEmpty == false))")
+        #endif
 
         if Self.isLocalDevelopmentHost(baseHost) {
             let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
@@ -148,14 +151,22 @@ final class GatewayManager {
                 allowPortFallback: !hasRuntimePortOverride
             )
             let discoveredToken = discovery.token?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return ResolvedGatewayEndpoint(
+            let resolved = ResolvedGatewayEndpoint(
                 host: discovery.host,
                 port: discovery.port,
                 token: (discoveredToken?.isEmpty == false) ? discoveredToken : baseToken
             )
+            #if DEBUG
+            print("[Jeeves][GatewayManager] resolveEndpoint final host=\(resolved.host) port=\(resolved.port) tokenPresent=\((resolved.token?.isEmpty == false)) healthy=\(discovery.isHealthy)")
+            #endif
+            return resolved
         }
 
-        return ResolvedGatewayEndpoint(host: baseHost, port: basePort, token: baseToken)
+        let resolved = ResolvedGatewayEndpoint(host: baseHost, port: basePort, token: baseToken)
+        #if DEBUG
+        print("[Jeeves][GatewayManager] resolveEndpoint final host=\(resolved.host) port=\(resolved.port) tokenPresent=\((resolved.token?.isEmpty == false)) healthy=false")
+        #endif
+        return resolved
     }
 
     private func resolveHostInternal(connection: GatewayConnection?) -> String {

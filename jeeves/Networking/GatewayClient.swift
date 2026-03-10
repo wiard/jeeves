@@ -179,9 +179,15 @@ actor GatewayClient {
     }
 
     func fetchRecentKnowledgeObjects(limit: Int = 20) async throws -> [KnowledgeObject] {
-        let path = "/api/knowledge/objects/recent?limit=\(limit)"
-        print("[Knowledge] request start: \(path)")
-        let (data, _) = try await request(path: path, method: "GET")
+        let boundedLimit = max(1, min(limit, 100))
+        let path = "/api/knowledge/objects/recent"
+        let queryItems = [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        print("[Knowledge] request start: path=\(path) limit=\(boundedLimit) host=\(baseURL.host ?? "nil") port=\(baseURL.port ?? -1) tokenPresent=\(!token.isEmpty)")
+        if let requestURL = try? builder.request(path: path, method: "GET", queryItems: queryItems).url?.absoluteString {
+            print("[Knowledge] request url: \(requestURL)")
+        }
+        let (data, response) = try await request(path: path, method: "GET", queryItems: queryItems)
+        print("[Knowledge] response received: status=\(response.statusCode) bytes=\(data.count)")
 
         let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
         print("[Knowledge] raw response (\(data.count) bytes): \(String(raw.prefix(600)))")
@@ -196,10 +202,10 @@ actor GatewayClient {
             }
             let objects = envelope.resolved
             if !objects.isEmpty {
-                print("[Knowledge] snake_case envelope: \(objects.count) objects")
+                print("[Knowledge] decode success: snake_case envelope count=\(objects.count)")
                 return objects
             }
-            print("[Knowledge] snake_case envelope decoded but resolved 0 objects (ok=\(String(describing: envelope.ok)))")
+            print("[Knowledge] decode success: snake_case envelope count=0 ok=\(String(describing: envelope.ok))")
         }
 
         // Try default (camelCase) decoder
@@ -210,19 +216,20 @@ actor GatewayClient {
             }
             let objects = envelope.resolved
             if !objects.isEmpty {
-                print("[Knowledge] camelCase envelope: \(objects.count) objects")
+                print("[Knowledge] decode success: camelCase envelope count=\(objects.count)")
                 return objects
             }
+            print("[Knowledge] decode success: camelCase envelope count=0 ok=\(String(describing: envelope.ok))")
         }
 
         // Try direct array decode (backend may return bare array)
         if let objects = try? snakeDecoder.decode([KnowledgeObject].self, from: data), !objects.isEmpty {
-            print("[Knowledge] direct array: \(objects.count) objects")
+            print("[Knowledge] decode success: direct array count=\(objects.count)")
             return objects
         }
 
         // All strategies empty — log detailed decode error for diagnosis
-        print("[Knowledge] all decode strategies returned 0 objects")
+        print("[Knowledge] decode failure: all strategies returned 0 objects")
         do {
             let _ = try snakeDecoder.decode(KnowledgeObjectsEnvelope.self, from: data)
         } catch {
