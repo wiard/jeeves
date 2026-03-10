@@ -22,39 +22,56 @@ final class KnowledgeBrowserViewModel {
         isLoading = true
         errorMessage = nil
         isRateLimited = false
-        defer {
-            hasLoaded = true
-            isLoading = false
-        }
+        defer { isLoading = false }
 
+        print("[KnowledgeVM] gateway.useMock=\(gateway.useMock), gateway.host=\(gateway.host)")
         if gateway.useMock || gateway.host.lowercased() == "mock" {
             objects = Self.mockObjects()
+            hasLoaded = true
+            print("[KnowledgeVM] using mock: \(objects.count) objects")
             return
         }
 
         let resolved = await gateway.resolveEndpoint()
+        print("[KnowledgeVM] resolved: host=\(resolved.host), port=\(resolved.port), token=\(resolved.token != nil ? "present(\(resolved.token!.prefix(8))...)" : "nil")")
         guard let token = resolved.token, !token.isEmpty else {
             errorMessage = "Geen geldige gateway-token beschikbaar voor Knowledge."
+            print("[KnowledgeVM] no token — aborting")
             return
         }
 
         let client = GatewayClient(host: resolved.host, port: resolved.port, token: token)
 
+        print("[KnowledgeVM] loading from \(resolved.host):\(resolved.port)")
         do {
-            objects = try await client.fetchRecentKnowledgeObjects(limit: 24)
+            let fetched = try await client.fetchRecentKnowledgeObjects(limit: 24)
+            objects = fetched
+            hasLoaded = true
+            print("[KnowledgeVM] success: \(fetched.count) objects")
         } catch GatewayClientError.rateLimited {
             isRateLimited = true
+            print("[KnowledgeVM] rate limited, retrying after 800ms")
             // One calm retry after a short backoff
             try? await Task.sleep(for: .milliseconds(800))
             do {
-                objects = try await client.fetchRecentKnowledgeObjects(limit: 24)
+                let fetched = try await client.fetchRecentKnowledgeObjects(limit: 24)
+                objects = fetched
                 isRateLimited = false
+                hasLoaded = true
+                print("[KnowledgeVM] retry success: \(fetched.count) objects")
             } catch {
-                // Still rate-limited or another error — keep the rate-limited state
+                print("[KnowledgeVM] retry failed: \(error)")
+                // Still rate-limited — keep existing objects visible
+                // Only mark loaded if we have objects from a prior successful fetch
+                if !objects.isEmpty { hasLoaded = true }
             }
         } catch {
+            print("[KnowledgeVM] fetch error: \(error)")
             errorMessage = "Jeeves kon de bibliotheek nu niet openen."
+            // Preserve existing library; only mark loaded if objects remain
+            if !objects.isEmpty { hasLoaded = true }
         }
+        print("[KnowledgeVM] final state: \(objects.count) objects, hasLoaded=\(hasLoaded), error=\(errorMessage ?? "nil"), rateLimited=\(isRateLimited)")
     }
 
     private static func mockObjects() -> [KnowledgeObject] {

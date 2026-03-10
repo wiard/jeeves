@@ -179,11 +179,56 @@ actor GatewayClient {
     }
 
     func fetchRecentKnowledgeObjects(limit: Int = 20) async throws -> [KnowledgeObject] {
-        let envelope: KnowledgeObjectsEnvelope = try await get("/api/knowledge/objects/recent?limit=\(limit)")
-        if envelope.error == "rate_limited" {
-            throw GatewayClientError.rateLimited
+        let path = "/api/knowledge/objects/recent?limit=\(limit)"
+        print("[Knowledge] request start: \(path)")
+        let (data, _) = try await request(path: path, method: "GET")
+
+        let raw = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+        print("[Knowledge] raw response (\(data.count) bytes): \(String(raw.prefix(600)))")
+
+        // Try snake_case decoder (backend convention)
+        let snakeDecoder = JSONDecoder()
+        snakeDecoder.keyDecodingStrategy = .convertFromSnakeCase
+        if let envelope = try? snakeDecoder.decode(KnowledgeObjectsEnvelope.self, from: data) {
+            if envelope.error == "rate_limited" {
+                print("[Knowledge] rate limited by response body")
+                throw GatewayClientError.rateLimited
+            }
+            let objects = envelope.resolved
+            if !objects.isEmpty {
+                print("[Knowledge] snake_case envelope: \(objects.count) objects")
+                return objects
+            }
+            print("[Knowledge] snake_case envelope decoded but resolved 0 objects (ok=\(String(describing: envelope.ok)))")
         }
-        return envelope.objects ?? []
+
+        // Try default (camelCase) decoder
+        let camelDecoder = JSONDecoder()
+        if let envelope = try? camelDecoder.decode(KnowledgeObjectsEnvelope.self, from: data) {
+            if envelope.error == "rate_limited" {
+                throw GatewayClientError.rateLimited
+            }
+            let objects = envelope.resolved
+            if !objects.isEmpty {
+                print("[Knowledge] camelCase envelope: \(objects.count) objects")
+                return objects
+            }
+        }
+
+        // Try direct array decode (backend may return bare array)
+        if let objects = try? snakeDecoder.decode([KnowledgeObject].self, from: data), !objects.isEmpty {
+            print("[Knowledge] direct array: \(objects.count) objects")
+            return objects
+        }
+
+        // All strategies empty — log detailed decode error for diagnosis
+        print("[Knowledge] all decode strategies returned 0 objects")
+        do {
+            let _ = try snakeDecoder.decode(KnowledgeObjectsEnvelope.self, from: data)
+        } catch {
+            print("[Knowledge] detailed decode error: \(error)")
+        }
+        return []
     }
 
     func fetchDecidedProposals(limit: Int = 20) async throws -> [DecidedProposal] {
@@ -204,7 +249,11 @@ actor GatewayClient {
     }
 
     func fetchKnowledgeGraph(objectId: String) async throws -> KnowledgeGraphResponse {
-        try await get("/api/knowledge/objects/\(objectId)/graph")
+        let path = "/api/knowledge/objects/\(objectId)/graph"
+        let (data, _) = try await request(path: path, method: "GET")
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(KnowledgeGraphResponse.self, from: data)
     }
 
     func fetchEmergence() async throws -> [EmergenceCluster] {

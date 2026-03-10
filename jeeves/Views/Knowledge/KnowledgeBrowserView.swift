@@ -12,30 +12,39 @@ struct KnowledgeBrowserView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && !viewModel.hasLoaded {
+                    let _ = print("[KnowledgeView] branch: loading")
                     ProgressView("Knowledge laden...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.isRateLimited && viewModel.objects.isEmpty {
+                    let _ = print("[KnowledgeView] branch: rateLimited+empty")
                     JeevesEmptyState(
                         icon: "clock.arrow.circlepath",
                         title: "Jeeves ordent de bibliotheek even.",
                         subtitle: "Probeer het zo opnieuw."
                     )
                 } else if viewModel.objects.isEmpty && viewModel.errorMessage != nil {
+                    let _ = print("[KnowledgeView] branch: error (\(viewModel.errorMessage!))")
                     JeevesEmptyState(
                         icon: "exclamationmark.triangle",
                         title: "Jeeves kon de bibliotheek nu niet openen.",
                         subtitle: viewModel.errorMessage!
                     )
                 } else if viewModel.objects.isEmpty {
+                    let _ = print("[KnowledgeView] branch: empty (hasLoaded=\(viewModel.hasLoaded), isLoading=\(viewModel.isLoading))")
                     JeevesEmptyState(
                         icon: "book.closed",
                         title: "De bibliotheek is nog leeg.",
                         subtitle: "Zodra het systeem evidence verwerkt, verschijnen hier de kennisobjecten."
                     )
                 } else {
+                    let _ = print("[KnowledgeView] branch: list (\(viewModel.objects.count) objects)")
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
-                            KnowledgeBrowserHero(count: viewModel.objects.count, warning: viewModel.errorMessage)
+                            KnowledgeBrowserHero(
+                                count: viewModel.objects.count,
+                                warning: viewModel.errorMessage
+                                    ?? (viewModel.isRateLimited ? "Laatste data — server beperkt verzoeken." : nil)
+                            )
 
                             ForEach(viewModel.objects) { object in
                                 Button {

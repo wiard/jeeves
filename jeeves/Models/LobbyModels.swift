@@ -427,6 +427,63 @@ struct KnowledgeObject: Codable, Identifiable {
         default: return "\u{1F4E6}"
         }
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case objectId, kind, createdAtIso, title, summary
+        case sourceRefs, linkedObjectIds, metadata
+        // snake_case alternatives the backend may use
+        case object_id, created_at_iso, source_refs, linked_object_ids
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        objectId = (try? c.decode(String.self, forKey: .objectId))
+            ?? (try? c.decode(String.self, forKey: .object_id))
+            ?? UUID().uuidString
+        kind = (try? c.decode(String.self, forKey: .kind)) ?? "unknown"
+        createdAtIso = (try? c.decode(String.self, forKey: .createdAtIso))
+            ?? (try? c.decode(String.self, forKey: .created_at_iso))
+            ?? ISO8601DateFormatter().string(from: Date())
+        title = (try? c.decode(String.self, forKey: .title)) ?? "Untitled"
+        summary = (try? c.decode(String.self, forKey: .summary)) ?? ""
+        sourceRefs = (try? c.decodeIfPresent([KnowledgeSourceRef].self, forKey: .sourceRefs))
+            ?? (try? c.decodeIfPresent([KnowledgeSourceRef].self, forKey: .source_refs))
+        linkedObjectIds = (try? c.decodeIfPresent([String].self, forKey: .linkedObjectIds))
+            ?? (try? c.decodeIfPresent([String].self, forKey: .linked_object_ids))
+        metadata = try? c.decodeIfPresent([String: AnyCodableValue].self, forKey: .metadata)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(objectId, forKey: .objectId)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(createdAtIso, forKey: .createdAtIso)
+        try c.encode(title, forKey: .title)
+        try c.encode(summary, forKey: .summary)
+        try c.encodeIfPresent(sourceRefs, forKey: .sourceRefs)
+        try c.encodeIfPresent(linkedObjectIds, forKey: .linkedObjectIds)
+        try c.encodeIfPresent(metadata, forKey: .metadata)
+    }
+
+    init(
+        objectId: String,
+        kind: String,
+        createdAtIso: String,
+        title: String,
+        summary: String,
+        sourceRefs: [KnowledgeSourceRef]?,
+        linkedObjectIds: [String]?,
+        metadata: [String: AnyCodableValue]?
+    ) {
+        self.objectId = objectId
+        self.kind = kind
+        self.createdAtIso = createdAtIso
+        self.title = title
+        self.summary = summary
+        self.sourceRefs = sourceRefs
+        self.linkedObjectIds = linkedObjectIds
+        self.metadata = metadata
+    }
 }
 
 struct KnowledgeSourceRef: Codable {
@@ -434,12 +491,50 @@ struct KnowledgeSourceRef: Codable {
     let sourceId: String
     let url: String?
     let label: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case sourceType, sourceId, url, label
+        case source_type, source_id
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sourceType = (try? c.decode(String.self, forKey: .sourceType))
+            ?? (try? c.decode(String.self, forKey: .source_type))
+            ?? "unknown"
+        sourceId = (try? c.decode(String.self, forKey: .sourceId))
+            ?? (try? c.decode(String.self, forKey: .source_id))
+            ?? ""
+        url = try? c.decodeIfPresent(String.self, forKey: .url)
+        label = try? c.decodeIfPresent(String.self, forKey: .label)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(sourceType, forKey: .sourceType)
+        try c.encode(sourceId, forKey: .sourceId)
+        try c.encodeIfPresent(url, forKey: .url)
+        try c.encodeIfPresent(label, forKey: .label)
+    }
+
+    init(sourceType: String, sourceId: String, url: String?, label: String?) {
+        self.sourceType = sourceType
+        self.sourceId = sourceId
+        self.url = url
+        self.label = label
+    }
 }
 
 struct KnowledgeObjectsEnvelope: Decodable {
     let ok: Bool?
     let objects: [KnowledgeObject]?
+    let data: [KnowledgeObject]?
+    let items: [KnowledgeObject]?
     let error: String?
+
+    var resolved: [KnowledgeObject] {
+        objects ?? data ?? items ?? []
+    }
 }
 
 struct IncomingToolEvidenceRef: Identifiable, Hashable {
