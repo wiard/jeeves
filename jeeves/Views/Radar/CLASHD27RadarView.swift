@@ -54,7 +54,7 @@ struct CLASHD27RadarView: View {
                     }
                 }
             }
-            .navigationTitle("Discovery Engine")
+            .navigationTitle("Jeeves")
             .task {
                 await viewModel.load()
                 guard !animateAmbient else { return }
@@ -62,6 +62,9 @@ struct CLASHD27RadarView: View {
                     animateAmbient = true
                 }
             }
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
         }
     }
 

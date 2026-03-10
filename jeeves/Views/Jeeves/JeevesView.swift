@@ -94,9 +94,9 @@ struct JeevesView: View {
                     )
                 }
             }
-            .navigationTitle("Morning Intelligence")
+            .navigationTitle("Jeeves")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .refreshable {
                 await briefingModel.load(gateway: gateway, force: true)

@@ -35,9 +35,9 @@ struct StreamView: View {
                     }
                 }
             }
-            .navigationTitle("Mission Control")
+            .navigationTitle("Jeeves")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .refreshable {
                 await poller.refresh(gateway: gateway)

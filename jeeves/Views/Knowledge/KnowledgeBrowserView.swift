@@ -89,9 +89,9 @@ struct KnowledgeBrowserView: View {
                     }
                 }
             }
-            .navigationTitle("Library")
+            .navigationTitle("Jeeves")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .refreshable {
                 await viewModel.load(gateway: gateway, force: true)
