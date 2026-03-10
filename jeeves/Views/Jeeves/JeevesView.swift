@@ -17,11 +17,30 @@ struct JeevesView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let briefing = briefingModel.briefing {
                     ZStack {
-                        JeevesMorningBackdrop()
+                        InstrumentBackdrop(
+                            colors: [
+                                Color(red: 0.96, green: 0.97, blue: 0.99),
+                                Color(red: 0.94, green: 0.96, blue: 0.99),
+                                Color(red: 0.98, green: 0.96, blue: 0.93)
+                            ]
+                        )
                             .ignoresSafeArea()
 
                         ScrollView {
                             VStack(spacing: 22) {
+                                InstrumentRoleHeader(
+                                    eyebrow: "Jeeves",
+                                    title: "Morning Intelligence",
+                                    summary: "A calm reading of what matters now, what needs approval, and where new evidence is forming.",
+                                    accent: .jeevesGold,
+                                    metrics: [
+                                        InstrumentRoleMetric(label: "Approvals", value: "\(briefing.counts.pendingApprovals)"),
+                                        InstrumentRoleMetric(label: "Signals", value: "\(briefing.counts.groupedSignals)"),
+                                        InstrumentRoleMetric(label: "Evidence", value: "\(briefing.counts.recentEvidence)")
+                                    ]
+                                )
+                                .calmAppear()
+
                                 DailyBriefingView(
                                     briefing: cappedBriefing(from: briefing),
                                     warning: briefingModel.usingCachedFallback ? "Toon gecachte briefing." : briefingModel.errorMessage,
@@ -47,11 +66,13 @@ struct JeevesView: View {
                                         fetchAndShowKnowledgeGraph(objectId: object.objectId)
                                     }
                                 )
+                                .calmAppear(delay: 0.08)
 
                                 if let pulse = briefing.discoveryPulse {
                                     DiscoveryPulsePanel(cells: pulseCells(from: pulse)) {
                                         NotificationCenter.default.post(name: .jeevesOpenObservatoryTab, object: nil)
                                     }
+                                    .calmAppear(delay: 0.16)
                                 }
                             }
                             .padding()
@@ -73,7 +94,7 @@ struct JeevesView: View {
                     )
                 }
             }
-            .navigationTitle("Jeeves")
+            .navigationTitle("Morning Intelligence")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             #endif
@@ -247,19 +268,5 @@ struct JeevesEmptyState: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
-    }
-}
-
-private struct JeevesMorningBackdrop: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.96, green: 0.97, blue: 0.99),
-                Color(red: 0.93, green: 0.95, blue: 0.98),
-                Color(red: 0.98, green: 0.96, blue: 0.93)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
 }

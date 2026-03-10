@@ -10,15 +10,43 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ConnectionSettings()
-                SecuritySettings()
-                tokenInfoSection
-                actionsSection
-                displaySection
-                infoSection
+            ZStack {
+                InstrumentBackdrop(
+                    colors: [
+                        Color(red: 0.96, green: 0.97, blue: 0.99),
+                        Color(red: 0.95, green: 0.96, blue: 0.97),
+                        Color(red: 0.97, green: 0.96, blue: 0.94)
+                    ]
+                )
+                .ignoresSafeArea()
+
+                List {
+                    Section {
+                        InstrumentRoleHeader(
+                            eyebrow: "Settings",
+                            title: "System",
+                            summary: "Connection, security posture, and operator preferences for the Jeeves cockpit.",
+                            accent: .jeevesGold,
+                            metrics: [
+                                InstrumentRoleMetric(label: "Gateway", value: gateway.isConnected ? "Live" : "Idle"),
+                                InstrumentRoleMetric(label: "Queue", value: "\(poller.pendingCount)"),
+                                InstrumentRoleMetric(label: "Knowledge", value: "\(poller.recentKnowledgeObjects.count)")
+                            ]
+                        )
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+
+                    ConnectionSettings()
+                    SecuritySettings()
+                    tokenInfoSection
+                    actionsSection
+                    displaySection
+                    infoSection
+                }
+                .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Instellingen")
+            .navigationTitle("System")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             #endif

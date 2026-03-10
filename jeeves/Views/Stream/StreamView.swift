@@ -10,18 +10,29 @@ struct StreamView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if !poller.hasLoadedOnce {
-                    ProgressView("Mission Control laden...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if hasNoRenderableContent {
-                    JeevesEmptyState(
-                        icon: "list.bullet.rectangle",
-                        title: "Alles rustig, meneer.",
-                        subtitle: poller.lastRefreshError ?? "Er zijn nog geen operationele signalen om te melden."
-                    )
-                } else {
-                    missionControlContent
+            ZStack {
+                InstrumentBackdrop(
+                    colors: [
+                        Color(red: 0.95, green: 0.97, blue: 0.99),
+                        Color(red: 0.93, green: 0.96, blue: 0.97),
+                        Color(red: 0.97, green: 0.98, blue: 0.95)
+                    ]
+                )
+                .ignoresSafeArea()
+
+                Group {
+                    if !poller.hasLoadedOnce {
+                        ProgressView("Mission Control laden...")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if hasNoRenderableContent {
+                        JeevesEmptyState(
+                            icon: "list.bullet.rectangle",
+                            title: "Alles rustig, meneer.",
+                            subtitle: poller.lastRefreshError ?? "Er zijn nog geen operationele signalen om te melden."
+                        )
+                    } else {
+                        missionControlContent
+                    }
                 }
             }
             .navigationTitle("Mission Control")
@@ -55,85 +66,109 @@ struct StreamView: View {
     private var missionControlContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                MissionControlHeroPanel(
-                    pendingCount: poller.pendingProposals.count,
-                    emergenceCount: poller.emergenceClusters.count,
-                    knowledgeCount: poller.recentKnowledgeObjects.count,
-                    lastSuccessfulRefreshAt: poller.lastSuccessfulRefreshAt,
-                    warning: poller.lastRefreshError
+                InstrumentRoleHeader(
+                    eyebrow: "Stream",
+                    title: "Mission Control",
+                    summary: "A calm operational instrument for system pulse, governed approvals, and the activity shaping the next decision.",
+                    accent: .cyan,
+                    metrics: [
+                        InstrumentRoleMetric(label: "Pulse", value: "\(systemPulseMetric)"),
+                        InstrumentRoleMetric(label: "Approvals", value: "\(pendingProposalItems.count)"),
+                        InstrumentRoleMetric(label: "Activity", value: "\(recentSignalEvents.count)")
+                    ]
                 )
+                .calmAppear()
 
-                if let store = poller.radarStatus?.store {
-                    missionSection(title: "Radar status", subtitle: "Operational signal volume across the collector.") {
-                        RadarSummaryRow(
-                            activations: store.activationCount,
-                            collisions: store.collisionCount,
-                            emergence: store.emergenceCount
+                StreamPanelShell(
+                    eyebrow: "System Pulse",
+                    title: "What the system is carrying right now",
+                    metricLabel: "Live index",
+                    metricValue: "\(systemPulseMetric)",
+                    accent: .teal
+                ) {
+                    ForEach(Array(systemPulseRows.enumerated()), id: \.offset) { index, row in
+                        StreamSignalLine(
+                            title: row.title,
+                            detail: row.detail,
+                            accent: row.accent
                         )
+                        .calmAppear(delay: 0.04 * Double(index))
                     }
                 }
+                .calmAppear(delay: 0.08)
 
-                if !pendingProposalItems.isEmpty {
-                    missionSection(title: "Pending approvals", subtitle: "Operator decisions waiting in the queue.") {
-                        ForEach(pendingProposalItems) { proposal in
+                StreamPanelShell(
+                    eyebrow: "Approvals",
+                    title: "Bounded decisions waiting for consent",
+                    metricLabel: "Pending",
+                    metricValue: "\(pendingProposalItems.count)",
+                    accent: .orange
+                ) {
+                    if pendingProposalItems.isEmpty {
+                        StreamPanelEmpty(text: "Geen voorstellen wachten op uw besluit.")
+                    } else {
+                        ForEach(Array(pendingProposalItems.enumerated()), id: \.element.id) { index, proposal in
                             ProposalRow(proposal: proposal)
+                                .calmAppear(delay: 0.05 * Double(index))
                         }
                     }
                 }
+                .calmAppear(delay: 0.14)
 
-                if !emergenceItems.isEmpty {
-                    missionSection(title: "Emergence", subtitle: "Escalated structural patterns seen by the runtime.") {
-                        ForEach(emergenceItems) { cluster in
-                            EmergenceRow(cluster: cluster)
-                        }
-                    }
-                }
-
-                if let action = poller.lastActionReceipt {
-                    missionSection(title: "Last action receipt", subtitle: "Most recent governed execution result.") {
-                        ActionReceiptRow(action: action)
-                    }
-                }
-
-                if !recentKnowledgeItems.isEmpty {
-                    missionSection(title: "Recent knowledge", subtitle: "Fresh evidence and knowledge objects entering the kernel.") {
-                        ForEach(recentKnowledgeItems) { object in
-                            Button {
-                                fetchAndShowKnowledgeGraph(objectId: object.objectId)
-                            } label: {
-                                KnowledgeObjectRow(object: object)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                if !recentSignalEvents.isEmpty {
-                    missionSection(title: "Recent activity", subtitle: "Mission-level runtime activity, not the operator briefing.") {
-                        ForEach(recentSignalEvents) { event in
+                StreamPanelShell(
+                    eyebrow: "Activity",
+                    title: "Recent movement across the operating loop",
+                    metricLabel: "Events",
+                    metricValue: "\(recentSignalEvents.count)",
+                    accent: .indigo
+                ) {
+                    if recentSignalEvents.isEmpty {
+                        StreamPanelEmpty(text: "Nog geen recente activiteit om te tonen.")
+                    } else {
+                        ForEach(Array(recentSignalEvents.enumerated()), id: \.element.id) { index, event in
                             eventRow(for: event)
+                                .calmAppear(delay: 0.04 * Double(index))
                         }
                     }
                 }
+                .calmAppear(delay: 0.2)
             }
             .padding(.horizontal, 20)
             .padding(.vertical)
         }
     }
 
-    private func missionSection<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            DailyBriefingSectionHeader(title: title, subtitle: subtitle)
-            content()
+    private var systemPulseMetric: Int {
+        if let store = poller.radarStatus?.store {
+            return store.activationCount + store.emergenceCount
         }
+        return recentSignalEvents.count + recentKnowledgeItems.count
+    }
+
+    private var systemPulseRows: [StreamPulseRow] {
+        var rows: [StreamPulseRow] = []
+        if let store = poller.radarStatus?.store {
+            rows.append(StreamPulseRow(title: "Radar activations", detail: "\(store.activationCount) active observations", accent: .teal))
+            rows.append(StreamPulseRow(title: "Emergence pressure", detail: "\(store.emergenceCount) escalated patterns", accent: .purple))
+            rows.append(StreamPulseRow(title: "Collision watch", detail: "\(store.collisionCount) active collision clusters", accent: .orange))
+        }
+        rows.append(StreamPulseRow(title: "Knowledge intake", detail: "\(recentKnowledgeItems.count) recent objects in the kernel", accent: .indigo))
+        if let action = poller.lastActionReceipt {
+            rows.append(StreamPulseRow(title: "Last governed action", detail: action.actionKind.replacingOccurrences(of: "_", with: " "), accent: action.isCompleted ? .green : .red))
+        }
+        if let refreshed = poller.lastSuccessfulRefreshAt {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            rows.append(StreamPulseRow(title: "Last refresh", detail: "Updated at \(formatter.string(from: refreshed))", accent: .cyan))
+        }
+        if let warning = poller.lastRefreshError, !warning.isEmpty {
+            rows.append(StreamPulseRow(title: "Operator note", detail: warning, accent: .orange))
+        }
+        return Array(rows.prefix(5))
     }
 
     private var pendingProposalItems: [Proposal] {
-        Array(poller.pendingProposals.prefix(4))
-    }
-
-    private var emergenceItems: [EmergenceCluster] {
-        Array(poller.emergenceClusters.prefix(3))
+        Array(poller.pendingProposals.prefix(5))
     }
 
     private var recentKnowledgeItems: [KnowledgeObject] {
@@ -141,7 +176,7 @@ struct StreamView: View {
     }
 
     private var recentSignalEvents: [ObservatoryStreamEvent] {
-        Array(poller.streamEvents.prefix(6))
+        Array(poller.streamEvents.prefix(5))
     }
 
     private var hasNoRenderableContent: Bool {
@@ -226,6 +261,108 @@ struct StreamView: View {
                 }
             }
         }
+    }
+}
+
+private struct StreamPulseRow {
+    let title: String
+    let detail: String
+    let accent: Color
+}
+
+private struct StreamPanelShell<Content: View>: View {
+    let eyebrow: String
+    let title: String
+    let metricLabel: String
+    let metricValue: String
+    let accent: Color
+    let content: Content
+
+    init(
+        eyebrow: String,
+        title: String,
+        metricLabel: String,
+        metricValue: String,
+        accent: Color,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.eyebrow = eyebrow
+        self.title = title
+        self.metricLabel = metricLabel
+        self.metricValue = metricValue
+        self.accent = accent
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(eyebrow.uppercased())
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(accent)
+
+                    Text(title)
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.primary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(metricLabel)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text(metricValue)
+                        .font(.jeevesMetric)
+                        .foregroundStyle(accent)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                content
+            }
+        }
+        .briefingPanel()
+    }
+}
+
+private struct StreamSignalLine: View {
+    let title: String
+    let detail: String
+    let accent: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Capsule()
+                .fill(accent.opacity(0.85))
+                .frame(width: 4, height: 34)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.jeevesBody.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(detail)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct StreamPanelEmpty: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.jeevesCaption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 10)
     }
 }
 
