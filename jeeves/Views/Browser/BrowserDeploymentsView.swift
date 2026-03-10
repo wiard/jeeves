@@ -60,7 +60,7 @@ struct BrowserDeploymentsView: View {
     private func metric(label: String, value: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
-                .font(.caption2.weight(.semibold))
+                .font(.jeevesCaption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.jeevesMono.weight(.semibold))
@@ -84,13 +84,13 @@ struct BrowserDeploymentsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "clock.fill")
                             .foregroundStyle(Color.consentOrange)
-                            .font(.caption)
+                            .font(.jeevesCaption)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(proposal.title)
                                 .font(.jeevesCaption.weight(.semibold))
                                 .foregroundStyle(.white)
                             Text(proposal.proposalId)
-                                .font(.caption2)
+                                .font(.jeevesCaption2)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -114,18 +114,18 @@ struct BrowserDeploymentsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(Color.consentGreen)
-                            .font(.caption)
+                            .font(.jeevesCaption)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(decision.title)
                                 .font(.jeevesCaption.weight(.semibold))
                                 .foregroundStyle(.white)
                             Text(decision.proposalId)
-                                .font(.caption2)
+                                .font(.jeevesCaption2)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Text(relativeDateLabel(iso: decision.decidedAtIso))
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                             .foregroundStyle(.secondary)
                     }
 
@@ -146,19 +146,19 @@ struct BrowserDeploymentsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Color.consentRed)
-                        .font(.caption)
+                        .font(.jeevesCaption)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(decision.title)
                             .font(.jeevesCaption.weight(.semibold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                         Text(decision.proposalId)
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Text(relativeDateLabel(iso: decision.decidedAtIso))
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(.secondary)
                 }
                 .browserPanel(padding: 12)
@@ -169,21 +169,12 @@ struct BrowserDeploymentsView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "shippingbox.circle")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("No deployments yet")
-                .font(.jeevesHeadline)
-                .foregroundStyle(.white)
-            Text("Governed deployments will appear here after you propose configurations from the Marketplace.")
-                .font(.jeevesCaption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-        .browserPanel(padding: 16)
+        JeevesEmptyState(
+            icon: "shippingbox.circle",
+            title: "Nog geen deployments.",
+            subtitle: "Governed deployments verschijnen hier zodra u configuraties voorstelt vanuit de Marketplace."
+        )
+        .frame(height: 240)
     }
 
     // MARK: - Proposal Created Banner
@@ -197,7 +188,7 @@ struct BrowserDeploymentsView: View {
                     .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.white)
                 Text("Proposal \(proposalId) is pending approval.")
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -233,9 +224,9 @@ struct BrowserDeploymentsView: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
-                .font(.caption)
+                .font(.jeevesCaption)
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.jeevesCaption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
             Text("\(count)")

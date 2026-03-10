@@ -17,7 +17,7 @@ struct BrowserFeaturedCard: View {
             }
 
             Text(card.title)
-                .font(.title3.weight(.semibold))
+                .font(.jeevesTitle.weight(.semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
 
@@ -46,7 +46,7 @@ struct BrowserFeaturedCard: View {
             }
 
             Text(card.deployReady ? "Ready for governed deployment." : "Awaiting certification envelope.")
-                .font(.caption2)
+                .font(.jeevesCaption2)
                 .foregroundStyle(card.deployReady ? Color.consentGreen : .consentOrange)
 
             HStack(spacing: 8) {
@@ -82,7 +82,7 @@ struct BrowserCertifiedCard: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(certificationColor(card.bestConfiguration.certificationLevel))
-                        .font(.caption)
+                        .font(.jeevesCaption)
                     Text(card.title)
                         .font(.jeevesHeadline)
                         .foregroundStyle(.white)
@@ -111,7 +111,7 @@ struct BrowserCertifiedCard: View {
 
             if let explanation = card.rankingExplanation {
                 Text(explanation)
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .italic()
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -158,7 +158,7 @@ struct BrowserEmergingCard: View {
                     HStack(spacing: 6) {
                         Image(systemName: "circle")
                             .foregroundStyle(Color.consentOrange)
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                         Text(intention.title)
                             .font(.jeevesHeadline)
                             .foregroundStyle(.white)
@@ -192,7 +192,7 @@ struct BrowserEmergingCard: View {
                 }
 
                 Text(intention.uncertaintyNarrative)
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
@@ -226,7 +226,7 @@ struct BrowserEmergingCard: View {
             }
         }()
         return Text(label)
-            .font(.caption2.weight(.semibold))
+            .font(.jeevesCaption2.weight(.semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -248,7 +248,7 @@ struct BrowserCategoryTile: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: category.icon)
-                    .font(.title3)
+                    .font(.jeevesTitle)
                     .foregroundStyle(isSelected ? .white : .cyan)
 
                 Text(category.title)
@@ -258,10 +258,10 @@ struct BrowserCategoryTile: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(certifiedCount) certified")
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(Color.consentGreen)
                     Text("\(emergingCount) emerging")
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(Color.consentOrange)
                 }
             }
@@ -317,13 +317,13 @@ struct LifecycleTimelineView: View {
                             .foregroundStyle(step.isComplete ? .white : .secondary)
 
                         Text(step.detail)
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
 
                         if let ts = step.timestamp {
                             Text(ts)
-                                .font(.caption2)
+                                .font(.jeevesCaption2)
                                 .foregroundStyle(.secondary.opacity(0.7))
                         }
                     }
@@ -349,7 +349,7 @@ struct BrowserGuidanceBriefView: View {
                     .foregroundStyle(.white)
                 Spacer()
                 Text(brief.state.rawValue.uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.jeevesCaption2.weight(.semibold))
                     .foregroundStyle(stateTint)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -380,7 +380,7 @@ struct BrowserGuidanceBriefView: View {
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.caption2.weight(.semibold))
+                        .font(.jeevesCaption2.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.8))
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         Text(row)
@@ -408,7 +408,7 @@ struct DeploymentProposalSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Configuration")
-                            .font(.caption2.weight(.semibold))
+                            .font(.jeevesCaption2.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Text(request.intentionTitle)
                             .font(.jeevesHeadline)
@@ -489,7 +489,7 @@ struct DeploymentProposalSheet: View {
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.caption2.weight(.semibold))
+            .font(.jeevesCaption2.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
@@ -518,7 +518,7 @@ func uncertaintyBadge(_ state: BrowserUncertaintyState) -> some View {
         }
     }()
     return Text(state.rawValue.uppercased())
-        .font(.caption2.weight(.semibold))
+        .font(.jeevesCaption2.weight(.semibold))
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -529,7 +529,7 @@ func uncertaintyBadge(_ state: BrowserUncertaintyState) -> some View {
 func certificationBadge(_ level: String) -> some View {
     let tint = certificationColor(level)
     return Text(level.uppercased())
-        .font(.caption2.weight(.semibold))
+        .font(.jeevesCaption2.weight(.semibold))
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -548,7 +548,7 @@ func certificationColor(_ level: String) -> Color {
 
 func statChip(_ text: String, tint: Color) -> some View {
     Text(text)
-        .font(.caption2.weight(.medium))
+        .font(.jeevesCaption2.weight(.medium))
         .foregroundStyle(tint)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

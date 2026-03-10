@@ -439,6 +439,7 @@ struct KnowledgeSourceRef: Codable {
 struct KnowledgeObjectsEnvelope: Decodable {
     let ok: Bool?
     let objects: [KnowledgeObject]?
+    let error: String?
 }
 
 struct IncomingToolEvidenceRef: Identifiable, Hashable {

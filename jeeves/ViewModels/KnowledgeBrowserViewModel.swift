@@ -9,6 +9,7 @@ final class KnowledgeBrowserViewModel {
     var isLoading = false
     var hasLoaded = false
     var errorMessage: String?
+    var isRateLimited = false
 
     func load(gateway: GatewayManager, force: Bool = false) async {
         if isLoading && !force {
@@ -20,6 +21,7 @@ final class KnowledgeBrowserViewModel {
 
         isLoading = true
         errorMessage = nil
+        isRateLimited = false
         defer {
             hasLoaded = true
             isLoading = false
@@ -40,8 +42,18 @@ final class KnowledgeBrowserViewModel {
 
         do {
             objects = try await client.fetchRecentKnowledgeObjects(limit: 24)
+        } catch GatewayClientError.rateLimited {
+            isRateLimited = true
+            // One calm retry after a short backoff
+            try? await Task.sleep(for: .milliseconds(800))
+            do {
+                objects = try await client.fetchRecentKnowledgeObjects(limit: 24)
+                isRateLimited = false
+            } catch {
+                // Still rate-limited or another error — keep the rate-limited state
+            }
         } catch {
-            errorMessage = "Kon recente knowledge objecten niet laden."
+            errorMessage = "Jeeves kon de bibliotheek nu niet openen."
         }
     }
 

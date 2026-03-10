@@ -33,10 +33,10 @@ struct HouseView: View {
                     } else if isLoading {
                         ProgressView(TextKeys.House.loadingStatus)
                     } else {
-                        ContentUnavailableView(
-                            TextKeys.House.notConnectedTitle,
-                            systemImage: "wifi.slash",
-                            description: Text(TextKeys.House.notConnectedDescription)
+                        JeevesEmptyState(
+                            icon: "wifi.slash",
+                            title: "Niet verbonden.",
+                            subtitle: TextKeys.House.notConnectedDescription
                         )
                     }
                 }

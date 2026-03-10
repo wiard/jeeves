@@ -18,12 +18,11 @@ struct OnboardingView: View {
 
             // Butler hat icon
             Text("\u{1f3a9}")
-                .font(.system(size: 80))
+                .font(.system(size: 80, weight: .light, design: .rounded))
 
             VStack(spacing: 8) {
                 Text("Welkom, meneer.")
-                    .font(.title)
-                    .fontWeight(.semibold)
+                    .font(.jeevesLargeTitle)
 
                 Text("Ik ben Jeeves, uw persoonlijke butler.")
                     .font(.jeevesBody)

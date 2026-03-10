@@ -49,18 +49,18 @@ private struct RadarCellCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(cell.title)
-                .font(.headline)
+                .font(.jeevesHeadline)
                 .foregroundStyle(.primary)
 
             Text(cell.subtitle)
-                .font(.footnote)
+                .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 8)
 
             HStack {
                 Label("\(cell.clusterCount)", systemImage: "sparkles")
-                    .font(.footnote)
+                    .font(.jeevesCaption)
                 Spacer()
                 Circle()
                     .fill(color(for: cell.intensity))
@@ -90,10 +90,10 @@ private struct RadarCellDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(cell.title)
-                    .font(.largeTitle.bold())
+                    .font(.jeevesLargeTitle)
 
                 Text(cell.subtitle)
-                    .font(.title3)
+                    .font(.jeevesTitle)
                     .foregroundStyle(.secondary)
 
                 HStack {
@@ -101,7 +101,7 @@ private struct RadarCellDetailView: View {
                     Spacer()
                     Text("State: \(cell.intensity.rawValue)")
                 }
-                .font(.subheadline)
+                .font(.jeevesBody)
 
                 if cell.hints.isEmpty {
                     Text("Nog geen concrete discovery hints in deze cel.")
@@ -110,16 +110,16 @@ private struct RadarCellDetailView: View {
                     ForEach(cell.hints) { hint in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(hint.topic)
-                                .font(.headline)
+                                .font(.jeevesHeadline)
                             Text(hint.why)
-                                .font(.subheadline)
+                                .font(.jeevesBody)
                                 .foregroundStyle(.secondary)
                             HStack {
                                 Text("Bronnen: \(hint.sourceCount)")
                                 Text("Novelty: \(String(format: "%.2f", hint.noveltyScore))")
                                 Text("Pressure: \(String(format: "%.2f", hint.pressureScore))")
                             }
-                            .font(.footnote)
+                            .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                         }
                         .padding()

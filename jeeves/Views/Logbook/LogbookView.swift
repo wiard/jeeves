@@ -44,7 +44,11 @@ struct LogbookView: View {
                 )
 
                 if filteredEntries.isEmpty {
-                    ContentUnavailableView.search(text: searchText.isEmpty ? "Geen entries" : searchText)
+                    JeevesEmptyState(
+                        icon: "doc.text.magnifyingglass",
+                        title: searchText.isEmpty ? "Geen entries gevonden." : "Geen resultaten.",
+                        subtitle: searchText.isEmpty ? "Het auditlogboek is nog leeg voor deze periode." : "Geen entries gevonden voor \"\(searchText)\"."
+                    )
                 } else {
                     List {
                         Section {

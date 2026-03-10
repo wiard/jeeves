@@ -103,7 +103,7 @@ struct AIBrowserView: View {
                     VStack(spacing: 6) {
                         HStack(spacing: 6) {
                             Image(systemName: sectionIcon(section))
-                                .font(.caption)
+                                .font(.jeevesCaption)
                             Text(section.rawValue)
                                 .font(.jeevesCaption.weight(.semibold))
                         }

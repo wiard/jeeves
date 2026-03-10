@@ -180,6 +180,9 @@ actor GatewayClient {
 
     func fetchRecentKnowledgeObjects(limit: Int = 20) async throws -> [KnowledgeObject] {
         let envelope: KnowledgeObjectsEnvelope = try await get("/api/knowledge/objects/recent?limit=\(limit)")
+        if envelope.error == "rate_limited" {
+            throw GatewayClientError.rateLimited
+        }
         return envelope.objects ?? []
     }
 
@@ -1437,6 +1440,7 @@ actor GatewayClient {
 
 enum GatewayClientError: Error {
     case httpStatus(Int)
+    case rateLimited
     case unknown
 }
 

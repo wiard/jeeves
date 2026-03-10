@@ -14,11 +14,23 @@ struct KnowledgeBrowserView: View {
                 if viewModel.isLoading && !viewModel.hasLoaded {
                     ProgressView("Knowledge laden...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.isRateLimited && viewModel.objects.isEmpty {
+                    JeevesEmptyState(
+                        icon: "clock.arrow.circlepath",
+                        title: "Jeeves ordent de bibliotheek even.",
+                        subtitle: "Probeer het zo opnieuw."
+                    )
+                } else if viewModel.objects.isEmpty && viewModel.errorMessage != nil {
+                    JeevesEmptyState(
+                        icon: "exclamationmark.triangle",
+                        title: "Jeeves kon de bibliotheek nu niet openen.",
+                        subtitle: viewModel.errorMessage!
+                    )
                 } else if viewModel.objects.isEmpty {
-                    ContentUnavailableView(
-                        "Geen knowledge beschikbaar",
-                        systemImage: "books.vertical",
-                        description: Text(viewModel.errorMessage ?? "Er zijn nog geen recente knowledge objecten.")
+                    JeevesEmptyState(
+                        icon: "book.closed",
+                        title: "De bibliotheek is nog leeg.",
+                        subtitle: "Zodra het systeem evidence verwerkt, verschijnen hier de kennisobjecten."
                     )
                 } else {
                     ScrollView {
@@ -152,7 +164,7 @@ private struct KnowledgeBrowserCard: View {
                     .lineLimit(2)
                 Spacer()
                 Text(kindLabel)
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .font(.jeevesMonoSmall)
                     .foregroundStyle(.secondary)
             }
 

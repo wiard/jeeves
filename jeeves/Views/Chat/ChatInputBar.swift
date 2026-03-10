@@ -28,14 +28,14 @@ struct ChatInputBar: View {
                 if inputText.isEmpty {
                     Button(action: toggleSpeech) {
                         Image(systemName: isRecording ? "mic.fill" : "mic")
-                            .font(.title3)
+                            .font(.jeevesTitle)
                             .foregroundStyle(isRecording ? Color.consentRed : Color.jeevesGold)
                     }
                     .accessibilityLabel(isRecording ? "Stop spraakherkenning" : "Start spraakherkenning")
                 } else {
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
+                            .font(.jeevesTitle)
                             .foregroundStyle(Color.jeevesGold)
                     }
                     .accessibilityLabel("Verstuur bericht")

@@ -178,7 +178,7 @@ struct ConfigurationDetailView: View {
 
     private func detailSectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.caption2.weight(.semibold))
+            .font(.jeevesCaption2.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
@@ -239,14 +239,14 @@ struct EmergingDetailView: View {
             HStack(spacing: 6) {
                 Image(systemName: "circle")
                     .foregroundStyle(Color.consentOrange)
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                 Text("Emerging Intention")
                     .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(Color.consentOrange)
             }
             Spacer()
             Text("CONFIDENCE \(String(format: "%.0f", intention.confidenceScore * 100))%")
-                .font(.caption2.weight(.semibold))
+                .font(.jeevesCaption2.weight(.semibold))
                 .foregroundStyle(.cyan)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -308,7 +308,7 @@ struct EmergingDetailView: View {
                     .foregroundStyle(.white)
                 Spacer()
                 Text(intention.uncertaintyState.rawValue.uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.jeevesCaption2.weight(.semibold))
                     .foregroundStyle(uncertaintyTint)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -345,18 +345,18 @@ struct EmergingDetailView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.seal.fill")
                                     .foregroundStyle(Color.consentGreen)
-                                    .font(.caption)
+                                    .font(.jeevesCaption)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(card.title)
                                         .font(.jeevesCaption.weight(.semibold))
                                         .foregroundStyle(.white)
                                     Text(card.intentionPath)
-                                        .font(.caption2)
+                                        .font(.jeevesCaption2)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .font(.caption2)
+                                    .font(.jeevesCaption2)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -397,14 +397,14 @@ struct EmergingDetailView: View {
 
     private func emergingSectionTitle(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(.caption2.weight(.semibold))
+            .font(.jeevesCaption2.weight(.semibold))
             .foregroundStyle(.secondary)
     }
 
     private func guidanceRow(_ title: String, _ content: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .font(.jeevesCaption2.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.8))
             Text(content)
                 .font(.jeevesCaption)

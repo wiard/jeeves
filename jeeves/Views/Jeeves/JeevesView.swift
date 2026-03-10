@@ -16,45 +16,52 @@ struct JeevesView: View {
                     ProgressView("Jeeves voorbereiden...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let briefing = briefingModel.briefing {
-                    ScrollView {
-                        DailyBriefingView(
-                            briefing: cappedBriefing(from: briefing),
-                            warning: briefingModel.usingCachedFallback ? "Toon gecachte briefing." : briefingModel.errorMessage,
-                            onSelectAttention: { item in
-                                selectedBriefingItem = item
-                            },
-                            onSelectSignal: { signal in
-                                selectedBriefingItem = DailyBriefingItem(
-                                    itemId: signal.groupId,
-                                    kind: "signal",
-                                    title: signal.title,
-                                    summary: signal.summary,
-                                    why: signal.why,
-                                    score: Double(signal.signalCount),
-                                    createdAtIso: signal.latestDetectedAtIso,
-                                    sourceCount: signal.sourceCount,
-                                    objectId: nil,
-                                    proposalId: nil,
-                                    relatedObjectIds: signal.relatedObjectIds
-                                )
-                            },
-                            onSelectEvidence: { object in
-                                fetchAndShowKnowledgeGraph(objectId: object.objectId)
-                            }
-                        )
-                        .padding()
+                    ZStack {
+                        JeevesMorningBackdrop()
+                            .ignoresSafeArea()
+
+                        ScrollView {
+                            DailyBriefingView(
+                                briefing: cappedBriefing(from: briefing),
+                                warning: briefingModel.usingCachedFallback ? "Toon gecachte briefing." : briefingModel.errorMessage,
+                                onSelectAttention: { item in
+                                    selectedBriefingItem = item
+                                },
+                                onSelectSignal: { signal in
+                                    selectedBriefingItem = DailyBriefingItem(
+                                        itemId: signal.groupId,
+                                        kind: "signal",
+                                        title: signal.title,
+                                        summary: signal.summary,
+                                        why: signal.why,
+                                        score: Double(signal.signalCount),
+                                        createdAtIso: signal.latestDetectedAtIso,
+                                        sourceCount: signal.sourceCount,
+                                        objectId: nil,
+                                        proposalId: nil,
+                                        relatedObjectIds: signal.relatedObjectIds
+                                    )
+                                },
+                                onSelectEvidence: { object in
+                                    fetchAndShowKnowledgeGraph(objectId: object.objectId)
+                                }
+                            )
+                            .padding()
+                        }
                     }
                 } else if let errorMessage = briefingModel.errorMessage {
-                    ContentUnavailableView(
-                        "Geen briefing beschikbaar",
-                        systemImage: "sun.max",
-                        description: Text(errorMessage)
+                    JeevesEmptyState(
+                        icon: "sun.max",
+                        tint: .secondary.opacity(0.5),
+                        title: "Mijn excuses, meneer.",
+                        subtitle: errorMessage
                     )
                 } else {
-                    ContentUnavailableView(
-                        "Nog geen briefing",
-                        systemImage: "sun.max",
-                        description: Text("Jeeves toont hier de dagelijkse briefing zodra er evidence beschikbaar is.")
+                    JeevesEmptyState(
+                        icon: "sun.max",
+                        tint: Color.jeevesGold.opacity(0.4),
+                        title: "Uw briefing wordt voorbereid.",
+                        subtitle: "Zodra er evidence binnenkomt, presenteer ik hier de ochtendbriefing."
                     )
                 }
             }
@@ -105,10 +112,10 @@ struct JeevesView: View {
             overview: Array(briefing.overview.prefix(3)),
             counts: briefing.counts,
             system: briefing.system,
-            attention: Array(briefing.attention.prefix(3)),
-            signals: Array(briefing.signals.prefix(2)),
+            attention: Array(briefing.attention.prefix(4)),
+            signals: Array(briefing.signals.prefix(4)),
             pendingProposals: Array(briefing.pendingProposals.prefix(2)),
-            evidence: Array(briefing.evidence.prefix(2)),
+            evidence: Array(briefing.evidence.prefix(4)),
             lastSignalAtIso: briefing.lastSignalAtIso,
             lastKnowledgeAtIso: briefing.lastKnowledgeAtIso
         )
@@ -183,5 +190,45 @@ struct JeevesView: View {
                 }
             }
         }
+    }
+}
+
+
+struct JeevesEmptyState: View {
+    let icon: String
+    var tint: Color = .secondary.opacity(0.4)
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 48, weight: .light, design: .rounded))
+                .foregroundStyle(tint)
+
+            Text(title)
+                .font(.jeevesHeadline)
+
+            Text(subtitle)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 40)
+    }
+}
+
+private struct JeevesMorningBackdrop: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.96, green: 0.97, blue: 0.99),
+                Color(red: 0.93, green: 0.95, blue: 0.98),
+                Color(red: 0.98, green: 0.96, blue: 0.93)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }

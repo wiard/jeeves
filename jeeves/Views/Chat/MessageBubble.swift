@@ -13,7 +13,7 @@ struct MessageBubble: View {
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 Text(text)
-                    .font(sender == .jeeves ? .jeevesBody : .body)
+                    .font(.jeevesBody)
                     .foregroundStyle(isUser ? .white : .primary)
 
                 Text(timestamp, style: .time)

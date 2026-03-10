@@ -31,7 +31,7 @@ struct BrowserMarketplaceView: View {
 
                 if let status = viewModel.statusMessage {
                     Text(status)
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal)
                 }
@@ -281,9 +281,9 @@ struct BrowserMarketplaceView: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
-                .font(.caption)
+                .font(.jeevesCaption)
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.jeevesCaption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
             Text("\(count)")
@@ -303,7 +303,7 @@ struct BrowserMarketplaceView: View {
                     .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.white)
                 Text("Latest request failed. Showing saved browser feed.")
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
             }
             Spacer()

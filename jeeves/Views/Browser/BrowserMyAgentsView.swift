@@ -30,9 +30,9 @@ struct BrowserMyAgentsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "bookmark.fill")
                     .foregroundStyle(Color.jeevesGold)
-                    .font(.caption)
+                    .font(.jeevesCaption)
                 Text("BOOKMARKED")
-                    .font(.caption.weight(.semibold))
+                    .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(viewModel.bookmarkedCards.count)")
@@ -59,9 +59,9 @@ struct BrowserMyAgentsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "eye.fill")
                     .foregroundStyle(.cyan)
-                    .font(.caption)
+                    .font(.jeevesCaption)
                 Text("WATCHING")
-                    .font(.caption.weight(.semibold))
+                    .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(viewModel.watchedIntentions.count)")
@@ -83,20 +83,11 @@ struct BrowserMyAgentsView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "person.crop.rectangle.stack")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("No saved agents")
-                .font(.jeevesHeadline)
-                .foregroundStyle(.white)
-            Text("Bookmark certified configurations or watch emerging intentions from the Marketplace to see them here.")
-                .font(.jeevesCaption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-        .browserPanel(padding: 16)
+        JeevesEmptyState(
+            icon: "person.crop.rectangle.stack",
+            title: "Nog geen agenten opgeslagen.",
+            subtitle: "Voeg bookmarks toe of volg emerging intentions vanuit de Marketplace."
+        )
+        .frame(height: 240)
     }
 }

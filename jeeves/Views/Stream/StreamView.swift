@@ -15,10 +15,10 @@ struct StreamView: View {
                     ProgressView("Mission Control laden...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if hasNoRenderableContent {
-                    ContentUnavailableView(
-                        TextKeys.Stream.empty,
-                        systemImage: "list.bullet.rectangle",
-                        description: Text(poller.lastRefreshError ?? "Mission Control heeft nog geen operationele signalen.")
+                    JeevesEmptyState(
+                        icon: "list.bullet.rectangle",
+                        title: "Alles rustig, meneer.",
+                        subtitle: poller.lastRefreshError ?? "Er zijn nog geen operationele signalen om te melden."
                     )
                 } else {
                     missionControlContent
@@ -54,7 +54,7 @@ struct StreamView: View {
 
     private var missionControlContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 28) {
                 MissionControlHeroPanel(
                     pendingCount: poller.pendingProposals.count,
                     emergenceCount: poller.emergenceClusters.count,
@@ -64,71 +64,67 @@ struct StreamView: View {
                 )
 
                 if let store = poller.radarStatus?.store {
-                    DailyBriefingSectionHeader(
-                        title: "Radar status",
-                        subtitle: "Operational signal volume across the collector."
-                    )
-                    RadarSummaryRow(
-                        activations: store.activationCount,
-                        collisions: store.collisionCount,
-                        emergence: store.emergenceCount
-                    )
+                    missionSection(title: "Radar status", subtitle: "Operational signal volume across the collector.") {
+                        RadarSummaryRow(
+                            activations: store.activationCount,
+                            collisions: store.collisionCount,
+                            emergence: store.emergenceCount
+                        )
+                    }
                 }
 
                 if !pendingProposalItems.isEmpty {
-                    DailyBriefingSectionHeader(
-                        title: "Pending approvals",
-                        subtitle: "Operator decisions waiting in the queue."
-                    )
-                    ForEach(pendingProposalItems) { proposal in
-                        ProposalRow(proposal: proposal)
+                    missionSection(title: "Pending approvals", subtitle: "Operator decisions waiting in the queue.") {
+                        ForEach(pendingProposalItems) { proposal in
+                            ProposalRow(proposal: proposal)
+                        }
                     }
                 }
 
                 if !emergenceItems.isEmpty {
-                    DailyBriefingSectionHeader(
-                        title: "Emergence",
-                        subtitle: "Escalated structural patterns seen by the runtime."
-                    )
-                    ForEach(emergenceItems) { cluster in
-                        EmergenceRow(cluster: cluster)
+                    missionSection(title: "Emergence", subtitle: "Escalated structural patterns seen by the runtime.") {
+                        ForEach(emergenceItems) { cluster in
+                            EmergenceRow(cluster: cluster)
+                        }
                     }
                 }
 
                 if let action = poller.lastActionReceipt {
-                    DailyBriefingSectionHeader(
-                        title: "Last action receipt",
-                        subtitle: "Most recent governed execution result."
-                    )
-                    ActionReceiptRow(action: action)
+                    missionSection(title: "Last action receipt", subtitle: "Most recent governed execution result.") {
+                        ActionReceiptRow(action: action)
+                    }
                 }
 
                 if !recentKnowledgeItems.isEmpty {
-                    DailyBriefingSectionHeader(
-                        title: "Recent knowledge",
-                        subtitle: "Fresh evidence and knowledge objects entering the kernel."
-                    )
-                    ForEach(recentKnowledgeItems) { object in
-                        Button {
-                            fetchAndShowKnowledgeGraph(objectId: object.objectId)
-                        } label: {
-                            KnowledgeObjectRow(object: object)
+                    missionSection(title: "Recent knowledge", subtitle: "Fresh evidence and knowledge objects entering the kernel.") {
+                        ForEach(recentKnowledgeItems) { object in
+                            Button {
+                                fetchAndShowKnowledgeGraph(objectId: object.objectId)
+                            } label: {
+                                KnowledgeObjectRow(object: object)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
 
                 if !recentSignalEvents.isEmpty {
-                    DailyBriefingSectionHeader(
-                        title: "Recent activity",
-                        subtitle: "Mission-level runtime activity, not the operator briefing."
-                    )
-                    ForEach(recentSignalEvents) { event in
-                        eventRow(for: event)
+                    missionSection(title: "Recent activity", subtitle: "Mission-level runtime activity, not the operator briefing.") {
+                        ForEach(recentSignalEvents) { event in
+                            eventRow(for: event)
+                        }
                     }
                 }
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.vertical)
+        }
+    }
+
+    private func missionSection<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DailyBriefingSectionHeader(title: title, subtitle: subtitle)
+            content()
         }
     }
 
@@ -315,11 +311,11 @@ private struct DailyBriefingHeroCard: View {
 
                 if briefing.quiet {
                     Text("quiet")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.jeevesMonoSmall)
                         .foregroundStyle(.green)
                 } else if briefing.counts.stale {
                     Text("stale")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.jeevesMonoSmall)
                         .foregroundStyle(.orange)
                 }
             }
@@ -385,17 +381,14 @@ private struct DailyBriefingSectionHeader: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.jeevesMono)
-                .fontWeight(.semibold)
+                .font(.jeevesHeadline)
             Text(subtitle)
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
     }
 }
 
@@ -468,7 +461,7 @@ private struct DailyBriefingAttentionRow: View {
 
                 HStack(spacing: 8) {
                     Text(item.kind)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.jeevesMonoSmall)
                         .foregroundStyle(tint)
                     Text("score \(scoreText)")
                         .font(.jeevesCaption)
@@ -481,10 +474,10 @@ private struct DailyBriefingAttentionRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
         .background(tint.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -513,9 +506,9 @@ private struct RadarSummaryRow: View {
             summaryCell(label: "Collisions", value: collisions)
             summaryCell(label: "Emergence", value: emergence)
         }
-        .padding(12)
+        .padding(14)
         .background(Color(.secondarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private func summaryCell(label: String, value: Int) -> some View {
@@ -583,13 +576,13 @@ private struct ProposalRow: View {
             Spacer()
 
             Text(statusLabel)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.jeevesMonoSmall)
                 .foregroundStyle(statusColor)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var rowBackground: Color {
@@ -638,10 +631,10 @@ private struct EmergenceRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(Color.purple.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -697,13 +690,13 @@ private struct StreamEventRow: View {
             Spacer()
 
             Text(eventTypeLabel)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.jeevesMonoSmall)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(Color(.secondarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -763,10 +756,10 @@ private struct PaperSignalRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
         .background(Color.indigo.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -831,7 +824,7 @@ private struct GravityHotspotRow: View {
                         .foregroundStyle(.secondary)
                     if let band = event.band {
                         Text(band)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.jeevesMonoSmall)
                             .foregroundStyle(bandColor)
                     }
                     if let rank = event.rank {
@@ -857,10 +850,10 @@ private struct GravityHotspotRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(bandColor.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -920,7 +913,7 @@ private struct DiscoveryCandidateRow: View {
                     }
                     if event.crossDomain == true {
                         Text("cross-domain")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.jeevesMonoSmall)
                             .foregroundStyle(.cyan)
                     }
                     if let rank = event.rank {
@@ -946,10 +939,10 @@ private struct DiscoveryCandidateRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(Color.cyan.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -992,13 +985,13 @@ private struct ActionReceiptRow: View {
             Spacer()
 
             Text("actie")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.jeevesMonoSmall)
                 .foregroundStyle(action.isCompleted ? .green : .red)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(action.isCompleted ? Color.green.opacity(0.08) : Color.red.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -1046,7 +1039,7 @@ private struct KnowledgeObjectRow: View {
 
                 HStack(spacing: 6) {
                     Text(object.kind.replacingOccurrences(of: "_", with: " "))
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.jeevesMonoSmall)
                         .foregroundStyle(kindColor)
 
                     if let refs = object.sourceRefs, !refs.isEmpty {
@@ -1059,10 +1052,10 @@ private struct KnowledgeObjectRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(kindColor.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -1108,10 +1101,10 @@ private struct RadarCollisionRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
         .background(Color.purple.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -1150,7 +1143,7 @@ private struct SourceBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .font(.jeevesMonoSmall)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(tint.opacity(0.15))

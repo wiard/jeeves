@@ -573,7 +573,7 @@ struct LobbyView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: bucket.icon)
-                    .font(.caption.weight(.semibold))
+                    .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(bucket.tint)
                 Text("\(bucket.title) · \(items.count)")
                     .font(.jeevesMono.weight(.semibold))
@@ -751,7 +751,7 @@ struct LobbyView: View {
                         .font(.jeevesCaption)
                         .foregroundStyle(.secondary)
                     Text("Calm AI Mission Control")
-                        .font(.title3.weight(.semibold))
+                        .font(.jeevesTitle.weight(.semibold))
                         .foregroundStyle(.white)
                 }
                 Spacer()
@@ -1062,7 +1062,7 @@ struct LobbyView: View {
     private var radarEmptyCard: some View {
         HStack(spacing: 12) {
             Image(systemName: "dot.radiowaves.left.and.right")
-                .font(.title2)
+                .font(.jeevesTitle)
                 .foregroundStyle(.secondary)
             Text("Nog geen radar signalen van CLASHD27.")
                 .font(.jeevesBody)
@@ -1084,7 +1084,7 @@ struct LobbyView: View {
             if poller.recentKnowledgeObjects.isEmpty {
                 HStack(spacing: 12) {
                     Image(systemName: "book")
-                        .font(.title3)
+                        .font(.jeevesTitle)
                         .foregroundStyle(.secondary)
                     Text("Nog geen kennisobjecten.")
                         .font(.jeevesBody)
@@ -1124,7 +1124,7 @@ struct LobbyView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: zone.icon)
-                    .font(.caption.weight(.semibold))
+                    .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(zone.tint)
                 Text(zone.title)
                     .font(.jeevesMono.weight(.semibold))
@@ -1198,7 +1198,7 @@ struct LobbyView: View {
     private func terminalTelemetryRow(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
-                .font(.caption2.weight(.medium))
+                .font(.jeevesCaption2.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Text(value)
@@ -1585,7 +1585,7 @@ struct LobbyView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: "shippingbox")
-                    .font(.title2)
+                    .font(.jeevesTitle)
                     .foregroundStyle(.secondary)
                 Text("No incoming forensic tool artifacts.")
                     .font(.jeevesBody)
@@ -2128,7 +2128,7 @@ struct LobbyView: View {
                             .font(.jeevesCaption.weight(.semibold))
                             .foregroundStyle(.white)
                         Text("Proposal \(proposalId) is pending approval in DECISIONS.")
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -2189,7 +2189,7 @@ struct LobbyView: View {
                         .font(.jeevesCaption)
                         .foregroundStyle(.secondary)
                     Text("No certified or emerging intentions available right now.")
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -2364,12 +2364,12 @@ struct LobbyView: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     Image(systemName: "square.grid.2x2")
-                                        .font(.caption)
+                                        .font(.jeevesCaption)
                                     Text(category.title)
                                         .font(.jeevesCaption.weight(.medium))
                                     if let count = category.certifiedCount {
                                         Text("\(count)")
-                                            .font(.caption2.weight(.semibold))
+                                            .font(.jeevesCaption2.weight(.semibold))
                                     }
                                 }
                                 .foregroundStyle(selectedFeedCategoryId == category.id ? .white : .secondary)
@@ -2396,7 +2396,7 @@ struct LobbyView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: category.icon)
-                                    .font(.caption)
+                                    .font(.jeevesCaption)
                                 Text(category.title)
                                     .font(.jeevesCaption.weight(.medium))
                             }
@@ -2446,7 +2446,7 @@ struct LobbyView: View {
                     .lineLimit(1)
                 Spacer()
                 Text(browserRiskProfile.uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.jeevesCaption2.weight(.semibold))
                     .foregroundStyle(.cyan)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -2489,7 +2489,7 @@ struct LobbyView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                     Text("/api/browser/feed?domain=\(browserDomain)&subdomain=\(browserSubdomain)&risk=\(browserRiskProfile)")
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -3522,7 +3522,7 @@ struct LobbyView: View {
     private var emptyQueueCard: some View {
         HStack(spacing: 12) {
             Image(systemName: "leaf")
-                .font(.title2)
+                .font(.jeevesTitle)
                 .foregroundStyle(.secondary)
             Text(TextKeys.Lobby.noProposals)
                 .font(.jeevesBody)
@@ -3536,7 +3536,7 @@ struct LobbyView: View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                    .font(.title2)
+                    .font(.jeevesTitle)
                     .foregroundStyle(.secondary)
                 Text("Backend niet beschikbaar")
                     .font(.jeevesBody)
@@ -3651,7 +3651,7 @@ struct LobbyView: View {
     private var extensionEmptyCard: some View {
         HStack(spacing: 12) {
             Image(systemName: "puzzlepiece.extension")
-                .font(.title2)
+                .font(.jeevesTitle)
                 .foregroundStyle(.secondary)
             Text(TextKeys.Lobby.noExtensionProposals)
                 .font(.jeevesBody)
@@ -3676,7 +3676,7 @@ struct LobbyView: View {
             if poller.decidedProposals.isEmpty {
                 HStack(spacing: 12) {
                     Image(systemName: "clock")
-                        .font(.title3)
+                        .font(.jeevesTitle)
                         .foregroundStyle(.secondary)
                     Text(TextKeys.Lobby.noDecisions)
                         .font(.jeevesBody)
@@ -3702,7 +3702,7 @@ struct LobbyView: View {
     private func sectionHeader(title: String, icon: String, count: Int?, tint: Color = .jeevesGold) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
+                .font(.jeevesBody.weight(.semibold))
                 .foregroundStyle(tint)
             Text(title)
                 .font(.jeevesHeadline.weight(.semibold))
@@ -4151,14 +4151,14 @@ struct LobbyView: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: icon)
-                    .font(.caption.weight(.semibold))
+                    .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(tint)
                 Text(title)
                     .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -4205,7 +4205,7 @@ struct LobbyView: View {
                                     .foregroundStyle(.white)
                                     .lineLimit(1)
                                 Text("\(card.domain) / \(card.subdomain)")
-                                    .font(.caption2)
+                                    .font(.jeevesCaption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -4236,7 +4236,7 @@ struct LobbyView: View {
     private func marketplaceMetric(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label.uppercased())
-                .font(.caption2.weight(.semibold))
+                .font(.jeevesCaption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.jeevesMono.weight(.semibold))
@@ -4278,12 +4278,12 @@ struct LobbyView: View {
                                     .foregroundStyle(.white)
                                     .lineLimit(1)
                                 Text(decision.proposalId)
-                                    .font(.caption2)
+                                    .font(.jeevesCaption2)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text(relativeDateLabel(iso: decision.decidedAtIso))
-                                .font(.caption2)
+                                .font(.jeevesCaption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -4387,7 +4387,7 @@ private struct RadarSignalCard: View {
                 HStack {
                     if let lastSeen = relativeTimestampLabel {
                         Text(lastSeen)
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
@@ -4439,7 +4439,7 @@ private struct RadarSignalDetailSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(signal.title)
-                            .font(.title3.weight(.semibold))
+                            .font(.jeevesTitle.weight(.semibold))
                             .foregroundStyle(.white)
 
                         detailRow(label: "WHAT", value: signal.what)
@@ -4546,7 +4546,7 @@ private struct BrowserGuidancePanel: View {
                     .foregroundStyle(.white)
                 Spacer()
                 Text(brief.state.rawValue.uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.jeevesCaption2.weight(.semibold))
                     .foregroundStyle(stateTint)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -4555,7 +4555,7 @@ private struct BrowserGuidancePanel: View {
             }
 
             Text("Not knowing → compare evidence → explain → propose next step.")
-                .font(.caption2)
+                .font(.jeevesCaption2)
                 .foregroundStyle(.secondary)
 
             section(title: "What seems clear", rows: brief.clear)
@@ -4586,7 +4586,7 @@ private struct BrowserGuidancePanel: View {
                 .foregroundStyle(.white)
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 Text("• \(row)")
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
             }
         }
@@ -4616,18 +4616,18 @@ private struct FeaturedAICard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Featured AI")
-                    .font(.caption.weight(.semibold))
+                    .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.cyan)
                 Spacer()
                 Text(card.uncertaintyState.rawValue.uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.jeevesCaption2.weight(.semibold))
                     .foregroundStyle(uncertaintyTint)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(uncertaintyTint.opacity(0.16))
                     .clipShape(Capsule())
                 Text(card.bestConfiguration.certificationLevel.uppercased())
-                    .font(.caption2.weight(.semibold))
+                    .font(.jeevesCaption2.weight(.semibold))
                     .foregroundStyle(certificationColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -4636,7 +4636,7 @@ private struct FeaturedAICard: View {
             }
 
             Text(card.title)
-                .font(.title3.weight(.semibold))
+                .font(.jeevesTitle.weight(.semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
 
@@ -4656,7 +4656,7 @@ private struct FeaturedAICard: View {
                 .lineLimit(2)
 
             Text(card.uncertaintyNarrative)
-                .font(.caption2)
+                .font(.jeevesCaption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
@@ -4667,7 +4667,7 @@ private struct FeaturedAICard: View {
             }
 
             Text(card.deployReady ? "Ready for governed deployment proposal." : "Deploy readiness pending certification envelope.")
-                .font(.caption2)
+                .font(.jeevesCaption2)
                 .foregroundStyle(card.deployReady ? Color.consentGreen : .consentOrange)
 
             HStack(spacing: 8) {
@@ -4707,7 +4707,7 @@ private struct FeaturedAICard: View {
 
     private func statChip(text: String, tint: Color) -> some View {
         Text(text)
-            .font(.caption2.weight(.medium))
+            .font(.jeevesCaption2.weight(.medium))
             .foregroundStyle(tint)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -4766,7 +4766,7 @@ private struct AIBrowserResultCard: View {
                 .lineLimit(2)
 
             Text(card.uncertaintyNarrative)
-                .font(.caption2)
+                .font(.jeevesCaption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
@@ -4777,12 +4777,12 @@ private struct AIBrowserResultCard: View {
             }
 
             Text(card.deployReady ? "Deploy readiness: governed proposal available." : "Deploy readiness: awaiting certification envelope.")
-                .font(.caption2)
+                .font(.jeevesCaption2)
                 .foregroundStyle(card.deployReady ? Color.consentGreen : .consentOrange)
 
             if emergingMomentumCount > 0 {
                 Text("Emerging momentum: \(emergingMomentumCount) related signal(s)")
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(Color.consentOrange)
             }
 
@@ -4837,7 +4837,7 @@ private struct AIBrowserResultCard: View {
 
     private func metricChip(text: String, tint: Color) -> some View {
         Text(text)
-            .font(.caption2.weight(.medium))
+            .font(.jeevesCaption2.weight(.medium))
             .foregroundStyle(tint)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -4867,7 +4867,7 @@ private struct AIBrowserDetailSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(card.title)
-                            .font(.title3.weight(.semibold))
+                            .font(.jeevesTitle.weight(.semibold))
                             .foregroundStyle(.white)
 
                         Text(card.shortDescription)
@@ -4955,7 +4955,7 @@ private struct AIBrowserDetailSheet: View {
                         Text(card.deployReady
                              ? "Deploy creates a governed proposal. Human approval remains required before any action executes."
                              : "This item is certified for browsing but not deploy-ready yet. Governance deploy route stays locked until readiness is true.")
-                            .font(.caption2)
+                            .font(.jeevesCaption2)
                             .foregroundStyle(.secondary)
 
                         HStack(spacing: 8) {
@@ -5035,7 +5035,7 @@ private struct BrowserDeployConfirmationSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text("Deploy this certified configuration?")
-                            .font(.title3.weight(.semibold))
+                            .font(.jeevesTitle.weight(.semibold))
                             .foregroundStyle(.white)
 
                         Text("This creates a governed proposal in openclashd. Execution can only happen after human approval.")
@@ -5192,7 +5192,7 @@ private struct EmergingIntentionCard: View {
                     .lineLimit(2)
 
                 Text(intention.uncertaintyNarrative)
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
 
@@ -5323,7 +5323,7 @@ private struct EmergingIntentionDetailSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(intention.title)
-                            .font(.title3.weight(.semibold))
+                            .font(.jeevesTitle.weight(.semibold))
                             .foregroundStyle(.white)
 
                         Text("\(intention.domain) / \(intention.subdomain)")
@@ -5576,12 +5576,12 @@ private struct IncomingToolCard: View {
 
             if let latest = tool.actionHistory.first {
                 Text("Last action: \(latest.action) · \(latest.atIso)")
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             } else {
                 Text("No operator actions recorded yet.")
-                    .font(.caption2)
+                    .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -5660,7 +5660,7 @@ private struct IncomingToolDetailSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(tool.title)
-                            .font(.title3.weight(.semibold))
+                            .font(.jeevesTitle.weight(.semibold))
                             .foregroundStyle(.white)
 
                         metadataRow(label: "Discovery origin", value: tool.discoveryOrigin)
@@ -5779,7 +5779,7 @@ private struct IncomingToolDetailSheet: View {
     private func evidenceRow(reference: IncomingToolEvidenceRef) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(reference.label.uppercased())
-                .font(.caption2.weight(.semibold))
+                .font(.jeevesCaption2.weight(.semibold))
                 .foregroundStyle(.cyan)
             Text(reference.value)
                 .font(.jeevesCaption)
@@ -5789,7 +5789,7 @@ private struct IncomingToolDetailSheet: View {
             if reference.url != nil {
                 Image(systemName: "arrow.up.right.square")
                     .foregroundStyle(.secondary)
-                    .font(.caption)
+                    .font(.jeevesCaption)
             }
         }
         .padding(10)
@@ -6033,7 +6033,7 @@ private struct LifecycleTimelineRow: View {
                     .lineLimit(1)
                 if let secondary = step.secondary, !secondary.isEmpty {
                     Text(secondary)
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -6242,7 +6242,7 @@ private struct DecidedProposalRow: View {
         HStack(spacing: 12) {
             Image(systemName: statusIcon)
                 .foregroundStyle(statusColor)
-                .font(.title3)
+                .font(.jeevesTitle)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(decision.title)
@@ -6275,12 +6275,12 @@ private struct DecidedProposalRow: View {
             if decision.action != nil {
                 Image(systemName: "doc.text.magnifyingglass")
                     .foregroundStyle(.secondary)
-                    .font(.body)
+                    .font(.jeevesBody)
             }
 
             Image(systemName: "chevron.right")
                 .foregroundStyle(.tertiary)
-                .font(.caption)
+                .font(.jeevesCaption)
         }
         .controlRoomPanel(padding: 12)
     }
@@ -6330,7 +6330,7 @@ private struct DecisionDetailSheet: View {
         return HStack {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .font(.title)
+                .font(.jeevesLargeTitle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(decision.title)
                     .font(.jeevesHeadline)
@@ -6725,7 +6725,7 @@ private struct ActionReceiptSheet: View {
         return HStack {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .font(.title)
+                .font(.jeevesLargeTitle)
             Text(label)
                 .font(.jeevesHeadline)
                 .foregroundStyle(.white)
@@ -6895,7 +6895,7 @@ private struct KnowledgeObjectCard: View {
                         .foregroundStyle(.secondary)
                     Image(systemName: "chevron.right")
                         .foregroundStyle(.tertiary)
-                        .font(.caption)
+                        .font(.jeevesCaption)
                 }
 
                 Text(object.title)
@@ -6957,7 +6957,7 @@ private struct KnowledgeGraphSheet: View {
                     } else {
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.title)
+                                .font(.jeevesLargeTitle)
                                 .foregroundStyle(.secondary)
                             Text("Kennisgraaf niet beschikbaar.")
                                 .font(.jeevesBody)
@@ -7010,7 +7010,7 @@ private struct KnowledgeGraphSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: lane.systemImage)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.jeevesBody.weight(.semibold))
                             .foregroundStyle(lane.tint)
                         Text(lane.title)
                             .font(.jeevesHeadline)
@@ -7041,7 +7041,7 @@ private struct KnowledgeGraphSheet: View {
                     HStack {
                         Spacer()
                         Image(systemName: "arrow.down")
-                            .font(.caption)
+                            .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                         Spacer()
                     }
@@ -7306,7 +7306,7 @@ private struct LineageNodeCard: View {
                         .lineLimit(2)
                     Spacer()
                     Text(node.timestamp)
-                        .font(.caption2)
+                        .font(.jeevesCaption2)
                         .foregroundStyle(.tertiary)
                 }
 
@@ -7349,7 +7349,7 @@ private struct LineageNodeDetailSheet: View {
                             .textCase(.uppercase)
 
                         Text(node.title)
-                            .font(.title3.weight(.semibold))
+                            .font(.jeevesTitle.weight(.semibold))
                             .foregroundStyle(.white)
 
                         detailRow(label: "Origin", value: node.origin)
