@@ -27,8 +27,8 @@ struct StreamView: View {
                     } else if hasNoRenderableContent {
                         JeevesEmptyState(
                             icon: "list.bullet.rectangle",
-                            title: "Alles rustig, meneer.",
-                            subtitle: poller.lastRefreshError ?? "Er zijn nog geen operationele signalen om te melden."
+                            title: "Mission Control is quiet.",
+                            subtitle: poller.lastRefreshError ?? "There is no urgent operational movement to surface right now."
                         )
                     } else {
                         missionControlContent
@@ -70,7 +70,7 @@ struct StreamView: View {
                     eyebrow: "Stream",
                     title: "Mission Control",
                     summary: "A calm operational instrument for system pulse, governed approvals, and the activity shaping the next decision.",
-                    accent: .cyan,
+                    accent: .blue,
                     metrics: [
                         InstrumentRoleMetric(label: "Pulse", value: "\(systemPulseMetric)"),
                         InstrumentRoleMetric(label: "Approvals", value: "\(pendingProposalItems.count)"),
@@ -84,7 +84,7 @@ struct StreamView: View {
                     title: "What the system is carrying right now",
                     metricLabel: "Live index",
                     metricValue: "\(systemPulseMetric)",
-                    accent: .teal
+                    accent: .blue
                 ) {
                     ForEach(Array(systemPulseRows.enumerated()), id: \.offset) { index, row in
                         StreamSignalLine(
@@ -92,10 +92,10 @@ struct StreamView: View {
                             detail: row.detail,
                             accent: row.accent
                         )
-                        .calmAppear(delay: 0.04 * Double(index))
+                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
                     }
                 }
-                .calmAppear(delay: 0.08)
+                .calmAppear(delay: 0.12)
 
                 StreamPanelShell(
                     eyebrow: "Approvals",
@@ -105,33 +105,33 @@ struct StreamView: View {
                     accent: .orange
                 ) {
                     if pendingProposalItems.isEmpty {
-                        StreamPanelEmpty(text: "Geen voorstellen wachten op uw besluit.")
+                        StreamPanelEmpty(text: "No approvals are waiting for consent.")
                     } else {
                         ForEach(Array(pendingProposalItems.enumerated()), id: \.element.id) { index, proposal in
                             ProposalRow(proposal: proposal)
-                                .calmAppear(delay: 0.05 * Double(index))
+                                .calmAppear(delay: 0.12 + (0.07 * Double(index)))
                         }
                     }
                 }
-                .calmAppear(delay: 0.14)
+                .calmAppear(delay: 0.12)
 
                 StreamPanelShell(
                     eyebrow: "Activity",
                     title: "Recent movement across the operating loop",
                     metricLabel: "Events",
                     metricValue: "\(recentSignalEvents.count)",
-                    accent: .indigo
+                    accent: .purple
                 ) {
                     if recentSignalEvents.isEmpty {
-                        StreamPanelEmpty(text: "Nog geen recente activiteit om te tonen.")
+                        StreamPanelEmpty(text: "No recent activity needs surfacing.")
                     } else {
                         ForEach(Array(recentSignalEvents.enumerated()), id: \.element.id) { index, event in
                             eventRow(for: event)
-                                .calmAppear(delay: 0.04 * Double(index))
+                                .calmAppear(delay: 0.12 + (0.07 * Double(index)))
                         }
                     }
                 }
-                .calmAppear(delay: 0.2)
+                .calmAppear(delay: 0.12)
             }
             .padding(.horizontal, 20)
             .padding(.vertical)
@@ -148,18 +148,18 @@ struct StreamView: View {
     private var systemPulseRows: [StreamPulseRow] {
         var rows: [StreamPulseRow] = []
         if let store = poller.radarStatus?.store {
-            rows.append(StreamPulseRow(title: "Radar activations", detail: "\(store.activationCount) active observations", accent: .teal))
+            rows.append(StreamPulseRow(title: "Radar activations", detail: "\(store.activationCount) active observations", accent: .blue))
             rows.append(StreamPulseRow(title: "Emergence pressure", detail: "\(store.emergenceCount) escalated patterns", accent: .purple))
             rows.append(StreamPulseRow(title: "Collision watch", detail: "\(store.collisionCount) active collision clusters", accent: .orange))
         }
-        rows.append(StreamPulseRow(title: "Knowledge intake", detail: "\(recentKnowledgeItems.count) recent objects in the kernel", accent: .indigo))
+        rows.append(StreamPulseRow(title: "Knowledge intake", detail: "\(recentKnowledgeItems.count) recent objects in the kernel", accent: .blue))
         if let action = poller.lastActionReceipt {
             rows.append(StreamPulseRow(title: "Last governed action", detail: action.actionKind.replacingOccurrences(of: "_", with: " "), accent: action.isCompleted ? .green : .red))
         }
         if let refreshed = poller.lastSuccessfulRefreshAt {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm"
-            rows.append(StreamPulseRow(title: "Last refresh", detail: "Updated at \(formatter.string(from: refreshed))", accent: .cyan))
+            rows.append(StreamPulseRow(title: "Last refresh", detail: "Updated at \(formatter.string(from: refreshed))", accent: .blue))
         }
         if let warning = poller.lastRefreshError, !warning.isEmpty {
             rows.append(StreamPulseRow(title: "Operator note", detail: warning, accent: .orange))
@@ -868,7 +868,7 @@ private struct PaperSignalRow: View {
                 .frame(width: 40, alignment: .leading)
 
             Text("\u{25C8}")
-                .foregroundStyle(.indigo)
+                .foregroundStyle(.blue)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -895,7 +895,7 @@ private struct PaperSignalRow: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
-        .background(Color.indigo.opacity(0.10))
+        .background(Color.blue.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
@@ -1051,7 +1051,7 @@ private struct DiscoveryCandidateRow: View {
                     if event.crossDomain == true {
                         Text("cross-domain")
                             .font(.jeevesMonoSmall)
-                            .foregroundStyle(.cyan)
+                            .foregroundStyle(.purple)
                     }
                     if let rank = event.rank {
                         Text("#\(rank)")
@@ -1078,7 +1078,7 @@ private struct DiscoveryCandidateRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 14)
-        .background(Color.cyan.opacity(0.08))
+        .background(Color.purple.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
@@ -1144,11 +1144,11 @@ private struct KnowledgeObjectRow: View {
 
     private var kindColor: Color {
         switch object.kind {
-        case "discovery": return .cyan
+        case "discovery": return .purple
         case "decision": return .orange
         case "action_receipt": return .green
         case "investigation_outcome": return .purple
-        case "evidence": return .indigo
+        case "evidence": return .blue
         default: return .secondary
         }
     }
@@ -1266,7 +1266,7 @@ private struct SourceBadge: View {
     private var tint: Color {
         switch source {
         case "openalex":
-            return .indigo
+            return .blue
         case "arxiv":
             return .orange
         case "github":

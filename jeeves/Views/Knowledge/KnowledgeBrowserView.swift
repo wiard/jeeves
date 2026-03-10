@@ -36,22 +36,22 @@ struct KnowledgeBrowserView: View {
                         let _ = print("[KnowledgeView] branch: rateLimited+empty")
                         JeevesEmptyState(
                             icon: "clock.arrow.circlepath",
-                            title: "Jeeves ordent de bibliotheek even.",
-                            subtitle: "Probeer het zo opnieuw."
+                            title: "The library is pausing.",
+                            subtitle: "Please try again in a moment."
                         )
                     } else if viewModel.objects.isEmpty && viewModel.errorMessage != nil {
                         let _ = print("[KnowledgeView] branch: error (\(viewModel.errorMessage!))")
                         JeevesEmptyState(
                             icon: "exclamationmark.triangle",
-                            title: "Jeeves kon de bibliotheek nu niet openen.",
+                            title: "The library could not open.",
                             subtitle: viewModel.errorMessage!
                         )
                     } else if viewModel.objects.isEmpty {
                         let _ = print("[KnowledgeView] branch: empty (hasLoaded=\(viewModel.hasLoaded), isLoading=\(viewModel.isLoading))")
                         JeevesEmptyState(
                             icon: "book.closed",
-                            title: "De bibliotheek is nog leeg.",
-                            subtitle: "Zodra het systeem evidence verwerkt, verschijnen hier de kennisobjecten."
+                            title: "The library is quiet.",
+                            subtitle: "New evidence will appear here once the system observes it."
                         )
                     } else {
                         let _ = print("[KnowledgeView] branch: list (\(viewModel.objects.count) objects)")
@@ -60,11 +60,11 @@ struct KnowledgeBrowserView: View {
                                 InstrumentRoleHeader(
                                     eyebrow: "Knowledge",
                                     title: "Library",
-                                    summary: "Structured shelves for discoveries, evidence, code-adjacent signals, and research currently in circulation.",
+                                    summary: "A calm library surface for discoveries, evidence, and code-adjacent signals now worth operator attention.",
                                     accent: .jeevesGold,
                                     metrics: [
                                         InstrumentRoleMetric(label: "Objects", value: "\(viewModel.objects.count)"),
-                                        InstrumentRoleMetric(label: "Shelves", value: "\(groupedShelves.count)"),
+                                        InstrumentRoleMetric(label: "Shelves", value: "3"),
                                         InstrumentRoleMetric(label: "Focus", value: groupedShelves.first?.shelf.shortLabel ?? "Calm")
                                     ]
                                 )
@@ -81,7 +81,7 @@ struct KnowledgeBrowserView: View {
                                     KnowledgeShelfPanel(section: section) { objectId in
                                         fetchAndShowKnowledgeGraph(objectId: objectId)
                                     }
-                                    .calmAppear(delay: 0.10 + (0.05 * Double(index)))
+                                    .calmAppear(delay: 0.12)
                                 }
                             }
                             .padding()
@@ -135,16 +135,6 @@ struct KnowledgeBrowserView: View {
             || allTokens.contains("commit")
             || allTokens.contains("code") {
             return .codeSignals
-        }
-
-        if allTokens.contains("research")
-            || allTokens.contains("paper")
-            || allTokens.contains("arxiv")
-            || allTokens.contains("pubmed")
-            || allTokens.contains("rss")
-            || allTokens.contains("journal")
-            || allTokens.contains("internet_source") {
-            return .research
         }
 
         return .evidence
@@ -224,14 +214,12 @@ private enum KnowledgeShelf: CaseIterable, Hashable {
     case discoveries
     case evidence
     case codeSignals
-    case research
 
     var title: String {
         switch self {
         case .discoveries: return "Recent discoveries"
         case .evidence: return "Evidence"
         case .codeSignals: return "Code signals"
-        case .research: return "Research"
         }
     }
 
@@ -240,16 +228,14 @@ private enum KnowledgeShelf: CaseIterable, Hashable {
         case .discoveries: return "Newly formed patterns and structured findings."
         case .evidence: return "Grounded objects supporting the current state."
         case .codeSignals: return "Repository or implementation-adjacent signals."
-        case .research: return "External reading, papers, and feed-derived context."
         }
     }
 
     var accent: Color {
         switch self {
-        case .discoveries: return .cyan
-        case .evidence: return .indigo
+        case .discoveries: return .purple
+        case .evidence: return .blue
         case .codeSignals: return .orange
-        case .research: return .jeevesGold
         }
     }
 
@@ -258,7 +244,6 @@ private enum KnowledgeShelf: CaseIterable, Hashable {
         case .discoveries: return "Discovery"
         case .evidence: return "Evidence"
         case .codeSignals: return "Code"
-        case .research: return "Research"
         }
     }
 }
@@ -297,7 +282,7 @@ private struct KnowledgeShelfPanel: View {
                     KnowledgeBrowserCard(object: object, accent: section.shelf.accent)
                 }
                 .buttonStyle(.plain)
-                .calmAppear(delay: 0.03 * Double(index))
+                .calmAppear(delay: 0.12 + (0.07 * Double(index)))
             }
         }
         .briefingPanel()
@@ -315,7 +300,7 @@ private struct KnowledgeBrowserHero: View {
                     .font(.jeevesMonoSmall)
                     .foregroundStyle(.secondary)
 
-                Text("\(count) objecten beschikbaar voor inspectie.")
+                Text("\(count) objects ready for inspection.")
                     .font(.jeevesBody.weight(.semibold))
 
                 Text("Shelves remain capped for clarity while the full graph stays accessible from each object.")

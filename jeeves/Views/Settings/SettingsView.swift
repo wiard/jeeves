@@ -37,6 +37,33 @@ struct SettingsView: View {
                         .listRowBackground(Color.clear)
                     }
 
+                    Section {
+                        VStack(spacing: 12) {
+                            SystemStatusCard(
+                                title: "Gateway status",
+                                value: gateway.isConnected ? "Healthy" : "Waiting",
+                                detail: gatewayStatusDetail,
+                                accent: gateway.isConnected ? .green : .orange
+                            )
+
+                            SystemStatusCard(
+                                title: "Queue",
+                                value: "\(poller.pendingCount)",
+                                detail: poller.pendingCount == 0 ? "No approvals are waiting." : "Governed decisions are queued for consent.",
+                                accent: poller.pendingCount == 0 ? .green : .orange
+                            )
+
+                            SystemStatusCard(
+                                title: "Knowledge state",
+                                value: "\(poller.recentKnowledgeObjects.count)",
+                                detail: knowledgeStatusDetail,
+                                accent: .blue
+                            )
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
+
                     ConnectionSettings()
                     SecuritySettings()
                     tokenInfoSection
@@ -209,6 +236,52 @@ struct SettingsView: View {
         Task {
             await poller.seedIfNeeded(gateway: gateway, force: true)
         }
+    }
+
+    private var gatewayStatusDetail: String {
+        guard let connection = connections.first else {
+            return "No gateway connection is configured."
+        }
+        return "\(connection.host):\(connection.port)"
+    }
+
+    private var knowledgeStatusDetail: String {
+        if let refresh = poller.lastSuccessfulRefreshAt {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            return "Last refreshed at \(formatter.string(from: refresh))."
+        }
+        if let error = poller.lastRefreshError, !error.isEmpty {
+            return error
+        }
+        return "Knowledge objects will appear here as the system observes them."
+    }
+}
+
+private struct SystemStatusCard: View {
+    let title: String
+    let value: String
+    let detail: String
+    let accent: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.jeevesHeadline)
+                Text(detail)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Text(value)
+                .font(.jeevesMetric)
+                .foregroundStyle(accent)
+        }
+        .briefingPanel()
     }
 }
 

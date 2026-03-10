@@ -83,6 +83,64 @@ struct InstrumentRoleHeader: View {
     }
 }
 
+struct InstrumentSectionPanel<Content: View>: View {
+    let eyebrow: String
+    let title: String
+    let subtitle: String
+    let accent: Color
+    let metric: String?
+    let content: Content
+
+    init(
+        eyebrow: String,
+        title: String,
+        subtitle: String,
+        accent: Color,
+        metric: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.eyebrow = eyebrow
+        self.title = title
+        self.subtitle = subtitle
+        self.accent = accent
+        self.metric = metric
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(eyebrow.uppercased())
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(accent)
+
+                    Text(title)
+                        .font(.jeevesHeadline)
+
+                    Text(subtitle)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                if let metric, !metric.isEmpty {
+                    Text(metric)
+                        .font(.jeevesMetric)
+                        .foregroundStyle(accent)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                content
+            }
+        }
+        .briefingPanel()
+    }
+}
+
 struct InstrumentRoleMetric: Identifiable {
     let id: String
     let label: String
@@ -129,7 +187,7 @@ private struct CalmEntrance: ViewModifier {
             .offset(y: isVisible ? 0 : 18)
             .onAppear {
                 guard !isVisible else { return }
-                withAnimation(.easeOut(duration: 0.5).delay(delay)) {
+                withAnimation(.easeOut(duration: 0.45).delay(delay)) {
                     isVisible = true
                 }
             }

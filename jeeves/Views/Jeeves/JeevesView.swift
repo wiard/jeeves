@@ -31,49 +31,91 @@ struct JeevesView: View {
                                 InstrumentRoleHeader(
                                     eyebrow: "Jeeves",
                                     title: "Morning Intelligence",
-                                    summary: "A calm reading of what matters now, what needs approval, and where new evidence is forming.",
+                                    summary: "A calm operator briefing for the world outside, the AI field, and the discovery patterns quietly forming in the system.",
                                     accent: .jeevesGold,
                                     metrics: [
-                                        InstrumentRoleMetric(label: "Approvals", value: "\(briefing.counts.pendingApprovals)"),
-                                        InstrumentRoleMetric(label: "Signals", value: "\(briefing.counts.groupedSignals)"),
-                                        InstrumentRoleMetric(label: "Evidence", value: "\(briefing.counts.recentEvidence)")
+                                        InstrumentRoleMetric(label: "World", value: "\(worldSituationItems(from: briefing).count)"),
+                                        InstrumentRoleMetric(label: "AI", value: "\(aiDevelopmentItems(from: briefing).count)"),
+                                        InstrumentRoleMetric(label: "Hints", value: "\(discoveryHintItems(from: briefing).count)")
                                     ]
                                 )
                                 .calmAppear()
 
-                                DailyBriefingView(
-                                    briefing: cappedBriefing(from: briefing),
-                                    warning: briefingModel.usingCachedFallback ? "Toon gecachte briefing." : briefingModel.errorMessage,
-                                    onSelectAttention: { item in
-                                        selectedBriefingItem = item
-                                    },
-                                    onSelectSignal: { signal in
-                                        selectedBriefingItem = DailyBriefingItem(
-                                            itemId: signal.groupId,
-                                            kind: "signal",
-                                            title: signal.title,
-                                            summary: signal.summary,
-                                            why: signal.why,
-                                            score: Double(signal.signalCount),
-                                            createdAtIso: signal.latestDetectedAtIso,
-                                            sourceCount: signal.sourceCount,
-                                            objectId: nil,
-                                            proposalId: nil,
-                                            relatedObjectIds: signal.relatedObjectIds
-                                        )
-                                    },
-                                    onSelectEvidence: { object in
-                                        fetchAndShowKnowledgeGraph(objectId: object.objectId)
+                                InstrumentSectionPanel(
+                                    eyebrow: "Section One",
+                                    title: "World situation",
+                                    subtitle: "The strongest developments demanding an operator glance.",
+                                    accent: .jeevesGold,
+                                    metric: "\(worldSituationItems(from: briefing).count)"
+                                ) {
+                                    ForEach(Array(worldSituationItems(from: briefing).enumerated()), id: \.element.id) { index, item in
+                                        Button {
+                                            selectedBriefingItem = item
+                                        } label: {
+                                            JeevesBriefingCard(
+                                                title: item.title,
+                                                summary: item.summary,
+                                                meta: item.why,
+                                                accent: .jeevesGold
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
                                     }
-                                )
-                                .calmAppear(delay: 0.08)
-
-                                if let pulse = briefing.discoveryPulse {
-                                    DiscoveryPulsePanel(cells: pulseCells(from: pulse)) {
-                                        NotificationCenter.default.post(name: .jeevesOpenObservatoryTab, object: nil)
-                                    }
-                                    .calmAppear(delay: 0.16)
                                 }
+                                .calmAppear(delay: 0.12)
+
+                                InstrumentSectionPanel(
+                                    eyebrow: "Section Two",
+                                    title: "AI developments",
+                                    subtitle: "Signal groups shaping the technical landscape right now.",
+                                    accent: .blue,
+                                    metric: "\(aiDevelopmentItems(from: briefing).count)"
+                                ) {
+                                    ForEach(Array(aiDevelopmentItems(from: briefing).enumerated()), id: \.element.id) { index, signal in
+                                        Button {
+                                            selectedBriefingItem = dailyBriefingItem(from: signal)
+                                        } label: {
+                                            JeevesBriefingCard(
+                                                title: signal.title,
+                                                summary: signal.summary,
+                                                meta: signal.why,
+                                                accent: .blue
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
+                                    }
+                                }
+                                .calmAppear(delay: 0.12)
+
+                                InstrumentSectionPanel(
+                                    eyebrow: "Section Three",
+                                    title: "Discovery hints",
+                                    subtitle: "Early cues from the discovery engine, capped for calm reading.",
+                                    accent: .purple,
+                                    metric: "\(discoveryHintItems(from: briefing).count)"
+                                ) {
+                                    ForEach(Array(discoveryHintItems(from: briefing).enumerated()), id: \.element.id) { index, hint in
+                                        Button {
+                                            if let objectId = hint.objectId {
+                                                fetchAndShowKnowledgeGraph(objectId: objectId)
+                                            } else {
+                                                NotificationCenter.default.post(name: .jeevesOpenObservatoryTab, object: nil)
+                                            }
+                                        } label: {
+                                            JeevesBriefingCard(
+                                                title: hint.title,
+                                                summary: hint.summary,
+                                                meta: hint.meta,
+                                                accent: .purple
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
+                                    }
+                                }
+                                .calmAppear(delay: 0.12)
                             }
                             .padding()
                         }
@@ -82,15 +124,15 @@ struct JeevesView: View {
                     JeevesEmptyState(
                         icon: "sun.max",
                         tint: .secondary.opacity(0.5),
-                        title: "Mijn excuses, meneer.",
+                        title: "Morning Intelligence is quiet.",
                         subtitle: errorMessage
                     )
                 } else {
                     JeevesEmptyState(
                         icon: "sun.max",
                         tint: Color.jeevesGold.opacity(0.4),
-                        title: "Uw briefing wordt voorbereid.",
-                        subtitle: "Zodra er evidence binnenkomt, presenteer ik hier de ochtendbriefing."
+                        title: "Morning Intelligence is preparing.",
+                        subtitle: "Fresh signals and evidence will settle here when the system has something worth your attention."
                     )
                 }
             }
@@ -148,6 +190,58 @@ struct JeevesView: View {
             lastSignalAtIso: briefing.lastSignalAtIso,
             lastKnowledgeAtIso: briefing.lastKnowledgeAtIso,
             discoveryPulse: briefing.discoveryPulse
+        )
+    }
+
+    private func worldSituationItems(from briefing: DailyBriefing) -> [DailyBriefingItem] {
+        Array(briefing.attention.prefix(5))
+    }
+
+    private func aiDevelopmentItems(from briefing: DailyBriefing) -> [DailyBriefingSignalGroup] {
+        Array(briefing.signals.prefix(5))
+    }
+
+    private func discoveryHintItems(from briefing: DailyBriefing) -> [JeevesDiscoveryHint] {
+        let pulseHints: [JeevesDiscoveryHint] = briefing.discoveryPulse?.cells.compactMap { cell -> JeevesDiscoveryHint? in
+            let summary = cell.topHint?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !summary.isEmpty else { return nil }
+            return JeevesDiscoveryHint(
+                id: cell.cellId,
+                title: cell.title,
+                summary: summary,
+                meta: "\(cell.clusterCount) active cluster\(cell.clusterCount == 1 ? "" : "s")",
+                objectId: nil
+            )
+        } ?? []
+
+        if !pulseHints.isEmpty {
+            return Array(pulseHints.prefix(5))
+        }
+
+        return Array(briefing.evidence.prefix(5)).map { object in
+            JeevesDiscoveryHint(
+                id: object.objectId,
+                title: object.title,
+                summary: object.summary,
+                meta: object.kind.replacingOccurrences(of: "_", with: " "),
+                objectId: object.objectId
+            )
+        }
+    }
+
+    private func dailyBriefingItem(from signal: DailyBriefingSignalGroup) -> DailyBriefingItem {
+        DailyBriefingItem(
+            itemId: signal.groupId,
+            kind: "signal",
+            title: signal.title,
+            summary: signal.summary,
+            why: signal.why,
+            score: Double(signal.signalCount),
+            createdAtIso: signal.latestDetectedAtIso,
+            sourceCount: signal.sourceCount,
+            objectId: nil,
+            proposalId: nil,
+            relatedObjectIds: signal.relatedObjectIds
         )
     }
 
@@ -242,6 +336,44 @@ struct JeevesView: View {
                 }
             }
         }
+    }
+}
+
+private struct JeevesDiscoveryHint: Identifiable {
+    let id: String
+    let title: String
+    let summary: String
+    let meta: String
+    let objectId: String?
+}
+
+private struct JeevesBriefingCard: View {
+    let title: String
+    let summary: String
+    let meta: String
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.jeevesBody.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+
+            Text(summary)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+
+            Text(meta)
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(accent)
+                .lineLimit(1)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 

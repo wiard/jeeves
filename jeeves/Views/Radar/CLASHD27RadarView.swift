@@ -2,7 +2,6 @@ import SwiftUI
 
 struct CLASHD27RadarView: View {
     @State private var viewModel = RadarViewModel()
-    @State private var animateAmbient = false
 
     var body: some View {
         NavigationStack {
@@ -34,7 +33,7 @@ struct CLASHD27RadarView: View {
                                     eyebrow: "Radar",
                                     title: "Discovery Engine",
                                     summary: "A quiet spatial reading of active cells, rising pressure, and linked zones that deserve attention.",
-                                    accent: .cyan,
+                                    accent: .purple,
                                     metrics: [
                                         InstrumentRoleMetric(label: "Cells", value: "\(activeCount(in: layer))"),
                                         InstrumentRoleMetric(label: "Hot", value: "\(hotCount(in: layer))"),
@@ -43,8 +42,8 @@ struct CLASHD27RadarView: View {
                                 )
                                 .calmAppear()
 
-                                RadarGridPanel(layer: layer, animateAmbient: animateAmbient)
-                                    .calmAppear(delay: 0.08)
+                                RadarGridPanel(layer: layer)
+                                    .calmAppear(delay: 0.12)
                             }
                             .padding()
                         }
@@ -55,13 +54,7 @@ struct CLASHD27RadarView: View {
                 }
             }
             .navigationTitle("Jeeves")
-            .task {
-                await viewModel.load()
-                guard !animateAmbient else { return }
-                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
-                    animateAmbient = true
-                }
-            }
+            .task { await viewModel.load() }
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -92,7 +85,6 @@ struct CLASHD27RadarView: View {
 
 private struct RadarGridPanel: View {
     let layer: DiscoveryLayer
-    let animateAmbient: Bool
 
     private let spacing: CGFloat = 12
 
@@ -125,9 +117,9 @@ private struct RadarGridPanel: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color.cyan.opacity(animateAmbient ? 0.10 : 0.06),
+                                    Color.blue.opacity(0.08),
                                     Color.white.opacity(0.55),
-                                    Color.jeevesGold.opacity(animateAmbient ? 0.12 : 0.08)
+                                    Color.jeevesGold.opacity(0.10)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -176,27 +168,22 @@ private struct RadarConnectionOverlay: View {
     let cellSize: CGFloat
     let spacing: CGFloat
 
-    private var highActivityIndices: [Int] {
+    private var hotIndices: [Int] {
         cells.enumerated().compactMap { index, cell in
-            switch cell.intensity {
-            case .rising, .hot:
-                return index
-            case .quiet, .normal:
-                return nil
-            }
+            cell.intensity == .hot ? index : nil
         }
     }
 
     var body: some View {
         Canvas { context, _ in
-            guard highActivityIndices.count > 1 else { return }
-            for pair in highActivityIndices.adjacentPairs() {
+            guard hotIndices.count > 1 else { return }
+            for pair in hotIndices.adjacentPairs() {
                 var path = Path()
                 path.move(to: center(for: pair.0))
                 path.addLine(to: center(for: pair.1))
                 context.stroke(
                     path,
-                    with: .color(Color.cyan.opacity(0.30)),
+                    with: .color(Color.blue.opacity(0.26)),
                     style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [4, 6])
                 )
             }
@@ -232,8 +219,8 @@ private struct RadarCellCard: View {
         switch cell.intensity {
         case .quiet: return .gray
         case .normal: return .blue
-        case .rising: return .orange
-        case .hot: return .red
+        case .rising: return .purple
+        case .hot: return .orange
         }
     }
 
@@ -265,10 +252,10 @@ private struct RadarCellCard: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
-                    Text(cell.title)
-                        .font(.jeevesHeadline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+                    Text(shortTitle)
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
 
                     Spacer()
 
@@ -278,22 +265,17 @@ private struct RadarCellCard: View {
                         .shadow(color: glowColor.opacity(cell.intensity == .quiet ? 0 : 0.35), radius: 10)
                 }
 
-                Text(cell.subtitle.isEmpty ? "Signal density mapped for this cell." : cell.subtitle)
-                    .font(.jeevesCaption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-
                 Spacer(minLength: 4)
 
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
+                        Text("\(cell.clusterCount) clusters")
+                            .font(.jeevesMetric)
+                            .foregroundStyle(.primary)
+
                         Text(intensityLabel)
                             .font(.jeevesMonoSmall)
                             .foregroundStyle(glowColor)
-
-                        Text("\(cell.clusterCount) clusters")
-                            .font(.jeevesCaption)
-                            .foregroundStyle(.secondary)
                     }
 
                     Spacer()
@@ -311,13 +293,19 @@ private struct RadarCellCard: View {
         )
         .shadow(color: glowColor.opacity(cell.intensity == .quiet ? 0.04 : 0.18), radius: cell.intensity == .quiet ? 8 : 18, y: 10)
         .scaleEffect(shouldPulse && animatePulse ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.55), value: cell.intensity)
+        .animation(.easeInOut(duration: 0.45), value: cell.intensity)
         .onAppear {
             guard shouldPulse, !animatePulse else { return }
-            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
                 animatePulse = true
             }
         }
+    }
+
+    private var shortTitle: String {
+        let title = cell.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return "CELL" }
+        return String(title.prefix(14)).uppercased()
     }
 }
 
