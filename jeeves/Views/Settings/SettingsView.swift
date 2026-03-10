@@ -25,7 +25,7 @@ struct SettingsView: View {
                         InstrumentRoleHeader(
                             eyebrow: "Settings",
                             title: "System",
-                            summary: "Connection, security posture, and operator preferences for the Jeeves cockpit.",
+                            summary: "Connection, queue state, and knowledge flow for the Jeeves cockpit.",
                             accent: .jeevesGold,
                             metrics: [
                                 InstrumentRoleMetric(label: "Gateway", value: gateway.isConnected ? "Live" : "Idle"),

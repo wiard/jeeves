@@ -31,7 +31,7 @@ struct JeevesView: View {
                                 InstrumentRoleHeader(
                                     eyebrow: "Jeeves",
                                     title: "Morning Intelligence",
-                                    summary: "A reasoning instrument for watching geopolitics, frontier AI, and engineering infrastructure together, so emerging patterns can be seen where those domains begin to collide.",
+                                    summary: "An instrument for reasoning about what matters today.",
                                     accent: .jeevesGold,
                                     metrics: [
                                         InstrumentRoleMetric(label: "World", value: "\(worldSituationItems(from: briefing).count)"),
@@ -43,8 +43,8 @@ struct JeevesView: View {
 
                                 InstrumentSectionPanel(
                                     eyebrow: "Section One",
-                                    title: "World situation",
-                                    subtitle: "Geopolitical shifts that may alter the operating environment.",
+                                    title: "World signals",
+                                    subtitle: "Geopolitical movements that may reshape the operating environment.",
                                     accent: .jeevesGold,
                                     metric: "\(worldSituationItems(from: briefing).count)"
                                 ) {
@@ -67,8 +67,8 @@ struct JeevesView: View {
 
                                 InstrumentSectionPanel(
                                     eyebrow: "Section Two",
-                                    title: "AI developments",
-                                    subtitle: "Frontier AI developments that may change capability, risk, or timing.",
+                                    title: "AI frontier",
+                                    subtitle: "Research, models, and infrastructure shaping the AI race.",
                                     accent: .blue,
                                     metric: "\(aiDevelopmentItems(from: briefing).count)"
                                 ) {
@@ -91,8 +91,8 @@ struct JeevesView: View {
 
                                 InstrumentSectionPanel(
                                     eyebrow: "Section Three",
-                                    title: "Discovery hints",
-                                    subtitle: "Where geopolitics, AI, and infrastructure begin to converge in CLASHD27 signals.",
+                                    title: "Emerging patterns",
+                                    subtitle: "Signals where multiple domains begin to intersect.",
                                     accent: .purple,
                                     metric: "\(discoveryHintItems(from: briefing).count)"
                                 ) {
@@ -207,9 +207,9 @@ struct JeevesView: View {
             guard !summary.isEmpty else { return nil }
             return JeevesDiscoveryHint(
                 id: cell.cellId,
-                title: cell.title,
-                summary: summary,
-                meta: "\(cell.clusterCount) active cluster\(cell.clusterCount == 1 ? "" : "s")",
+                title: discoveryPatternTitle(for: cell),
+                summary: operatorFacingSummary(summary),
+                meta: "\(cell.clusterCount) related signal\(cell.clusterCount == 1 ? "" : "s")",
                 objectId: nil
             )
         } ?? []
@@ -243,6 +243,25 @@ struct JeevesView: View {
             proposalId: nil,
             relatedObjectIds: signal.relatedObjectIds
         )
+    }
+
+    private func discoveryPatternTitle(for cell: BriefingDiscoveryPulseCell) -> String {
+        switch cell.intensity {
+        case "hot":
+            return "New convergence"
+        case "rising":
+            return "Rising signal"
+        default:
+            return "Emerging pattern"
+        }
+    }
+
+    private func operatorFacingSummary(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
+            .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "cell", with: "zone", options: .caseInsensitive)
+            .replacingOccurrences(of: "emergence candidate", with: "emerging pattern", options: .caseInsensitive)
     }
 
     private func pulseCells(from pulse: BriefingDiscoveryPulse) -> [DiscoveryCell] {

@@ -69,18 +69,18 @@ struct StreamView: View {
                 InstrumentRoleHeader(
                     eyebrow: "Stream",
                     title: "Mission Control",
-                    summary: "A calm operational instrument for system pulse, governed approvals, and the activity shaping the next decision.",
+                    summary: "An operational view of system activity, pending approvals, and the recent events shaping the next decision.",
                     accent: .blue,
                     metrics: [
-                        InstrumentRoleMetric(label: "Pulse", value: "\(systemPulseMetric)"),
+                        InstrumentRoleMetric(label: "Activity", value: "\(systemPulseMetric)"),
                         InstrumentRoleMetric(label: "Approvals", value: "\(pendingProposalItems.count)"),
-                        InstrumentRoleMetric(label: "Activity", value: "\(recentSignalEvents.count)")
+                        InstrumentRoleMetric(label: "Recent", value: "\(recentSignalEvents.count)")
                     ]
                 )
                 .calmAppear()
 
                 StreamPanelShell(
-                    eyebrow: "System Pulse",
+                    eyebrow: "System activity",
                     title: "What the system is carrying right now",
                     metricLabel: "Live index",
                     metricValue: "\(systemPulseMetric)",
@@ -116,7 +116,7 @@ struct StreamView: View {
                 .calmAppear(delay: 0.12)
 
                 StreamPanelShell(
-                    eyebrow: "Activity",
+                    eyebrow: "Recent events",
                     title: "Recent movement across the operating loop",
                     metricLabel: "Events",
                     metricValue: "\(recentSignalEvents.count)",
@@ -148,11 +148,11 @@ struct StreamView: View {
     private var systemPulseRows: [StreamPulseRow] {
         var rows: [StreamPulseRow] = []
         if let store = poller.radarStatus?.store {
-            rows.append(StreamPulseRow(title: "Radar activations", detail: "\(store.activationCount) active observations", accent: .blue))
-            rows.append(StreamPulseRow(title: "Emergence pressure", detail: "\(store.emergenceCount) escalated patterns", accent: .purple))
-            rows.append(StreamPulseRow(title: "Collision watch", detail: "\(store.collisionCount) active collision clusters", accent: .orange))
+            rows.append(StreamPulseRow(title: "Radar signals", detail: "\(store.activationCount) signals under watch", accent: .blue))
+            rows.append(StreamPulseRow(title: "Rising pressure", detail: "\(store.emergenceCount) patterns are building", accent: .purple))
+            rows.append(StreamPulseRow(title: "Signal overlap", detail: "\(store.collisionCount) intersections need attention", accent: .orange))
         }
-        rows.append(StreamPulseRow(title: "Knowledge intake", detail: "\(recentKnowledgeItems.count) recent objects in the kernel", accent: .blue))
+        rows.append(StreamPulseRow(title: "Knowledge flow", detail: "\(recentKnowledgeItems.count) recent objects are available", accent: .blue))
         if let action = poller.lastActionReceipt {
             rows.append(StreamPulseRow(title: "Last governed action", detail: action.actionKind.replacingOccurrences(of: "_", with: " "), accent: action.isCompleted ? .green : .red))
         }
@@ -956,8 +956,8 @@ private struct GravityHotspotRow: View {
                     .fontWeight(.medium)
 
                 HStack(spacing: 8) {
-                    Text("gravity \(scoreText)")
-                        .font(.jeevesCaption)
+                    Text("pressure \(scoreText)")
+                    .font(.jeevesMono)
                         .foregroundStyle(.secondary)
                     if let band = event.band {
                         Text(band)
@@ -1033,7 +1033,7 @@ private struct DiscoveryCandidateRow: View {
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.explanation ?? event.displayTitle)
+                Text(operatorFacingEventTitle(for: event))
                     .font(.jeevesMono)
                     .fontWeight(.medium)
 
@@ -1044,7 +1044,7 @@ private struct DiscoveryCandidateRow: View {
                             .foregroundStyle(.secondary)
                     }
                     if !scoreText.isEmpty {
-                        Text("score \(scoreText)")
+                        Text("signal score \(scoreText)")
                             .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                     }
@@ -1351,10 +1351,47 @@ private func readableWhyMatters(type: String, explanation: String?, summary: Str
     case "signal_detected":
         return "A new paper signal aligns with active observatory pressure."
     case "gravity_hotspot":
-        return "This cell is attracting sustained attention and can reshape upcoming collisions."
+        return "Attention is building quickly in this part of the map."
     case "discovery_candidate":
-        return "This candidate combines multiple signals into a concrete research direction."
+        return "Multiple signals are converging into a pattern worth watching."
     default:
         return "This event changes the current discovery context."
     }
+}
+
+private func operatorFacingEventTitle(for event: ObservatoryStreamEvent) -> String {
+    let preferred = [event.explanation, event.title, event.displayTitle]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .first { !$0.isEmpty }
+
+    let cleaned = preferred?
+        .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
+        .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
+        .replacingOccurrences(of: "hotspot", with: "signal", options: .caseInsensitive)
+        .replacingOccurrences(of: "candidate", with: "pattern", options: .caseInsensitive)
+
+    guard let cleaned, !cleaned.isEmpty else {
+        switch event.type {
+        case "gravity_hotspot":
+            return "Rising signal"
+        case "discovery_candidate":
+            return "Emerging pattern"
+        default:
+            return "Signal update"
+        }
+    }
+
+    let lowered = cleaned.lowercased()
+    if lowered.contains("gravity") || lowered.contains("cluster") || lowered.contains("hotspot") || lowered.contains("candidate") {
+        switch event.type {
+        case "gravity_hotspot":
+            return "Rising signal"
+        case "discovery_candidate":
+            return "Emerging pattern"
+        default:
+            return cleaned
+        }
+    }
+
+    return cleaned
 }

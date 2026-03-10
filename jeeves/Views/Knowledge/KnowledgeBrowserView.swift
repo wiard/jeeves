@@ -60,7 +60,7 @@ struct KnowledgeBrowserView: View {
                                 InstrumentRoleHeader(
                                     eyebrow: "Knowledge",
                                     title: "Library",
-                                    summary: "A calm library surface for discoveries, evidence, and code-adjacent signals now worth operator attention.",
+                                    summary: "A calm library of discoveries, verified evidence, and code signals shaping the current picture.",
                                     accent: .jeevesGold,
                                     metrics: [
                                         InstrumentRoleMetric(label: "Objects", value: "\(viewModel.objects.count)"),
@@ -217,7 +217,7 @@ private enum KnowledgeShelf: CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .discoveries: return "Recent discoveries"
+        case .discoveries: return "Discoveries"
         case .evidence: return "Evidence"
         case .codeSignals: return "Code signals"
         }
@@ -225,9 +225,9 @@ private enum KnowledgeShelf: CaseIterable, Hashable {
 
     var summary: String {
         switch self {
-        case .discoveries: return "Newly formed patterns and structured findings."
-        case .evidence: return "Grounded objects supporting the current state."
-        case .codeSignals: return "Repository or implementation-adjacent signals."
+        case .discoveries: return "New connections identified by the discovery engine."
+        case .evidence: return "Verified artifacts collected from the internet."
+        case .codeSignals: return "Repositories and tools shaping AI development."
         }
     }
 

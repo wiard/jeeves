@@ -32,12 +32,12 @@ struct CLASHD27RadarView: View {
                                 InstrumentRoleHeader(
                                     eyebrow: "Radar",
                                     title: "Discovery Engine",
-                                    summary: "A quiet spatial reading of active cells, rising pressure, and linked zones that deserve attention.",
+                                    summary: "A spatial reading of where pressure is forming across domains and where attention is beginning to build.",
                                     accent: .purple,
                                     metrics: [
-                                        InstrumentRoleMetric(label: "Cells", value: "\(activeCount(in: layer))"),
-                                        InstrumentRoleMetric(label: "Hot", value: "\(hotCount(in: layer))"),
-                                        InstrumentRoleMetric(label: "Clusters", value: "\(clusterTotal(in: layer))")
+                                        InstrumentRoleMetric(label: "Zones", value: "\(activeCount(in: layer))"),
+                                        InstrumentRoleMetric(label: "Active", value: "\(hotCount(in: layer))"),
+                                        InstrumentRoleMetric(label: "Signals", value: "\(clusterTotal(in: layer))")
                                     ]
                                 )
                                 .calmAppear()
@@ -104,7 +104,7 @@ private struct RadarGridPanel: View {
                         .font(.jeevesHeadline)
                 }
                 Spacer()
-                Text("\(displayCells.count) cells")
+                Text("\(displayCells.count) zones")
                     .font(.jeevesMonoSmall)
                     .foregroundStyle(.secondary)
             }
@@ -209,9 +209,9 @@ private struct RadarCellCard: View {
     private var intensityLabel: String {
         switch cell.intensity {
         case .quiet: return "Quiet"
-        case .normal: return "Tracking"
+        case .normal: return "Watching"
         case .rising: return "Rising"
-        case .hot: return "Hot"
+        case .hot: return "Active"
         }
     }
 
@@ -269,7 +269,7 @@ private struct RadarCellCard: View {
 
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(cell.clusterCount) clusters")
+                        Text("\(cell.clusterCount) signals")
                             .font(.jeevesMetric)
                             .foregroundStyle(.primary)
 
@@ -304,7 +304,7 @@ private struct RadarCellCard: View {
 
     private var shortTitle: String {
         let title = cell.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return "CELL" }
+        guard !title.isEmpty else { return "ZONE" }
         return String(title.prefix(14)).uppercased()
     }
 }
@@ -315,34 +315,38 @@ private struct RadarCellDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                Text("Domain intersection")
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(.secondary)
+
                 Text(cell.title)
                     .font(.jeevesLargeTitle)
 
-                Text(cell.subtitle)
+                Text("What signals are driving pressure here.")
                     .font(.jeevesTitle)
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Text("Clusters: \(cell.clusterCount)")
+                    Text("Signals: \(cell.clusterCount)")
                     Spacer()
-                    Text("State: \(cell.intensity.rawValue)")
+                    Text("State: \(operatorStateLabel)")
                 }
                 .font(.jeevesBody)
 
                 if cell.hints.isEmpty {
-                    Text("Nog geen concrete discovery hints in deze cel.")
+                    Text("No clear signals are surfacing here yet.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(cell.hints) { hint in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(hint.topic)
                                 .font(.jeevesHeadline)
-                            Text(hint.why)
+                            Text(operatorHintExplanation(hint))
                                 .font(.jeevesBody)
                                 .foregroundStyle(.secondary)
                             HStack {
-                                Text("Bronnen: \(hint.sourceCount)")
-                                Text("Novelty: \(String(format: "%.2f", hint.noveltyScore))")
+                                Text("Sources: \(hint.sourceCount)")
+                                Text("Change: \(String(format: "%.2f", hint.noveltyScore))")
                                 Text("Pressure: \(String(format: "%.2f", hint.pressureScore))")
                             }
                             .font(.jeevesCaption)
@@ -356,8 +360,28 @@ private struct RadarCellDetailView: View {
             }
             .padding()
         }
-        .navigationTitle("Cluster")
+        .navigationTitle("Signal")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var operatorStateLabel: String {
+        switch cell.intensity {
+        case .quiet: return "Quiet"
+        case .normal: return "Watching"
+        case .rising: return "Rising"
+        case .hot: return "Active"
+        }
+    }
+
+    private func operatorHintExplanation(_ hint: DiscoveryHint) -> String {
+        let text = hint.why.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            return text
+                .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
+                .replacingOccurrences(of: "cell", with: "zone", options: .caseInsensitive)
+                .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
+        }
+        return "Recent developments are increasing pressure across this domain intersection."
     }
 }
 
