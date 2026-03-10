@@ -31,7 +31,7 @@ struct JeevesView: View {
                                 InstrumentRoleHeader(
                                     eyebrow: "Jeeves",
                                     title: "Morning Intelligence",
-                                    summary: "A calm operator briefing for the world outside, the AI field, and the discovery patterns quietly forming in the system.",
+                                    summary: "A reasoning instrument for watching geopolitics, frontier AI, and engineering infrastructure together, so emerging patterns can be seen where those domains begin to collide.",
                                     accent: .jeevesGold,
                                     metrics: [
                                         InstrumentRoleMetric(label: "World", value: "\(worldSituationItems(from: briefing).count)"),
@@ -44,7 +44,7 @@ struct JeevesView: View {
                                 InstrumentSectionPanel(
                                     eyebrow: "Section One",
                                     title: "World situation",
-                                    subtitle: "The strongest developments demanding an operator glance.",
+                                    subtitle: "Geopolitical shifts that may alter the operating environment.",
                                     accent: .jeevesGold,
                                     metric: "\(worldSituationItems(from: briefing).count)"
                                 ) {
@@ -68,7 +68,7 @@ struct JeevesView: View {
                                 InstrumentSectionPanel(
                                     eyebrow: "Section Two",
                                     title: "AI developments",
-                                    subtitle: "Signal groups shaping the technical landscape right now.",
+                                    subtitle: "Frontier AI developments that may change capability, risk, or timing.",
                                     accent: .blue,
                                     metric: "\(aiDevelopmentItems(from: briefing).count)"
                                 ) {
@@ -92,7 +92,7 @@ struct JeevesView: View {
                                 InstrumentSectionPanel(
                                     eyebrow: "Section Three",
                                     title: "Discovery hints",
-                                    subtitle: "Early cues from the discovery engine, capped for calm reading.",
+                                    subtitle: "Where geopolitics, AI, and infrastructure begin to converge in CLASHD27 signals.",
                                     accent: .purple,
                                     metric: "\(discoveryHintItems(from: briefing).count)"
                                 ) {
