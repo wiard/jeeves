@@ -250,12 +250,13 @@ private struct RadarCellCard: View {
                     .blur(radius: 8)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
-                    Text(shortTitle)
+                    Text(domainLabel)
                         .font(.jeevesMonoSmall)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
                     Spacer()
 
@@ -265,18 +266,28 @@ private struct RadarCellCard: View {
                         .shadow(color: glowColor.opacity(cell.intensity == .quiet ? 0 : 0.35), radius: 10)
                 }
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(RadarMeaning.patternTitle(for: cell))
+                        .font(.jeevesHeadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text(RadarMeaning.patternInterpretation(for: cell))
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
+                }
+
+                Spacer(minLength: 2)
 
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(cell.clusterCount) signals")
-                            .font(.jeevesMetric)
-                            .foregroundStyle(.primary)
-
-                        Text(intensityLabel)
-                            .font(.jeevesMonoSmall)
-                            .foregroundStyle(glowColor)
-                    }
+                    Text(intensityLabel)
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(glowColor)
 
                     Spacer()
 
@@ -302,10 +313,10 @@ private struct RadarCellCard: View {
         }
     }
 
-    private var shortTitle: String {
+    private var domainLabel: String {
         let title = cell.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return "ZONE" }
-        return String(title.prefix(14)).uppercased()
+        return title.uppercased()
     }
 }
 
@@ -322,40 +333,85 @@ private struct RadarCellDetailView: View {
                 Text(cell.title)
                     .font(.jeevesLargeTitle)
 
-                Text("What signals are driving pressure here.")
+                Text(RadarMeaning.patternTitle(for: cell))
                     .font(.jeevesTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
 
                 HStack {
-                    Text("Signals: \(cell.clusterCount)")
+                    Text("Signal convergence: \(cell.clusterCount)")
                     Spacer()
                     Text("State: \(operatorStateLabel)")
                 }
                 .font(.jeevesBody)
 
-                if cell.hints.isEmpty {
-                    Text("No clear signals are surfacing here yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(cell.hints) { hint in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(hint.topic)
-                                .font(.jeevesHeadline)
-                            Text(operatorHintExplanation(hint))
-                                .font(.jeevesBody)
-                                .foregroundStyle(.secondary)
-                            HStack {
-                                Text("Sources: \(hint.sourceCount)")
-                                Text("Change: \(String(format: "%.2f", hint.noveltyScore))")
-                                Text("Pressure: \(String(format: "%.2f", hint.pressureScore))")
-                            }
-                            .font(.jeevesCaption)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Signals detected across:")
+                        .font(.jeevesHeadline)
+
+                    ForEach(RadarMeaning.signalSources(for: cell), id: \.self) { source in
+                        Text("• \(source)")
+                            .font(.jeevesBody)
                             .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                if cell.hints.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CLASHD27 reading")
+                            .font(.jeevesHeadline)
+
+                        Text(RadarMeaning.clashdReading(for: cell))
+                            .font(.jeevesBody)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Signal overview")
+                            .font(.jeevesHeadline)
+
+                        ForEach(Array(cell.hints.prefix(5))) { hint in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(hint.topic)
+                                    .font(.jeevesHeadline)
+                                Text(operatorHintExplanation(hint))
+                                    .font(.jeevesBody)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CLASHD27 reading")
+                            .font(.jeevesHeadline)
+
+                        Text(RadarMeaning.clashdReading(for: cell))
+                            .font(.jeevesBody)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Operator interpretation")
+                            .font(.jeevesHeadline)
+
+                        Text(RadarMeaning.operatorInterpretation(for: cell))
+                            .font(.jeevesBody)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             }
             .padding()
@@ -378,10 +434,175 @@ private struct RadarCellDetailView: View {
         if !text.isEmpty {
             return text
                 .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
-                .replacingOccurrences(of: "cell", with: "zone", options: .caseInsensitive)
+                .replacingOccurrences(of: "cell", with: "domain intersection", options: .caseInsensitive)
                 .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
+                .replacingOccurrences(of: "candidate", with: "signal convergence", options: .caseInsensitive)
+                .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+                .replacingOccurrences(of: "cross-domain overlap", with: "multi-domain signal convergence", options: .caseInsensitive)
         }
         return "Recent developments are increasing pressure across this domain intersection."
+    }
+}
+
+private enum RadarMeaning {
+    static func patternTitle(for cell: DiscoveryCell) -> String {
+        switch normalizedDomainKey(for: cell) {
+        case "AIxTECH":
+            return "Inference engines accelerating"
+        case "AIxGOV":
+            return "Model regulation pressure"
+        case "AIxECON":
+            return "Compute cost competition"
+        case "GEOxTECH":
+            return "Technology sanctions pressure"
+        case "GEOxGOV":
+            return "Policy realignment signals"
+        case "GEOxECON":
+            return "Economic leverage building"
+        case "INFRAxTECH":
+            return "Compute infrastructure expansion"
+        case "INFRAxGOV":
+            return "Infrastructure regulation pressure"
+        case "INFRAxECON":
+            return "Infrastructure investment race"
+        default:
+            switch cell.intensity {
+            case .quiet:
+                return "Signals holding steady"
+            case .normal:
+                return "Early movement detected"
+            case .rising:
+                return "Pressure beginning to build"
+            case .hot:
+                return "Strong convergence forming"
+            }
+        }
+    }
+
+    static func patternInterpretation(for cell: DiscoveryCell) -> String {
+        switch normalizedDomainKey(for: cell) {
+        case "AIxTECH":
+            return "Acceleration detected across code and infrastructure."
+        case "AIxGOV":
+            return "Policy attention is increasing around model development."
+        case "AIxECON":
+            return "Competition is building around compute access and cost."
+        case "GEOxTECH":
+            return "Geopolitical pressure is shaping strategic technology."
+        case "GEOxGOV":
+            return "Government priorities are shifting in this intersection."
+        case "GEOxECON":
+            return "State and market signals are reinforcing the same direction."
+        case "INFRAxTECH":
+            return "Acceleration detected across code, research, and infrastructure."
+        case "INFRAxGOV":
+            return "Policy attention is increasing around critical infrastructure."
+        case "INFRAxECON":
+            return "Multiple sources point to rising infrastructure demand."
+        default:
+            switch cell.intensity {
+            case .quiet:
+                return "Signals are present but not yet moving together."
+            case .normal:
+                return "Signals are gathering but not yet converging."
+            case .rising:
+                return "Multiple independent sources are reinforcing the same direction."
+            case .hot:
+                return "Pressure is building quickly across this intersection."
+            }
+        }
+    }
+
+    static func clashdReading(for cell: DiscoveryCell) -> String {
+        switch normalizedDomainKey(for: cell) {
+        case "AIxTECH":
+            return "Technical capability in this domain is accelerating faster than governance."
+        case "AIxGOV":
+            return "State and regulatory attention is beginning to shape how models can be developed and deployed."
+        case "AIxECON":
+            return "Economic pressure is concentrating around access to compute, tooling, and model advantage."
+        case "GEOxTECH":
+            return "Strategic technology decisions are increasingly being shaped by geopolitical pressure."
+        case "GEOxGOV":
+            return "Government action in this intersection may reset strategic priorities."
+        case "GEOxECON":
+            return "Political and economic signals are converging into the same strategic direction."
+        case "INFRAxTECH":
+            return "Infrastructure capability is becoming a limiting factor for technical progress in this domain."
+        case "INFRAxGOV":
+            return "Policy attention is rising as infrastructure becomes more strategically consequential."
+        case "INFRAxECON":
+            return "Capital, capacity, and infrastructure demand are moving in the same direction."
+        default:
+            switch cell.intensity {
+            case .quiet:
+                return "This domain intersection is stable and not yet showing meaningful pressure."
+            case .normal:
+                return "Signals are beginning to gather here, but the direction is still early."
+            case .rising:
+                return "Independent sources are starting to reinforce the same pattern."
+            case .hot:
+                return "This intersection is now strategically active and merits closer investigation."
+            }
+        }
+    }
+
+    static func operatorInterpretation(for cell: DiscoveryCell) -> String {
+        switch normalizedDomainKey(for: cell) {
+        case "AIxTECH":
+            return "This intersection may shape the next generation of AI deployment."
+        case "AIxGOV":
+            return "This area may determine how quickly AI capability can move into real-world systems."
+        case "AIxECON":
+            return "This pattern may reshape who can afford to compete at the frontier."
+        case "GEOxTECH":
+            return "This intersection may redefine where technical power can be built and maintained."
+        case "GEOxGOV":
+            return "This pattern may influence how state power is expressed through technology."
+        case "GEOxECON":
+            return "This area may affect how geopolitical shifts turn into economic leverage."
+        case "INFRAxTECH":
+            return "This domain intersection may shape the next generation of AI deployment."
+        case "INFRAxGOV":
+            return "This pattern may determine how infrastructure can scale under political constraint."
+        case "INFRAxECON":
+            return "This area may influence who controls future infrastructure capacity."
+        default:
+            return "This intersection is worth watching because early movement here may shape broader system behavior."
+        }
+    }
+
+    static func signalSources(for cell: DiscoveryCell) -> [String] {
+        switch normalizedDomainKey(for: cell) {
+        case "AIxTECH":
+            return ["GitHub repositories", "research papers", "infrastructure announcements"]
+        case "AIxGOV":
+            return ["policy papers", "law proposals", "government programs"]
+        case "AIxECON":
+            return ["market signals", "compute pricing moves", "investment announcements"]
+        case "GEOxTECH":
+            return ["export controls", "technology policy", "strategic infrastructure announcements"]
+        case "GEOxGOV":
+            return ["state programs", "policy statements", "institutional changes"]
+        case "GEOxECON":
+            return ["trade policy", "capital flows", "sanctions announcements"]
+        case "INFRAxTECH":
+            return ["infrastructure announcements", "GitHub repositories", "research papers"]
+        case "INFRAxGOV":
+            return ["regulatory proposals", "infrastructure policy", "public investment signals"]
+        case "INFRAxECON":
+            return ["capacity announcements", "investment rounds", "supply chain signals"]
+        default:
+            return ["research papers", "GitHub repositories", "public announcements"]
+        }
+    }
+
+    private static func normalizedDomainKey(for cell: DiscoveryCell) -> String {
+        cell.title
+            .uppercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "×", with: "x")
+            .replacingOccurrences(of: "*", with: "x")
     }
 }
 

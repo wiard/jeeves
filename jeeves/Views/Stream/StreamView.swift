@@ -227,7 +227,7 @@ struct StreamView: View {
                                 kind: "discovery",
                                 createdAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-300)),
                                 title: "Related discovery",
-                                summary: "A linked discovery candidate grounded in the same evidence.",
+                                summary: "A linked pattern grounded in the same evidence.",
                                 sourceRefs: nil,
                                 linkedObjectIds: nil,
                                 metadata: nil
@@ -1039,17 +1039,17 @@ private struct DiscoveryCandidateRow: View {
 
                 HStack(spacing: 8) {
                     if let candidateType = event.candidateType {
-                        Text(candidateType.replacingOccurrences(of: "_", with: " "))
+                        Text(operatorFacingDiscoveryType(candidateType))
                             .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                     }
                     if !scoreText.isEmpty {
-                        Text("signal score \(scoreText)")
+                        Text("confidence \(scoreText)")
                             .font(.jeevesCaption)
                             .foregroundStyle(.secondary)
                     }
                     if event.crossDomain == true {
-                        Text("cross-domain")
+                        Text("multi-domain")
                             .font(.jeevesMonoSmall)
                             .foregroundStyle(.purple)
                     }
@@ -1345,6 +1345,11 @@ private func readableWhyMatters(type: String, explanation: String?, summary: Str
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "  ", with: " ")
         return cleaned
+            .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+            .replacingOccurrences(of: "cross-domain overlap", with: "multi-domain signal convergence", options: .caseInsensitive)
+            .replacingOccurrences(of: "challenge review", with: "investigation suggested", options: .caseInsensitive)
+            .replacingOccurrences(of: "discovery review", with: "new research signal detected", options: .caseInsensitive)
+            .replacingOccurrences(of: "internet evidence", with: "ecosystem activity", options: .caseInsensitive)
     }
 
     switch type {
@@ -1369,6 +1374,10 @@ private func operatorFacingEventTitle(for event: ObservatoryStreamEvent) -> Stri
         .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
         .replacingOccurrences(of: "hotspot", with: "signal", options: .caseInsensitive)
         .replacingOccurrences(of: "candidate", with: "pattern", options: .caseInsensitive)
+        .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+        .replacingOccurrences(of: "discovery review", with: "new research signal detected", options: .caseInsensitive)
+        .replacingOccurrences(of: "challenge review", with: "investigation suggested", options: .caseInsensitive)
+        .replacingOccurrences(of: "internet evidence", with: "ecosystem activity", options: .caseInsensitive)
 
     guard let cleaned, !cleaned.isEmpty else {
         switch event.type {
@@ -1394,4 +1403,24 @@ private func operatorFacingEventTitle(for event: ObservatoryStreamEvent) -> Stri
     }
 
     return cleaned
+}
+
+private func operatorFacingDiscoveryType(_ value: String) -> String {
+    let lowered = value.lowercased()
+    if lowered.contains("paper") {
+        return "research papers"
+    }
+    if lowered.contains("repo") || lowered.contains("github") || lowered.contains("code") {
+        return "GitHub repositories"
+    }
+    if lowered.contains("infra") {
+        return "infrastructure announcements"
+    }
+    if lowered.contains("policy") || lowered.contains("gov") {
+        return "governance developments"
+    }
+
+    return value
+        .replacingOccurrences(of: "_", with: " ")
+        .replacingOccurrences(of: "candidate", with: "signal", options: .caseInsensitive)
 }

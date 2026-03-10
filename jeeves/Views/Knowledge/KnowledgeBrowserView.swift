@@ -326,12 +326,14 @@ private struct KnowledgeBrowserCard: View {
     let accent: Color
 
     private var kindLabel: String {
-        object.kind.replacingOccurrences(of: "_", with: " ")
+        object.kind
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "discovery", with: "signal", options: .caseInsensitive)
     }
 
     private var sourceLabel: String {
         if let first = object.sourceRefs?.first {
-            return first.label ?? first.sourceType
+            return operatorFacingText(first.label ?? first.sourceType)
         }
         return object.createdAtIso
     }
@@ -340,7 +342,7 @@ private struct KnowledgeBrowserCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(object.title)
+                    Text(operatorFacingTitle)
                         .font(.jeevesBody.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
@@ -356,7 +358,7 @@ private struct KnowledgeBrowserCard: View {
                     .font(.jeevesHeadline)
             }
 
-            Text(object.summary)
+            Text(operatorFacingSummary)
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
@@ -379,5 +381,43 @@ private struct KnowledgeBrowserCard: View {
         .padding(14)
         .background(accent.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var operatorFacingTitle: String {
+        let lowered = object.title.lowercased()
+        if lowered.contains("discovery review") {
+            return "New research signal detected"
+        }
+        if lowered.contains("challenge review") {
+            return "Investigation suggested"
+        }
+        if lowered.contains("internet evidence") && lowered.contains("langchain") {
+            return "LangChain ecosystem activity"
+        }
+        if lowered.contains("internet evidence") {
+            return "Ecosystem activity"
+        }
+        if lowered.contains("possible emerging cluster") {
+            return "Emerging pattern"
+        }
+        return operatorFacingText(object.title)
+    }
+
+    private var operatorFacingSummary: String {
+        let lowered = object.summary.lowercased()
+        if lowered.contains("langchain") && lowered.contains("internet evidence") {
+            return "LangChain ecosystem activity is contributing to this pattern."
+        }
+        return operatorFacingText(object.summary)
+    }
+
+    private func operatorFacingText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
+            .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "candidate", with: "signal", options: .caseInsensitive)
+            .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+            .replacingOccurrences(of: "cross-domain overlap", with: "multi-domain signal convergence", options: .caseInsensitive)
+            .replacingOccurrences(of: "internet evidence", with: "ecosystem activity", options: .caseInsensitive)
     }
 }

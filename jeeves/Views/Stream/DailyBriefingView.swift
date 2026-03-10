@@ -830,20 +830,51 @@ private struct BriefingEvidenceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(object.title)
+                Text(operatorFacingTitle)
                     .font(.jeevesBody.weight(.semibold))
                     .foregroundStyle(.primary)
                 Spacer()
-                Text(object.kind.replacingOccurrences(of: "_", with: " "))
+                Text(object.kind.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "discovery", with: "signal", options: .caseInsensitive))
                     .font(.jeevesMonoSmall)
                     .foregroundStyle(.secondary)
             }
-            Text(object.summary)
+            Text(operatorFacingSummary)
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
         }
         .briefingPanel()
+    }
+
+    private var operatorFacingTitle: String {
+        let lowered = object.title.lowercased()
+        if lowered.contains("discovery review") {
+            return "New research signal detected"
+        }
+        if lowered.contains("challenge review") {
+            return "Investigation suggested"
+        }
+        if lowered.contains("internet evidence") && lowered.contains("langchain") {
+            return "LangChain ecosystem activity"
+        }
+        if lowered.contains("internet evidence") {
+            return "Ecosystem activity"
+        }
+        return sanitize(object.title)
+    }
+
+    private var operatorFacingSummary: String {
+        sanitize(object.summary)
+    }
+
+    private func sanitize(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
+            .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "candidate", with: "signal", options: .caseInsensitive)
+            .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+            .replacingOccurrences(of: "cross-domain overlap", with: "multi-domain signal convergence", options: .caseInsensitive)
+            .replacingOccurrences(of: "internet evidence", with: "ecosystem activity", options: .caseInsensitive)
     }
 }
 

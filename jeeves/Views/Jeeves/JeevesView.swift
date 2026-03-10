@@ -221,9 +221,9 @@ struct JeevesView: View {
         return Array(briefing.evidence.prefix(5)).map { object in
             JeevesDiscoveryHint(
                 id: object.objectId,
-                title: object.title,
-                summary: object.summary,
-                meta: object.kind.replacingOccurrences(of: "_", with: " "),
+                title: operatorFacingTitle(object.title),
+                summary: operatorFacingSummary(object.summary),
+                meta: operatorFacingMeta(object.kind),
                 objectId: object.objectId
             )
         }
@@ -257,11 +257,56 @@ struct JeevesView: View {
     }
 
     private func operatorFacingSummary(_ text: String) -> String {
-        text
+        let lowered = text.lowercased()
+        if lowered.contains("langchain") && lowered.contains("internet evidence") {
+            return "LangChain ecosystem activity is contributing to this pattern."
+        }
+        if lowered.contains("discovery review") {
+            return "New research signals are reinforcing this direction."
+        }
+        if lowered.contains("challenge review") {
+            return "Further investigation is warranted across multiple signals."
+        }
+
+        return text
             .replacingOccurrences(of: "gravity", with: "pressure", options: .caseInsensitive)
             .replacingOccurrences(of: "cluster", with: "pattern", options: .caseInsensitive)
             .replacingOccurrences(of: "cell", with: "zone", options: .caseInsensitive)
             .replacingOccurrences(of: "emergence candidate", with: "emerging pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "discovery candidate", with: "emerging pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "cross-domain overlap", with: "multi-domain signal convergence", options: .caseInsensitive)
+            .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+            .replacingOccurrences(of: "internet evidence", with: "ecosystem activity", options: .caseInsensitive)
+    }
+
+    private func operatorFacingTitle(_ text: String) -> String {
+        let lowered = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lowered.contains("possible emerging cluster") {
+            return "Emerging pattern"
+        }
+        if lowered.contains("discovery review") {
+            return "New research signal detected"
+        }
+        if lowered.contains("challenge review") {
+            return "Investigation suggested"
+        }
+        if lowered.contains("internet evidence") && lowered.contains("langchain") {
+            return "LangChain ecosystem activity"
+        }
+        if lowered.contains("internet evidence") {
+            return "Ecosystem activity"
+        }
+
+        return text
+            .replacingOccurrences(of: "gravity intersection", with: "pressure pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "discovery candidate", with: "emerging pattern", options: .caseInsensitive)
+            .replacingOccurrences(of: "disc-paper", with: "research signal", options: .caseInsensitive)
+    }
+
+    private func operatorFacingMeta(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "discovery", with: "signal", options: .caseInsensitive)
     }
 
     private func pulseCells(from pulse: BriefingDiscoveryPulse) -> [DiscoveryCell] {
@@ -321,7 +366,7 @@ struct JeevesView: View {
                                 kind: "discovery",
                                 createdAtIso: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-300)),
                                 title: "Related discovery",
-                                summary: "A linked discovery candidate grounded in the same evidence.",
+                                summary: "A linked pattern grounded in the same evidence.",
                                 sourceRefs: nil,
                                 linkedObjectIds: nil,
                                 metadata: nil
