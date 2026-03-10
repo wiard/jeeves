@@ -227,7 +227,21 @@ final class DailyBriefingViewModel {
                 )
             ],
             lastSignalAtIso: nowIso,
-            lastKnowledgeAtIso: nowIso
+            lastKnowledgeAtIso: nowIso,
+            discoveryPulse: BriefingDiscoveryPulse(
+                cells: [
+                    BriefingDiscoveryPulseCell(cellId: "0-0", title: "Trust × Internal", intensity: "normal", clusterCount: 1, topHint: nil),
+                    BriefingDiscoveryPulseCell(cellId: "0-1", title: "Trust × External", intensity: "quiet", clusterCount: 0, topHint: nil),
+                    BriefingDiscoveryPulseCell(cellId: "0-2", title: "Trust × Engine", intensity: "rising", clusterCount: 2, topHint: "Execution runtime gravity rising"),
+                    BriefingDiscoveryPulseCell(cellId: "1-0", title: "Surface × Internal", intensity: "quiet", clusterCount: 0, topHint: nil),
+                    BriefingDiscoveryPulseCell(cellId: "1-1", title: "Surface × External", intensity: "hot", clusterCount: 3, topHint: "Cross-domain convergence in AI infrastructure"),
+                    BriefingDiscoveryPulseCell(cellId: "1-2", title: "Surface × Engine", intensity: "normal", clusterCount: 1, topHint: nil),
+                    BriefingDiscoveryPulseCell(cellId: "2-0", title: "Core × Internal", intensity: "quiet", clusterCount: 0, topHint: nil),
+                    BriefingDiscoveryPulseCell(cellId: "2-1", title: "Core × External", intensity: "rising", clusterCount: 2, topHint: "Chip export policy pressure building"),
+                    BriefingDiscoveryPulseCell(cellId: "2-2", title: "Core × Engine", intensity: "quiet", clusterCount: 0, topHint: nil)
+                ],
+                summary: "Surface × External — elevated activity."
+            )
         )
     }
 }

@@ -21,31 +21,39 @@ struct JeevesView: View {
                             .ignoresSafeArea()
 
                         ScrollView {
-                            DailyBriefingView(
-                                briefing: cappedBriefing(from: briefing),
-                                warning: briefingModel.usingCachedFallback ? "Toon gecachte briefing." : briefingModel.errorMessage,
-                                onSelectAttention: { item in
-                                    selectedBriefingItem = item
-                                },
-                                onSelectSignal: { signal in
-                                    selectedBriefingItem = DailyBriefingItem(
-                                        itemId: signal.groupId,
-                                        kind: "signal",
-                                        title: signal.title,
-                                        summary: signal.summary,
-                                        why: signal.why,
-                                        score: Double(signal.signalCount),
-                                        createdAtIso: signal.latestDetectedAtIso,
-                                        sourceCount: signal.sourceCount,
-                                        objectId: nil,
-                                        proposalId: nil,
-                                        relatedObjectIds: signal.relatedObjectIds
-                                    )
-                                },
-                                onSelectEvidence: { object in
-                                    fetchAndShowKnowledgeGraph(objectId: object.objectId)
+                            VStack(spacing: 22) {
+                                DailyBriefingView(
+                                    briefing: cappedBriefing(from: briefing),
+                                    warning: briefingModel.usingCachedFallback ? "Toon gecachte briefing." : briefingModel.errorMessage,
+                                    onSelectAttention: { item in
+                                        selectedBriefingItem = item
+                                    },
+                                    onSelectSignal: { signal in
+                                        selectedBriefingItem = DailyBriefingItem(
+                                            itemId: signal.groupId,
+                                            kind: "signal",
+                                            title: signal.title,
+                                            summary: signal.summary,
+                                            why: signal.why,
+                                            score: Double(signal.signalCount),
+                                            createdAtIso: signal.latestDetectedAtIso,
+                                            sourceCount: signal.sourceCount,
+                                            objectId: nil,
+                                            proposalId: nil,
+                                            relatedObjectIds: signal.relatedObjectIds
+                                        )
+                                    },
+                                    onSelectEvidence: { object in
+                                        fetchAndShowKnowledgeGraph(objectId: object.objectId)
+                                    }
+                                )
+
+                                if let pulse = briefing.discoveryPulse {
+                                    DiscoveryPulsePanel(cells: pulseCells(from: pulse)) {
+                                        NotificationCenter.default.post(name: .jeevesOpenObservatoryTab, object: nil)
+                                    }
                                 }
-                            )
+                            }
                             .padding()
                         }
                     }
@@ -117,8 +125,31 @@ struct JeevesView: View {
             pendingProposals: Array(briefing.pendingProposals.prefix(2)),
             evidence: Array(briefing.evidence.prefix(4)),
             lastSignalAtIso: briefing.lastSignalAtIso,
-            lastKnowledgeAtIso: briefing.lastKnowledgeAtIso
+            lastKnowledgeAtIso: briefing.lastKnowledgeAtIso,
+            discoveryPulse: briefing.discoveryPulse
         )
+    }
+
+    private func pulseCells(from pulse: BriefingDiscoveryPulse) -> [DiscoveryCell] {
+        pulse.cells.map { cell in
+            DiscoveryCell(
+                id: cell.cellId,
+                title: cell.title,
+                subtitle: "",
+                intensity: RadarIntensity(rawValue: cell.intensity) ?? .quiet,
+                clusterCount: cell.clusterCount,
+                hints: cell.topHint.map { hint in
+                    [DiscoveryHint(
+                        id: "\(cell.cellId)-hint",
+                        topic: hint,
+                        why: "",
+                        sourceCount: 0,
+                        noveltyScore: 0,
+                        pressureScore: 0
+                    )]
+                } ?? []
+            )
+        }
     }
 
     private func relatedEvidence(for item: DailyBriefingItem) -> [KnowledgeObject] {

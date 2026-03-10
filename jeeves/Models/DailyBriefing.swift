@@ -17,6 +17,7 @@ struct DailyBriefing: Codable, Identifiable {
     let evidence: [KnowledgeObject]
     let lastSignalAtIso: String?
     let lastKnowledgeAtIso: String?
+    let discoveryPulse: BriefingDiscoveryPulse?
 }
 
 struct DailyBriefingCounts: Codable, Hashable {
@@ -92,6 +93,19 @@ struct DailyBriefingSignalGroup: Codable, Identifiable, Hashable {
     let relatedObjectIds: [String]
 
     var id: String { groupId }
+}
+
+struct BriefingDiscoveryPulseCell: Codable, Hashable {
+    let cellId: String
+    let title: String
+    let intensity: String
+    let clusterCount: Int
+    let topHint: String?
+}
+
+struct BriefingDiscoveryPulse: Codable, Hashable {
+    let cells: [BriefingDiscoveryPulseCell]
+    let summary: String
 }
 
 struct DailyBriefingEnvelope: Decodable {
