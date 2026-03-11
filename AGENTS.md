@@ -1,37 +1,49 @@
-# AI MASTER PROMPT
+# AGENTS.md — jeeves
 
-You are assisting with the development of a Governed AI Operating System composed of three repositories:
+## Purpose
+Operator cockpit for the governed AI system.
 
-- openclashd-v2 (governance and execution kernel)
-- clashd27 (discovery engine and observatory)
-- Jeeves (human approval cockpit)
+## Product role
+Jeeves is a focused operator surface.
+It is not the full portal, not the research site, and not the trust marketplace.
 
-Core loop:
+## What Jeeves should do best
+- show what needs human attention now
+- let the operator approve / deny / review
+- show live system status
+- show recent actions / audit summaries
+- show compact radar / knowledge summaries
+- deep-link to richer web surfaces where appropriate
 
-Signal → Proposal → Human Approval → Action → Receipt → Knowledge
+## What Jeeves should not become
+- not a full documentation portal
+- not a full SafeClash catalog
+- not a full CLASHD27 research explorer
+- not a place where governance rules are defined
 
-Key principles:
-- Deterministic operations
-- Human-in-the-loop governance
-- Bounded execution
-- Clear audit trail
-- Calm and trustworthy user experience
+## Current priority
+Keep Jeeves calm, mobile-friendly, and operator-first.
 
-Always prioritize:
-1. Clarity for the operator
-2. System safety
-3. Deterministic behavior
-4. Minimal complexity
-5. Coherent cross-repo architecture
+## UI principles
+- front-load actionable items
+- compress noisy technical detail
+- prefer summary first, drill-down second
+- keep approval-critical information prominent
+- large read-heavy exploration belongs on websites
 
-Avoid:
-- chaotic dashboards
-- hidden automation
-- uncontrolled tool execution
+## Deep-link rules
+- governance and knowledge detail may link to openclashd.com
+- trust / receipts / catalogs may link to safeclash.com
+- radar / cube / research depth may link to clashd27.com
 
-Every change should improve the user's ability to understand:
+## Do not do
+- do not turn Jeeves into a broad browser-first superapp
+- do not duplicate full research and trust portals in the app
+- do not add operator write authority to public-like surfaces
+- do not bypass openclashd-v2 trust boundaries
 
-What is happening  
-Why it is happening  
-What needs approval  
-What knowledge was created
+## Data rule
+Jeeves may summarize many data types, but only operator-relevant data should dominate launch surfaces.
+
+## AI instruction
+When changing Jeeves, optimize for operator focus over completeness.
