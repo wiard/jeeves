@@ -507,6 +507,376 @@ struct MissionControlCubeCellState: Identifiable, Hashable, Sendable {
     }
 }
 
+struct MissionControlCubeEvidenceSummary: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    let kind: String
+    let summary: String
+}
+
+struct MissionControlCubeCellDetailState: Identifiable, Hashable, Sendable {
+    let cell: MissionControlCubeCellState
+    let planeLabel: String
+    let layerLabel: String
+    let label: String
+    let collisionSummary: String
+    let emergenceSummary: String
+    let gravitySummary: String
+    let residueSummary: String
+    let topGapCandidateTitle: String
+    let topGapCandidateDetail: String
+    let topDiscoverySignalSummary: String
+    let confidenceSummary: String
+    let prioritySummary: String
+    let evidenceItems: [MissionControlCubeEvidenceSummary]
+    let evidencePosture: String
+    let representationSummary: String
+    let operatorGuidance: String
+    let attentionBand: String
+    let governanceSummary: String
+    let hasGovernanceFollowUp: Bool
+
+    var id: Int { cell.index }
+    var cellId: String { cell.coordinateLabel }
+}
+
+extension MissionControlDiscoveryCube {
+    func detailState(
+        for cellIndex: Int,
+        topSignal: RadarTopSignal?,
+        collisions: [RadarCollision],
+        emergence: [RadarCollision],
+        hotspots: [RadarGravityHotspot],
+        activations: [RadarActivation],
+        discoveries: [RadarDiscoveryCandidate],
+        knowledgeObjects: [KnowledgeObject],
+        pendingProposals: [Proposal]
+    ) -> MissionControlCubeCellDetailState? {
+        guard let cell = cells.first(where: { $0.index == cellIndex }) else { return nil }
+
+        let linkedCollisions = collisions
+            .filter { Self.cellIndices(from: $0.cellIds).contains(cell.index) }
+            .sorted { $0.density > $1.density }
+        let linkedEmergence = emergence
+            .filter { Self.cellIndices(from: $0.cellIds).contains(cell.index) }
+            .sorted { $0.density > $1.density }
+        let linkedHotspot = hotspots
+            .filter { Self.normalizedIndex(for: $0.cell) == cell.index }
+            .sorted { lhs, rhs in
+                if lhs.rank == rhs.rank {
+                    return lhs.gravityScore > rhs.gravityScore
+                }
+                return lhs.rank < rhs.rank
+            }
+            .first
+        let linkedActivations = activations
+            .filter { Self.cellIndices(from: $0.cellIds).contains(cell.index) }
+            .sorted { $0.residue > $1.residue }
+
+        let sortedDiscoveries = discoveries.sorted { lhs, rhs in
+            let leftRank = lhs.rank == 0 ? Int.max : lhs.rank
+            let rightRank = rhs.rank == 0 ? Int.max : rhs.rank
+            if leftRank == rightRank {
+                return lhs.candidateScore > rhs.candidateScore
+            }
+            return leftRank < rightRank
+        }
+        let linkedGapCandidate = Self.discoveryCandidate(for: cell, discoveries: sortedDiscoveries)
+
+        let linkedEvidence = knowledgeObjects
+            .filter { Self.knowledgeObjectCellIndices($0).contains(cell.index) }
+            .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        let evidenceItems = Array(linkedEvidence.prefix(3)).map { object in
+            MissionControlCubeEvidenceSummary(
+                id: object.objectId,
+                title: object.title,
+                kind: object.kind.uppercased(),
+                summary: object.summary.isEmpty ? "No summary available." : object.summary
+            )
+        }
+
+        let directlyLinkedGovernance = pendingProposals
+            .filter { $0.isGapDiscovery }
+            .filter { Self.proposalCellIndices($0).contains(cell.index) }
+            .sorted { ($0.priorityScore ?? 0) > ($1.priorityScore ?? 0) }
+        let fallbackGovernance = pendingProposals.filter(\.isGapDiscovery)
+
+        let attentionBand = Self.attentionBand(for: cell, governanceCount: directlyLinkedGovernance.count)
+
+        let collisionSummary: String
+        if let strongest = linkedCollisions.first {
+            let sourceLine = strongest.sources.prefix(2).joined(separator: ", ")
+            collisionSummary = "\(linkedCollisions.count) localized collision trace(s). Strongest density \(String(format: "%.2f", strongest.density)) across \(sourceLine.isEmpty ? "multiple sources" : sourceLine)."
+        } else if cell.hasCollision {
+            collisionSummary = "Collision pressure is visible in this cell, but the current CLASHD27 payload only exposes aggregate placement."
+        } else {
+            collisionSummary = "No localized collision cluster is attached to this cell."
+        }
+
+        let emergenceSummary: String
+        if let strongest = linkedEmergence.first {
+            emergenceSummary = "\(linkedEmergence.count) emergence trace(s) are centered here. Strongest density \(String(format: "%.2f", strongest.density))."
+        } else if cell.hasEmergence {
+            emergenceSummary = "Emergence pressure is present, but Jeeves is currently inferring this cell from aggregate CLASHD27 heat."
+        } else {
+            emergenceSummary = "No explicit emergence cluster is pinned to this cell yet."
+        }
+
+        let gravitySummary: String
+        if let hotspot = linkedHotspot {
+            let contributors = hotspot.contributors.prefix(3).joined(separator: ", ")
+            let contributorText = contributors.isEmpty ? "contributors not listed" : contributors
+            gravitySummary = "Gravity hotspot \(hotspot.band.uppercased()) with score \(String(format: "%.2f", hotspot.gravityScore)). \(contributorText)."
+        } else if cell.hasGravity {
+            gravitySummary = "Gravity or hotspot pressure is visible in this cell, but the detailed hotspot record is not attached."
+        } else {
+            gravitySummary = "No hotspot pressure is currently localized to this cell."
+        }
+
+        let residueSummary: String
+        if let activation = linkedActivations.first {
+            residueSummary = "Residue \(String(format: "%.2f", cell.residue)) with \(max(cell.persistence, linkedActivations.count)) persistence mark(s). Latest source: \(activation.source)."
+        } else if cell.hasResidue {
+            residueSummary = "Residue \(String(format: "%.2f", cell.residue)) is visible with persistence \(cell.persistence)."
+        } else {
+            residueSummary = "No residue or persistence trace is currently attached to this cell."
+        }
+
+        let topGapCandidateTitle: String
+        let topGapCandidateDetail: String
+        if let candidate = linkedGapCandidate {
+            topGapCandidateTitle = candidate.candidateType.replacingOccurrences(of: "_", with: " ").capitalized
+            let rank = candidate.rank > 0 ? "rank \(candidate.rank)" : "unranked"
+            let score = candidate.candidateScore > 0 ? "score \(String(format: "%.2f", candidate.candidateScore))" : "score pending"
+            let base = candidate.explanation.isEmpty ? candidate.sources.joined(separator: ", ") : candidate.explanation
+            topGapCandidateDetail = "\(rank) · \(score). \(base.isEmpty ? "CLASHD27 has not published an explanation yet." : base)"
+        } else if cell.hasGapFocus {
+            topGapCandidateTitle = "Gap focus warming"
+            topGapCandidateDetail = "This cell is carrying gap pressure, but CLASHD27 has not yet attached a cell-specific candidate payload."
+        } else {
+            topGapCandidateTitle = "No gap candidate pinned"
+            topGapCandidateDetail = "This cell does not currently have a localized gap candidate."
+        }
+
+        let topDiscoverySignalSummary: String
+        if let topSignal, cell.isTopCell || cell.hasResidue || cell.hasEmergence {
+            topDiscoverySignalSummary = "Top visible signal: \(topSignal.title) from \(topSignal.source), residue \(String(format: "%.2f", topSignal.residue))."
+        } else if let topSignal {
+            topDiscoverySignalSummary = "\(topSignal.title) is the strongest global signal, but it is not yet pinned to this cell."
+        } else {
+            topDiscoverySignalSummary = "No top discovery signal is available from CLASHD27 right now."
+        }
+
+        let confidenceSummary: String
+        if !linkedCollisions.isEmpty || !linkedEmergence.isEmpty || linkedHotspot != nil || !linkedEvidence.isEmpty {
+            confidenceSummary = "Confidence is stronger here because Jeeves has direct localized discovery or evidence signals for this cell."
+        } else if cell.isPlaceholder {
+            confidenceSummary = "Confidence is medium. This cell is partially derived from aggregate CLASHD27 radar counts while richer cell payloads are still sparse."
+        } else {
+            confidenceSummary = "Confidence is early. The cell is visible, but its signal stack is still thin."
+        }
+
+        let prioritySummary: String
+        if cell.isTopCell || !directlyLinkedGovernance.isEmpty {
+            prioritySummary = "Priority is elevated because this cell is either the current top zone or already has downstream governance pressure."
+        } else if cell.hasGapFocus || cell.hasEmergence || cell.hasGravity {
+            prioritySummary = "Priority is medium because the cell is heating, but governance follow-up is not yet explicit."
+        } else {
+            prioritySummary = "Priority is low for now; this is primarily an observation point."
+        }
+
+        let evidencePosture: String
+        if evidenceItems.isEmpty {
+            evidencePosture = "No linked knowledge or evidence objects are pinned to this cell yet. The cell currently represents live discovery posture only."
+        } else {
+            evidencePosture = "\(evidenceItems.count) linked knowledge or evidence object(s) reinforce this cell. Jeeves is exposing their summaries without altering attribution."
+        }
+
+        let representationSummary: String
+        if let note = cell.note, !note.isEmpty {
+            representationSummary = note
+        } else if let hotspot = linkedHotspot, !hotspot.explanation.isEmpty {
+            representationSummary = hotspot.explanation
+        } else if let candidate = linkedGapCandidate, !candidate.explanation.isEmpty {
+            representationSummary = candidate.explanation
+        } else {
+            representationSummary = "This cell represents the current localized blend of collision, emergence, gravity, residue, and gap attention visible from CLASHD27."
+        }
+
+        let governanceSummary: String
+        if let proposal = directlyLinkedGovernance.first {
+            let priority = proposal.priorityScore.map { "P\(Int($0.rounded()))" } ?? proposal.intent.risk.uppercased()
+            governanceSummary = "A downstream governance follow-up is already visible: \(proposal.title) (\(priority)). openclashd-v2 remains the only execution authority."
+        } else if cell.hasGapFocus && !fallbackGovernance.isEmpty {
+            governanceSummary = "Gap-related governance follow-up exists elsewhere in the queue, but it is not explicitly pinned to this cell yet."
+        } else {
+            governanceSummary = "No downstream governance follow-up is currently linked to this cell."
+        }
+
+        return MissionControlCubeCellDetailState(
+            cell: cell,
+            planeLabel: String(format: "Plane %02d", cell.position.z + 1),
+            layerLabel: Self.layerLabel(for: cell.position.z),
+            label: Self.label(for: cell, hotspot: linkedHotspot, candidate: linkedGapCandidate),
+            collisionSummary: collisionSummary,
+            emergenceSummary: emergenceSummary,
+            gravitySummary: gravitySummary,
+            residueSummary: residueSummary,
+            topGapCandidateTitle: topGapCandidateTitle,
+            topGapCandidateDetail: topGapCandidateDetail,
+            topDiscoverySignalSummary: topDiscoverySignalSummary,
+            confidenceSummary: confidenceSummary,
+            prioritySummary: prioritySummary,
+            evidenceItems: evidenceItems,
+            evidencePosture: evidencePosture,
+            representationSummary: representationSummary,
+            operatorGuidance: Self.operatorGuidance(
+                for: cell,
+                attentionBand: attentionBand,
+                evidenceCount: evidenceItems.count,
+                governanceCount: directlyLinkedGovernance.count,
+                gapCandidate: linkedGapCandidate
+            ),
+            attentionBand: attentionBand,
+            governanceSummary: governanceSummary,
+            hasGovernanceFollowUp: !directlyLinkedGovernance.isEmpty
+        )
+    }
+
+    private static func discoveryCandidate(
+        for cell: MissionControlCubeCellState,
+        discoveries: [RadarDiscoveryCandidate]
+    ) -> RadarDiscoveryCandidate? {
+        guard !discoveries.isEmpty, cell.hasGapFocus else { return nil }
+        if let exactRank = cell.gapFocusRank,
+           exactRank > 0,
+           let ranked = discoveries.first(where: { $0.rank == exactRank }) {
+            return ranked
+        }
+        if let rank = cell.gapFocusRank, rank > 0 {
+            return discoveries[safe: min(rank - 1, discoveries.count - 1)]
+        }
+        return discoveries.first
+    }
+
+    private static func proposalCellIndices(_ proposal: Proposal) -> [Int] {
+        var rawValues: [String] = []
+        if let cubeCell = proposal.gapDetails?.cubeCell, !cubeCell.isEmpty {
+            rawValues.append(cubeCell)
+        }
+        return unique(rawValues.compactMap(parseCellReference))
+    }
+
+    private static func knowledgeObjectCellIndices(_ object: KnowledgeObject) -> [Int] {
+        var rawValues: [String] = []
+
+        if let metadata = object.metadata {
+            let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+            for key in ["linked_cells", "cube_cells", "cells", "cell", "cube_cell", "linked_cell"] {
+                guard let value = normalized[key] else { continue }
+                if let list = value.stringArrayValue {
+                    rawValues.append(contentsOf: list)
+                } else if let scalar = value.scalarStringValue {
+                    rawValues.append(scalar)
+                }
+            }
+        }
+
+        if let refs = object.sourceRefs {
+            for ref in refs {
+                rawValues.append(ref.sourceId)
+                if let label = ref.label {
+                    rawValues.append(label)
+                }
+            }
+        }
+
+        if let linked = object.linkedObjectIds {
+            rawValues.append(contentsOf: linked)
+        }
+
+        return unique(rawValues.compactMap(parseCellReference))
+    }
+
+    private static func label(
+        for cell: MissionControlCubeCellState,
+        hotspot: RadarGravityHotspot?,
+        candidate: RadarDiscoveryCandidate?
+    ) -> String {
+        if let hotspot {
+            return hotspot.axes.what.replacingOccurrences(of: "-", with: " ").capitalized
+        }
+        if let candidate {
+            return candidate.candidateType.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+        if cell.hasEmergence { return "Emergence watch" }
+        if cell.hasCollision { return "Collision watch" }
+        if cell.hasResidue { return "Residue corridor" }
+        return "Observation cell"
+    }
+
+    private static func layerLabel(for z: Int) -> String {
+        switch z {
+        case 2:
+            return "Upper layer"
+        case 1:
+            return "Middle layer"
+        default:
+            return "Lower layer"
+        }
+    }
+
+    private static func attentionBand(for cell: MissionControlCubeCellState, governanceCount: Int) -> String {
+        if cell.isTopCell || governanceCount > 0 || cell.pressure >= 0.72 {
+            return "STRONG"
+        }
+        if cell.pressure >= 0.40 || cell.hasEmergence || cell.hasGapFocus || cell.hasGravity {
+            return "MEDIUM"
+        }
+        return "EARLY"
+    }
+
+    private static func operatorGuidance(
+        for cell: MissionControlCubeCellState,
+        attentionBand: String,
+        evidenceCount: Int,
+        governanceCount: Int,
+        gapCandidate: RadarDiscoveryCandidate?
+    ) -> String {
+        var reasons: [String] = []
+        if cell.isTopCell {
+            reasons.append("it is the current top discovery zone")
+        }
+        if cell.hasEmergence {
+            reasons.append("emergence pressure is visible")
+        }
+        if cell.hasGapFocus {
+            reasons.append("gap focus is accumulating")
+        }
+        if evidenceCount > 0 {
+            reasons.append("knowledge objects are already linked")
+        }
+        if governanceCount > 0 {
+            reasons.append("governance follow-up already exists downstream")
+        }
+
+        let reasonLine = reasons.isEmpty
+            ? "This cell is primarily worth watching for change rather than action."
+            : "This cell deserves attention because " + reasons.joined(separator: ", ") + "."
+
+        let gapLine: String
+        if let gapCandidate {
+            gapLine = "The leading opportunity is \(gapCandidate.candidateType.replacingOccurrences(of: "_", with: " "))."
+        } else if cell.hasGapFocus {
+            gapLine = "Opportunity pressure is visible, but the candidate payload is still partial."
+        } else {
+            gapLine = "No opportunity candidate is localized yet."
+        }
+
+        return "\(reasonLine) Signal strength is \(attentionBand.lowercased()). \(gapLine)"
+    }
+}
+
 private extension Array {
     subscript(safe index: Int) -> Element? {
         guard indices.contains(index) else { return nil }

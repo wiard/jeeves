@@ -4,6 +4,7 @@ struct MissionControlDashboardView: View {
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
     @State private var model = MissionControlViewModel()
+    @State private var selectedDiscoveryCellIndex: Int?
 
     var body: some View {
         NavigationStack {
@@ -106,8 +107,16 @@ struct MissionControlDashboardView: View {
 
             MissionControlDiscoveryCubeView(
                 cube: discoveryCube,
-                topSignal: topDiscoverySignal
+                topSignal: topDiscoverySignal,
+                selectedCellIndex: resolvedSelectedDiscoveryCellIndex,
+                onSelectCell: { cell in
+                    selectedDiscoveryCellIndex = cell.index
+                }
             )
+
+            if let detail = selectedDiscoveryDetail {
+                MissionControlCubeCellDetailView(detail: detail)
+            }
 
             if let signal = topDiscoverySignal {
                 MissionControlSpotlightCard(
@@ -430,6 +439,31 @@ struct MissionControlDashboardView: View {
             discoveries: poller.radarDiscoveryCandidates,
             knowledgeStatus: knowledgeSnapshot,
             pendingGapCount: pendingGapCount
+        )
+    }
+
+    private var resolvedSelectedDiscoveryCellIndex: Int? {
+        if let selectedDiscoveryCellIndex,
+           discoveryCube.cells.contains(where: { $0.index == selectedDiscoveryCellIndex }) {
+            return selectedDiscoveryCellIndex
+        }
+        return discoveryCube.topCellIndex
+            ?? discoveryCube.cells.first(where: \.isActive)?.index
+            ?? discoveryCube.cells.first?.index
+    }
+
+    private var selectedDiscoveryDetail: MissionControlCubeCellDetailState? {
+        guard let index = resolvedSelectedDiscoveryCellIndex else { return nil }
+        return discoveryCube.detailState(
+            for: index,
+            topSignal: topDiscoverySignal,
+            collisions: poller.radarCollisions,
+            emergence: poller.radarEmergence,
+            hotspots: poller.radarGravityHotspots,
+            activations: poller.radarActivations,
+            discoveries: poller.radarDiscoveryCandidates,
+            knowledgeObjects: poller.recentKnowledgeObjects,
+            pendingProposals: poller.pendingProposals
         )
     }
 
@@ -992,6 +1026,8 @@ private struct MissionControlFeatureRow: View {
 private struct MissionControlDiscoveryCubeView: View {
     let cube: MissionControlDiscoveryCube
     let topSignal: RadarTopSignal?
+    let selectedCellIndex: Int?
+    let onSelectCell: (MissionControlCubeCellState) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1035,6 +1071,9 @@ private struct MissionControlDiscoveryCubeView: View {
                         .font(.jeevesCaption)
                         .foregroundStyle(Color.white.opacity(0.72))
                         .fixedSize(horizontal: false, vertical: true)
+                    Text("Select a cell to inspect why it matters.")
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(Color.white.opacity(0.46))
                 }
 
                 Spacer(minLength: 12)
@@ -1079,7 +1118,13 @@ private struct MissionControlDiscoveryCubeView: View {
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                         ForEach(plane.cells) { cell in
-                            MissionControlCubeTile(cell: cell)
+                            MissionControlCubeTile(
+                                cell: cell,
+                                isSelected: selectedCellIndex == cell.index,
+                                onSelect: {
+                                    onSelectCell(cell)
+                                }
+                            )
                         }
                     }
                 }
@@ -1158,66 +1203,75 @@ private struct MissionControlDiscoveryCubeView: View {
 
 private struct MissionControlCubeTile: View {
     let cell: MissionControlCubeCellState
+    let isSelected: Bool
+    let onSelect: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(cell.coordinateLabel)
-                    .font(.jeevesMonoSmall)
-                    .foregroundStyle(.white.opacity(0.88))
-
-                Spacer(minLength: 4)
-
-                if cell.isTopCell {
-                    Text("TOP")
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(cell.coordinateLabel)
                         .font(.jeevesMonoSmall)
-                        .foregroundStyle(Color.orange.opacity(0.95))
-                } else if cell.gapFocusRank != nil {
-                    Text("R\(cell.gapFocusRank ?? 0)")
-                        .font(.jeevesMonoSmall)
-                        .foregroundStyle(Color.orange.opacity(0.9))
-                }
-            }
+                        .foregroundStyle(.white.opacity(0.88))
 
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.12))
-                .frame(height: 5)
-                .overlay(alignment: .leading) {
-                    Capsule(style: .continuous)
-                        .fill(tileAccent)
-                        .frame(width: max(10, 64 * cell.pressure), height: 5)
+                    Spacer(minLength: 4)
+
+                    if isSelected {
+                        Text("VIEW")
+                            .font(.jeevesMonoSmall)
+                            .foregroundStyle(Color.white.opacity(0.92))
+                    } else if cell.isTopCell {
+                        Text("TOP")
+                            .font(.jeevesMonoSmall)
+                            .foregroundStyle(Color.orange.opacity(0.95))
+                    } else if cell.gapFocusRank != nil {
+                        Text("R\(cell.gapFocusRank ?? 0)")
+                            .font(.jeevesMonoSmall)
+                            .foregroundStyle(Color.orange.opacity(0.9))
+                    }
                 }
 
-            HStack(spacing: 5) {
-                signalBadge("C", active: cell.hasCollision, color: .cyan)
-                signalBadge("E", active: cell.hasEmergence, color: .purple)
-                signalBadge("G", active: cell.hasGravity, color: .yellow)
-                signalBadge("R", active: cell.hasResidue, color: .blue)
-                signalBadge("Gap", active: cell.hasGapFocus, color: .orange)
-            }
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+                    .frame(height: 5)
+                    .overlay(alignment: .leading) {
+                        Capsule(style: .continuous)
+                            .fill(tileAccent)
+                            .frame(width: max(10, 64 * cell.pressure), height: 5)
+                    }
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(metricText)
-                    .font(.jeevesCaption)
-                    .foregroundStyle(.white.opacity(cell.isActive ? 0.84 : 0.42))
+                HStack(spacing: 5) {
+                    signalBadge("C", active: cell.hasCollision, color: .cyan)
+                    signalBadge("E", active: cell.hasEmergence, color: .purple)
+                    signalBadge("G", active: cell.hasGravity, color: .yellow)
+                    signalBadge("R", active: cell.hasResidue, color: .blue)
+                    signalBadge("Gap", active: cell.hasGapFocus, color: .orange)
+                }
 
-                Spacer(minLength: 6)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(metricText)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.white.opacity(cell.isActive ? 0.84 : 0.42))
 
-                if cell.sourceCount > 0 {
-                    Text("\(cell.sourceCount)s")
-                        .font(.jeevesMonoSmall)
-                        .foregroundStyle(.white.opacity(0.46))
+                    Spacer(minLength: 6)
+
+                    if cell.sourceCount > 0 {
+                        Text("\(cell.sourceCount)s")
+                            .font(.jeevesMonoSmall)
+                            .foregroundStyle(.white.opacity(0.46))
+                    }
                 }
             }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+            .background(tileBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(tileStroke, lineWidth: isSelected || cell.isTopCell ? 1.5 : 1)
+            )
+            .shadow(color: isSelected ? Color.white.opacity(0.16) : (cell.isTopCell ? tileAccent.opacity(0.28) : .clear), radius: 10)
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-        .background(tileBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(tileStroke, lineWidth: cell.isTopCell ? 1.5 : 1)
-        )
-        .shadow(color: cell.isTopCell ? tileAccent.opacity(0.28) : .clear, radius: 10)
+        .buttonStyle(.plain)
     }
 
     private var metricText: String {
@@ -1250,8 +1304,8 @@ private struct MissionControlCubeTile: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        tileAccent.opacity(cell.isActive ? 0.26 : 0.08),
-                        Color.white.opacity(cell.isTopCell ? 0.10 : 0.03),
+                        tileAccent.opacity(isSelected ? 0.34 : (cell.isActive ? 0.26 : 0.08)),
+                        Color.white.opacity(isSelected || cell.isTopCell ? 0.12 : 0.03),
                         Color.black.opacity(0.18)
                     ],
                     startPoint: .topLeading,
@@ -1261,6 +1315,9 @@ private struct MissionControlCubeTile: View {
     }
 
     private var tileStroke: Color {
+        if isSelected {
+            return Color.white.opacity(0.88)
+        }
         if cell.isTopCell {
             return tileAccent.opacity(0.9)
         }
@@ -1280,6 +1337,118 @@ private struct MissionControlCubeTile: View {
                 Capsule(style: .continuous)
                     .fill(active ? color.opacity(0.18) : Color.white.opacity(0.05))
             )
+    }
+}
+
+private struct MissionControlCubeCellDetailView: View {
+    let detail: MissionControlCubeCellDetailState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+
+            MissionControlMiniMetricRow(items: [
+                .init(label: "Cell", value: detail.cellId, tint: .cyan),
+                .init(label: "Plane", value: detail.planeLabel, tint: .blue),
+                .init(label: "Layer", value: detail.layerLabel, tint: .secondary),
+                .init(
+                    label: "Governance",
+                    value: detail.hasGovernanceFollowUp ? "linked" : "none",
+                    tint: detail.hasGovernanceFollowUp ? .orange : .secondary
+                )
+            ])
+
+            MissionControlSummaryStrip(items: [
+                .init(label: "Collision", detail: detail.collisionSummary, tint: .cyan),
+                .init(label: "Emergence", detail: detail.emergenceSummary, tint: .purple),
+                .init(label: "Gravity", detail: detail.gravitySummary, tint: .yellow),
+                .init(label: "Residue", detail: detail.residueSummary, tint: .blue)
+            ])
+
+            MissionControlFeatureRow(
+                title: detail.topGapCandidateTitle,
+                detail: detail.topGapCandidateDetail + " " + detail.topDiscoverySignalSummary + " " + detail.confidenceSummary + " " + detail.prioritySummary,
+                tint: detail.cell.hasGapFocus ? .orange : .cyan,
+                badge: detail.attentionBand
+            )
+
+            MissionControlFeatureRow(
+                title: "Evidence posture",
+                detail: detail.evidencePosture + " " + detail.representationSummary,
+                tint: .green
+            )
+
+            if detail.evidenceItems.isEmpty {
+                MissionControlPlaceholderRow(
+                    title: "Linked knowledge / evidence",
+                    detail: "No cell-linked knowledge objects are visible yet."
+                )
+            } else {
+                ForEach(detail.evidenceItems) { item in
+                    MissionControlFeatureRow(
+                        title: item.title,
+                        detail: item.summary,
+                        tint: color(for: item.kind),
+                        badge: item.kind
+                    )
+                }
+            }
+
+            MissionControlFeatureRow(
+                title: "Operator guidance",
+                detail: detail.operatorGuidance + " " + detail.governanceSummary,
+                tint: detail.hasGovernanceFollowUp ? .orange : .blue,
+                badge: detail.attentionBand
+            )
+
+            MissionControlReadOnlyBadge(
+                title: "Inspection only",
+                detail: "This cell detail surface explains why the discovery zone matters. It does not add approval or execution controls to Jeeves."
+            )
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.42))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.cyan.opacity(0.10), lineWidth: 1)
+                )
+        )
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Cell inspection".uppercased())
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(.cyan)
+                Text("\(detail.cellId) · \(detail.label)")
+                    .font(.jeevesHeadline)
+                Text("\(detail.planeLabel) · \(detail.layerLabel)")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(detail.attentionBand)
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(detail.hasGovernanceFollowUp ? .orange : .blue)
+        }
+    }
+
+    private func color(for kind: String) -> Color {
+        switch kind.lowercased() {
+        case "evidence":
+            return .blue
+        case "discovery":
+            return .purple
+        case "action_receipt":
+            return .green
+        default:
+            return .secondary
+        }
     }
 }
 
