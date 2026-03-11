@@ -372,6 +372,42 @@ struct GapReviewRecord: Identifiable {
         )
     }
 
+    static func fromGap(
+        _ gap: GovernedGapEntry,
+        action: ActionSummary? = nil,
+        knowledge: [KnowledgeObject] = []
+    ) -> GapReviewRecord? {
+        let details = gap.gapDetails
+        let knowledgeIds = linkedKnowledgeIds(
+            proposalId: gap.gapProposalId,
+            action: action,
+            knowledge: knowledge
+        )
+
+        return GapReviewRecord(
+            proposalId: gap.gapProposalId,
+            title: gap.title,
+            summary: details.summary,
+            sourceEvidence: details.sourceEvidence,
+            cubeCell: details.cubeCell,
+            scores: details.scores,
+            hypothesis: details.hypothesis,
+            verificationPlan: details.verificationPlan,
+            killTests: details.killTests,
+            recommendedAction: details.recommendedAction,
+            status: gap.status == "proposed" ? "pending" : gap.status,
+            agentId: gap.source,
+            risk: gap.risk,
+            intentKey: "intent.gap.govern",
+            createdAtIso: gap.createdAtIso,
+            decidedAtIso: gap.decidedAtIso,
+            decisionReason: gap.decisionReason,
+            action: action,
+            knowledgeObjectIds: Array(Set(knowledgeIds + gap.knowledgeObjectIds)).sorted(),
+            auditHint: auditHint(status: gap.status, action: action)
+        )
+    }
+
     private static func fallbackDetails(
         title: String,
         summary: String?,

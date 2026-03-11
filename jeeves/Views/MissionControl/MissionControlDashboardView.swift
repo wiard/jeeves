@@ -559,7 +559,10 @@ struct MissionControlDashboardView: View {
     }
 
     private var pendingGapCount: Int {
-        poller.pendingProposals.filter(\.isGapDiscovery).count
+        max(
+            poller.pendingProposals.filter(\.isGapDiscovery).count,
+            poller.gapProposals.filter(\.isPending).count
+        )
     }
 
     private var approvedCount: Int {

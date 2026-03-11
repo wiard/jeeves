@@ -21,6 +21,8 @@ final class ProposalPoller {
     var incomingTools: [IncomingToolSummary] = []
     var extensionUsesDemoFallback = false
     var decidedProposals: [DecidedProposal] = []
+    var gapProposals: [GovernedGapEntry] = []
+    var recentActions: [ActionSummary] = []
     var recentKnowledgeObjects: [KnowledgeObject] = []
     var lastActionReceipt: ActionSummary?
     var lastDecideLinkedKnowledge: [KnowledgeObject] = []
@@ -284,6 +286,30 @@ final class ProposalPoller {
         }
 
         do {
+            let fetchedGaps = try await client.fetchGaps(limit: 40)
+            gapProposals = fetchedGaps
+            observedSuccessfulResponse = true
+        } catch {
+            #if DEBUG
+            print("[Jeeves][ProposalPoller] gaps fetch failed: \(error)")
+            #endif
+        }
+
+        do {
+            let actions = try await client.fetchActions()
+            recentActions = actions.sorted { lhs, rhs in
+                let left = lhs.receipt?.completedAtIso ?? lhs.id
+                let right = rhs.receipt?.completedAtIso ?? rhs.id
+                return left > right
+            }
+            observedSuccessfulResponse = true
+        } catch {
+            #if DEBUG
+            print("[Jeeves][ProposalPoller] actions fetch failed: \(error)")
+            #endif
+        }
+
+        do {
             let snapshot = try await client.fetchObservatorySnapshot(proposals: proposals)
             observedSuccessfulResponse = true
             observatorySnapshot = snapshot
@@ -363,6 +389,18 @@ final class ProposalPoller {
         let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
 
         do {
+            if gapProposals.contains(where: { $0.gapProposalId == proposalId }) {
+                let response = try await client.decideGap(gapProposalId: proposalId, decision: decision, reason: reason)
+                if response.ok {
+                    lastActionReceipt = nil
+                    lastDecideLinkedKnowledge = []
+                    await refresh(gateway: gateway)
+                    return .success
+                }
+                await refresh(gateway: gateway)
+                return .failure(message: response.reason ?? "Gap-besluit niet bevestigd door backend.")
+            }
+
             let response = try await client.decideProposal(proposalId: proposalId, decision: decision, reason: reason)
             if response.ok {
                 if let action = response.action {
@@ -543,6 +581,10 @@ final class ProposalPoller {
         incomingTools = demoIncomingTools()
         extensionUsesDemoFallback = true
         decidedProposals = demoDecidedProposals(tick: demoTick)
+        gapProposals = []
+        recentActions = []
+        lastActionReceipt = nil
+        lastDecideLinkedKnowledge = []
         NotificationManager.shared.updateBadge(count: pendingProposals.count)
 
         let escalated = snapshot.collisions

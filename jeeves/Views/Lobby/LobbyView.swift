@@ -913,14 +913,15 @@ struct LobbyView: View {
     }
 
     private var queueSize: Int {
-        poller.pendingProposals.count + pendingExtensionProposals.count
+        let nonGapPending = poller.pendingProposals.filter { !$0.isGapDiscovery }.count
+        return gapPendingRecords.count + nonGapPending + pendingExtensionProposals.count
     }
 
     private var pendingExtensionProposals: [ExtensionProposal] {
         poller.extensionProposals.filter(\.isPending)
     }
 
-    private var gapPendingRecords: [GapReviewRecord] {
+    private var fallbackGapPendingRecords: [GapReviewRecord] {
         poller.pendingProposals.compactMap { proposal in
             GapReviewRecord.fromProposal(
                 proposal,
@@ -936,7 +937,29 @@ struct LobbyView: View {
         }
     }
 
-    private var gapHistoryRecords: [GapReviewRecord] {
+    private var liveGapPendingRecords: [GapReviewRecord] {
+        poller.gapProposals
+            .filter(\.isPending)
+            .compactMap { gap in
+                GapReviewRecord.fromGap(
+                    gap,
+                    action: gapAction(for: gap),
+                    knowledge: poller.recentKnowledgeObjects
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.primaryScore != rhs.primaryScore {
+                    return lhs.primaryScore > rhs.primaryScore
+                }
+                return lhs.createdAtIso > rhs.createdAtIso
+            }
+    }
+
+    private var gapPendingRecords: [GapReviewRecord] {
+        mergeGapRecords(primary: liveGapPendingRecords, fallback: fallbackGapPendingRecords)
+    }
+
+    private var fallbackGapHistoryRecords: [GapReviewRecord] {
         poller.decidedProposals.compactMap { decision in
             GapReviewRecord.fromDecision(
                 decision,
@@ -949,12 +972,46 @@ struct LobbyView: View {
         }
     }
 
+    private var liveGapHistoryRecords: [GapReviewRecord] {
+        poller.gapProposals
+            .filter { !$0.isPending }
+            .compactMap { gap in
+                GapReviewRecord.fromGap(
+                    gap,
+                    action: gapAction(for: gap),
+                    knowledge: poller.recentKnowledgeObjects
+                )
+            }
+            .sorted { lhs, rhs in
+                (lhs.decidedAtIso ?? lhs.createdAtIso) > (rhs.decidedAtIso ?? rhs.createdAtIso)
+            }
+    }
+
+    private var gapHistoryRecords: [GapReviewRecord] {
+        mergeGapRecords(primary: liveGapHistoryRecords, fallback: fallbackGapHistoryRecords)
+    }
+
     private var decisionsToday: Int {
         let calendar = Calendar.current
         return poller.decidedProposals.filter { decision in
             guard let decidedAt = decision.decidedAt else { return false }
             return calendar.isDateInToday(decidedAt)
         }.count
+    }
+
+    private func gapAction(for gap: GovernedGapEntry) -> ActionSummary? {
+        guard !gap.actionIds.isEmpty else { return nil }
+        let actionIdSet = Set(gap.actionIds)
+        return poller.recentActions.first(where: { actionIdSet.contains($0.actionId) })
+    }
+
+    private func mergeGapRecords(primary: [GapReviewRecord], fallback: [GapReviewRecord]) -> [GapReviewRecord] {
+        var merged: [GapReviewRecord] = primary
+        let existingIds = Set(primary.map(\.proposalId))
+        for record in fallback where !existingIds.contains(record.proposalId) {
+            merged.append(record)
+        }
+        return merged
     }
 
     private var triageItems: [TriageReviewItem] {
@@ -3806,25 +3863,24 @@ struct LobbyView: View {
     }
 
     private func handleGapDecision(_ record: GapReviewRecord, action: GapDecisionAction) {
-        guard let proposal = poller.pendingProposals.first(where: { $0.proposalId == record.proposalId }) else {
-            decisionErrorMessage = "Voorstel is niet meer beschikbaar in de governance-queue."
-            showDecisionError = true
-            return
-        }
         selectedGapRecord = nil
-        requestProposalDecision(proposal: proposal, decision: action.decisionValue)
+        requestGovernedDecision(proposalId: record.proposalId, risk: record.risk, decision: action.decisionValue)
     }
 
     private func requestProposalDecision(proposal: Proposal, decision: String) {
+        requestGovernedDecision(proposalId: proposal.proposalId, risk: proposal.intent.risk, decision: decision)
+    }
+
+    private func requestGovernedDecision(proposalId: String, risk: String, decision: String) {
         guard decidingProposalId == nil else { return }
 
-        if proposal.intent.risk == "orange" && decision == "approve" {
-            pendingDecision = (proposal.proposalId, decision)
+        if risk == "orange" && decision == "approve" {
+            pendingDecision = (proposalId, decision)
             showOrangeConfirm = true
             return
         }
 
-        executeDecision(proposalId: proposal.proposalId, decision: decision)
+        executeDecision(proposalId: proposalId, decision: decision)
     }
 
     private func executeDecision(proposalId: String, decision: String) {

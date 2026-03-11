@@ -30,12 +30,34 @@ actor GatewayClient {
         return try await post("/api/agents/proposals/decide", body: body)
     }
 
+    func decideGap(gapProposalId: String, decision: String, reason: String? = nil) async throws -> GapDecisionResponse {
+        let body = GapDecisionRequest(gapProposalId: gapProposalId, decision: decision, reason: reason)
+        return try await post("/api/gaps/decide", body: body)
+    }
+
     func fetchProposals() async throws -> [Proposal] {
         if let direct: [Proposal] = try? await get("/api/agents/proposals") {
             return direct
         }
         let envelope: ProposalsEnvelope = try await get("/api/agents/proposals")
         return envelope.resolved
+    }
+
+    func fetchGaps(limit: Int = 50) async throws -> [GovernedGapEntry] {
+        let boundedLimit = max(1, min(limit, 100))
+        let (data, _) = try await request(
+            path: "/api/gaps",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
+        if let direct = try? decoder.decode([GovernedGapEntry].self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(GovernedGapsEnvelope.self, from: data) {
+            return envelope.resolved
+        }
+        return []
     }
 
     func fetchExtensions() async throws -> [ExtensionProposal] {

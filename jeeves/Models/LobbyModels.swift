@@ -378,6 +378,155 @@ struct GapProposalScores: Codable {
     }
 }
 
+struct GapActionRequestSummary: Decodable {
+    let actionType: String
+    let title: String
+    let description: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        actionType = container.decodeFirstString(for: ["actionType", "action_type", "type"]) ?? "investigate"
+        title = container.decodeFirstString(for: ["title", "name"]) ?? "Gap follow-up"
+        description = container.decodeFirstString(for: ["description", "summary"]) ?? ""
+    }
+}
+
+struct GovernedGapEntry: Decodable, Identifiable {
+    let gapId: String
+    let gapProposalId: String
+    let source: String
+    let sourcePacketId: String
+    let detectedAtIso: String
+    let createdAtIso: String
+    let title: String
+    let summary: String
+    let gapType: String
+    let risk: String
+    let requiresConsent: Bool
+    let status: String
+    let evidence: [GapEvidenceReference]
+    let actions: [GapActionRequestSummary]
+    let metadata: [String: AnyCodableValue]?
+    let actionIds: [String]
+    let actionProposalIds: [String]
+    let knowledgeObjectIds: [String]
+    let decisionReason: String?
+    let proposedAtIso: String?
+    let deferredAtIso: String?
+    let approvedAtIso: String?
+    let deniedAtIso: String?
+    let executedAtIso: String?
+    let archivedAtIso: String?
+
+    var id: String { gapProposalId }
+
+    var isPending: Bool {
+        let normalized = status.lowercased()
+        return normalized == "detected" || normalized == "proposed"
+    }
+
+    var decidedAtIso: String? {
+        deferredAtIso ?? approvedAtIso ?? deniedAtIso ?? archivedAtIso ?? executedAtIso
+    }
+
+    var gapDetails: GapProposalDetails {
+        let summaryValue = metadataString(
+            metadata,
+            keys: ["summary", "gap_summary", "operator_summary", "why_matters"]
+        ) ?? summary
+
+        let evidenceRefs = metadataEvidence(metadata)
+        let verification = metadataStrings(
+            metadata,
+            keys: ["verification_plan", "verificationPlan", "verification_steps"]
+        )
+        let killTests = metadataStrings(
+            metadata,
+            keys: ["kill_tests", "killTests", "falsifiers", "kill_switch_tests"]
+        )
+        let recommended = metadataString(
+            metadata,
+            keys: ["recommended_action", "recommendedAction", "recommendation"]
+        ) ?? actions.first?.title
+
+        return GapProposalDetails(
+            summary: summaryValue,
+            sourceEvidence: evidenceRefs.isEmpty ? evidence : evidenceRefs,
+            cubeCell: metadataString(metadata, keys: ["cube_cell", "cubeCell", "cell", "linked_cell"]) ?? "Unmapped",
+            scores: GapProposalScores.fromMetadata(metadata, priorityFactors: nil),
+            hypothesis: metadataString(metadata, keys: ["hypothesis", "thesis"])
+                ?? "Investigate whether this gap warrants a governed follow-up action.",
+            verificationPlan: verification,
+            killTests: killTests,
+            recommendedAction: recommended ?? "Hold at proposal stage until an operator approves a bounded follow-up."
+        )
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        gapId = container.decodeFirstString(for: ["gapId", "gap_id"]) ?? UUID().uuidString
+        gapProposalId = container.decodeFirstString(for: ["gapProposalId", "gap_proposal_id", "proposalId", "proposal_id"])
+            ?? UUID().uuidString
+        source = container.decodeFirstString(for: ["source", "sourceSystem", "source_system"]) ?? "clashd27"
+        sourcePacketId = container.decodeFirstString(for: ["sourcePacketId", "source_packet_id", "packetId", "packet_id"])
+            ?? gapProposalId
+        detectedAtIso = container.decodeFirstString(for: ["detectedAtIso", "detected_at_iso"]) ?? ISO8601DateFormatter().string(from: Date())
+        createdAtIso = container.decodeFirstString(for: ["createdAtIso", "created_at_iso", "proposedAtIso", "proposed_at_iso"])
+            ?? detectedAtIso
+        title = container.decodeFirstString(for: ["title", "name"]) ?? "Governed gap"
+        summary = container.decodeFirstString(for: ["summary", "description"]) ?? "Governed gap awaiting operator review."
+        gapType = container.decodeFirstString(for: ["gapType", "gap_type", "type"]) ?? "governed_gap"
+        risk = container.decodeFirstString(for: ["risk", "riskLevel", "risk_level"]) ?? "green"
+        requiresConsent = container.decodeFirstBool(for: ["requiresConsent", "requires_consent"]) ?? true
+        status = container.decodeFirstString(for: ["status"]) ?? "proposed"
+        evidence = container.decodeFirstDecodableArray(
+            GapEvidenceReference.self,
+            for: ["evidence", "sourceEvidence", "source_evidence", "evidenceRefs", "evidence_refs"]
+        ) ?? []
+        actions = container.decodeFirstDecodableArray(
+            GapActionRequestSummary.self,
+            for: ["actions", "followUpActions", "follow_up_actions"]
+        ) ?? []
+        metadata = container.decodeFirstDictionary(for: ["metadata", "details", "payload"])
+        actionIds = container.decodeFirstStringArray(for: ["actionIds", "action_ids"])
+        actionProposalIds = container.decodeFirstStringArray(for: ["actionProposalIds", "action_proposal_ids"])
+        knowledgeObjectIds = container.decodeFirstStringArray(for: ["knowledgeObjectIds", "knowledge_object_ids"])
+        decisionReason = container.decodeFirstString(for: ["decisionReason", "decision_reason", "reason"])
+        proposedAtIso = container.decodeFirstString(for: ["proposedAtIso", "proposed_at_iso"])
+        deferredAtIso = container.decodeFirstString(for: ["deferredAtIso", "deferred_at_iso"])
+        approvedAtIso = container.decodeFirstString(for: ["approvedAtIso", "approved_at_iso"])
+        deniedAtIso = container.decodeFirstString(for: ["deniedAtIso", "denied_at_iso"])
+        executedAtIso = container.decodeFirstString(for: ["executedAtIso", "executed_at_iso"])
+        archivedAtIso = container.decodeFirstString(for: ["archivedAtIso", "archived_at_iso"])
+    }
+}
+
+struct GovernedGapsEnvelope: Decodable {
+    let gaps: [GovernedGapEntry]?
+    let items: [GovernedGapEntry]?
+    let data: [GovernedGapEntry]?
+    let ok: Bool?
+
+    var resolved: [GovernedGapEntry] {
+        gaps ?? items ?? data ?? []
+    }
+}
+
+struct GapDecisionRequest: Encodable {
+    let gapProposalId: String
+    let decision: String
+    let reason: String?
+}
+
+struct GapDecisionResponse: Decodable {
+    let ok: Bool
+    let status: String?
+    let executed: Bool?
+    let reason: String?
+    let actionIds: [String]?
+    let knowledgeObjectIds: [String]?
+}
+
 struct Challenge: Codable, Identifiable {
     let challengeId: String
     let title: String
