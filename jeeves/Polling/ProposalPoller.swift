@@ -24,6 +24,9 @@ final class ProposalPoller {
     var recentKnowledgeObjects: [KnowledgeObject] = []
     var lastActionReceipt: ActionSummary?
     var lastDecideLinkedKnowledge: [KnowledgeObject] = []
+    var conductorState: ConductorState?
+    var knowledgeStatus: KnowledgeStatus?
+    var safeClashFeed: SafeClashBrowserFeed?
     var emergenceClusters: [EmergenceCluster] = []
     var streamEvents: [ObservatoryStreamEvent] = []
     var radarStatus: RadarStatusSnapshot?
@@ -90,6 +93,8 @@ final class ProposalPoller {
         }
 
         let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
+        let builder = AuthorizedRequestBuilder(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
+        let safeClashClient = makeSafeClashClient(resolvedEndpoint: resolvedEndpoint)
         #if DEBUG
         print("[Jeeves][ProposalPoller] refresh start host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port) auth=true connected=\(gateway.isConnected)")
         #endif
@@ -97,6 +102,9 @@ final class ProposalPoller {
         var proposalFetchSucceeded = false
         var observedSuccessfulResponse = false
         var proposalFetchErrorMessage: String?
+        async let conductorTask = try? ConductorAPI.state(builder: builder)
+        async let knowledgeStatusTask = try? ConductorAPI.knowledgeStatus(builder: builder)
+        async let safeClashFeedTask = try? safeClashClient.fetchBrowserFeed()
 
         do {
             extensionProposals = try await client.fetchExtensionProposals()
@@ -145,6 +153,21 @@ final class ProposalPoller {
                 host: resolvedEndpoint.host,
                 port: resolvedEndpoint.port
             )
+        }
+
+        if let conductor = await conductorTask {
+            conductorState = conductor
+            observedSuccessfulResponse = true
+        }
+
+        if let knowledge = await knowledgeStatusTask {
+            knowledgeStatus = knowledge
+            observedSuccessfulResponse = true
+        }
+
+        if let feed = await safeClashFeedTask {
+            safeClashFeed = feed
+            observedSuccessfulResponse = true
         }
 
         var runtimeEmergenceClusters: [EmergenceCluster] = []
@@ -490,6 +513,9 @@ final class ProposalPoller {
 
     private func refreshDemoState() {
         demoTick += 1
+        conductorState = nil
+        knowledgeStatus = nil
+        safeClashFeed = nil
 
         let snapshot = ObservatorySnapshot.demo(tick: demoTick)
         observatorySnapshot = snapshot
@@ -534,10 +560,91 @@ final class ProposalPoller {
         processEmergenceChanges(escalated)
     }
 
+    private func makeSafeClashClient(resolvedEndpoint: ResolvedGatewayEndpoint) -> SafeClashClient {
+        let env = ProcessInfo.processInfo.environment
+        if let raw = env["SAFECLASH_BASE_URL"] ?? env["SAFECLASH_URL"],
+           let url = URL(string: raw),
+           let scheme = url.scheme,
+           (scheme == "http" || scheme == "https"),
+           url.host != nil {
+            let token = resolvedEndpoint.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return SafeClashClient(baseURL: url, token: (token?.isEmpty == false) ? token : nil)
+        }
+
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = resolvedEndpoint.host
+        components.port = resolvedEndpoint.port
+        let baseURL = components.url ?? URL(string: "http://localhost:19001")!
+        let token = resolvedEndpoint.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return SafeClashClient(baseURL: baseURL, token: (token?.isEmpty == false) ? token : nil)
+    }
+
     private func demoProposals(tick: Int) -> [Proposal] {
         let now = Date()
         let greenStatus = tick % 3 == 0 ? "pending" : "approved"
+        let gapStatus = tick % 6 == 0 ? "deferred" : "pending"
         let orangeStatus = tick % 4 == 0 ? "pending" : "denied"
+
+        let gap = Proposal(
+            proposalId: "gap-\(tick % 4)",
+            createdAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-90)),
+            agentId: "clashd27.gap-radar",
+            title: "Gap: cross-channel trust corridor is under-mapped",
+            intent: ProposalIntent(
+                kind: "gap_discovery",
+                key: "gap.discovery.trust-corridor",
+                risk: "orange",
+                requiresConsent: true
+            ),
+            status: gapStatus,
+            priorityScore: 84,
+            priorityExplanation: "Multiple discovery signals indicate an unresolved governance blind spot between discovery and approval.",
+            rank: 1,
+            priorityFactors: ProposalPriorityFactors(
+                riskScore: 0.72,
+                evidenceStrength: 0.78,
+                novelty: 0.81,
+                crossDomainRelevance: 0.76,
+                escalationSignal: 0.88,
+                ageUrgency: 0.58,
+                duplicatePressure: 0.44,
+                governanceValue: 0.91,
+                entropy: 0.69,
+                serendipity: 0.63
+            ),
+            proposalType: "gap_discovery",
+            gapDetails: GapProposalDetails(
+                summary: "CLASHD27 found a gap where strong discovery evidence enters Jeeves without a crisp operator explanation of why the gap matters to governed execution.",
+                sourceEvidence: [
+                    GapEvidenceReference(label: "Radar activation", value: "trust-corridor activation cluster"),
+                    GapEvidenceReference(label: "Collision trace", value: "signal overlap between policy drift and discovery residue"),
+                    GapEvidenceReference(label: "Knowledge residue", value: "operator notes reference the same blind spot without a canonical proposal brief")
+                ],
+                cubeCell: "trust-model / operator-cockpit / emerging",
+                scores: GapProposalScores(
+                    novelty: 0.82,
+                    collision: 0.67,
+                    residue: 0.74,
+                    gravity: 0.88,
+                    evidence: 0.79,
+                    entropy: 0.71,
+                    serendipity: 0.66
+                ),
+                hypothesis: "If the cockpit does not explain governed gaps in operator language, important proposals will be approved late or denied for unclear reasons.",
+                verificationPlan: [
+                    "Compare recent CLASHD27 gap detections with operator-facing proposal detail available in Jeeves.",
+                    "Check whether openclashd-v2 receipts already expose enough audit state to narrate the downstream path.",
+                    "Prepare a bounded UI brief that keeps approval human-controlled and execution server-side."
+                ],
+                killTests: [
+                    "Reject if the same operator context is already visible elsewhere in Jeeves.",
+                    "Reject if the backend cannot link the proposal to audit or action state.",
+                    "Reject if the UI implies client-side execution rather than governed approval."
+                ],
+                recommendedAction: "Open a bounded verification pass and surface the result as a dedicated Gap Inbox card for operator review."
+            )
+        )
 
         let green = Proposal(
             proposalId: "demo-green-\(tick % 5)",
@@ -578,7 +685,7 @@ final class ProposalPoller {
             priorityFactors: nil
         )
 
-        return [orange, green, denied].sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        return [gap, orange, green, denied].sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
     }
 
     private func demoExtensionProposals() -> [ExtensionProposal] {
@@ -685,41 +792,85 @@ final class ProposalPoller {
         let now = Date()
         return [
             DecidedProposal(
-                proposalId: "decided-1",
-                title: "Summarize daily knowledge residue",
-                agentId: "observer.loop",
+                proposalId: "gap-approved-1",
+                title: "Gap: approval language for discovery evidence",
+                agentId: "clashd27.gap-radar",
                 status: "approved",
                 decidedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-600)),
                 decisionReason: "Goedgekeurd door Jeeves iPhone",
-                intent: ProposalIntent(kind: "analysis", key: "residue_summary", risk: "green", requiresConsent: false),
-                priorityScore: 42,
+                intent: ProposalIntent(kind: "gap_discovery", key: "gap.discovery.operator-language", risk: "orange", requiresConsent: true),
+                priorityScore: 82,
                 action: ActionSummary(
-                    actionId: "demo-action-1",
-                    actionKind: "analysis",
+                    actionId: "gap-action-1",
+                    actionKind: "verification",
                     executionState: "completed",
                     receipt: ActionReceipt(
-                        receiptId: "demo-receipt-1",
-                        actionId: "demo-action-1",
+                        receiptId: "gap-receipt-1",
+                        actionId: "gap-action-1",
                         completedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-590)),
                         executionState: "completed",
-                        resultSummary: "Residue samenvatting gegenereerd met 12 signalen verwerkt.",
+                        resultSummary: "Gap verification brief generated and written to the governed knowledge pipeline.",
                         durationMs: 1240,
-                        resultType: "report",
-                        outputObjectIds: ["ko-demo-1"],
-                        notes: nil
+                        resultType: "knowledge_object",
+                        outputObjectIds: ["ko-gap-approved-1"],
+                        notes: "Receipt links the approved gap to a knowledge artifact for later audit."
                     )
+                ),
+                proposalType: "gap_discovery",
+                gapDetails: GapProposalDetails(
+                    summary: "A prior operator review confirmed that discovery evidence needed a clearer governance narrative before bounded execution.",
+                    sourceEvidence: [
+                        GapEvidenceReference(label: "Proposal brief", value: "operator-language review"),
+                        GapEvidenceReference(label: "Receipt", value: "gap-receipt-1")
+                    ],
+                    cubeCell: "discovery / governance / current",
+                    scores: GapProposalScores(
+                        novelty: 0.71,
+                        collision: 0.62,
+                        residue: 0.69,
+                        gravity: 0.77,
+                        evidence: 0.84,
+                        entropy: 0.48,
+                        serendipity: 0.59
+                    ),
+                    hypothesis: "Operators move faster when the gap narrative is explicit before approval.",
+                    verificationPlan: ["Compare approval latency before and after narrative improvements."],
+                    killTests: ["Reject if no measurable approval clarity improvement appears."],
+                    recommendedAction: "Keep the narrative template in the governed review path."
                 )
             ),
             DecidedProposal(
-                proposalId: "decided-2",
-                title: "Cross-domain anomaly probe",
+                proposalId: "gap-denied-1",
+                title: "Gap: automatic remediation without operator framing",
                 agentId: "observer.fabric",
                 status: "denied",
                 decidedAtIso: ISO8601DateFormatter().string(from: now.addingTimeInterval(-1200)),
                 decisionReason: "Afgewezen door Jeeves iPhone",
-                intent: ProposalIntent(kind: "analysis", key: "anomaly_probe", risk: "orange", requiresConsent: true),
+                intent: ProposalIntent(kind: "gap_discovery", key: "gap.discovery.auto-remediation", risk: "red", requiresConsent: true),
                 priorityScore: 68,
-                action: nil
+                action: nil,
+                proposalType: "gap_discovery",
+                gapDetails: GapProposalDetails(
+                    summary: "This proposal suggested closing a gap with an execution path that was not yet legible enough for human approval.",
+                    sourceEvidence: [
+                        GapEvidenceReference(label: "Audit note", value: "execution path too implicit"),
+                        GapEvidenceReference(label: "Kill test", value: "client UX implied hidden action")
+                    ],
+                    cubeCell: "execution / operator-cockpit / current",
+                    scores: GapProposalScores(
+                        novelty: 0.56,
+                        collision: 0.81,
+                        residue: 0.63,
+                        gravity: 0.86,
+                        evidence: 0.58,
+                        entropy: 0.74,
+                        serendipity: 0.34
+                    ),
+                    hypothesis: "An unclear execution boundary would weaken operator trust.",
+                    verificationPlan: ["Re-scope the proposal to approval-only UX before retrying."],
+                    killTests: ["Reject if any client flow implies automatic execution."],
+                    recommendedAction: "Reframe as a human-only review surface with explicit backend receipts."
+                )
             ),
             DecidedProposal(
                 proposalId: "decided-3",
@@ -754,17 +905,28 @@ final class ProposalPoller {
         guard let index = proposals.firstIndex(where: { $0.proposalId == proposalId }) else { return }
 
         let current = proposals[index]
+        let nextStatus: String
+        switch decision {
+        case "approve":
+            nextStatus = "approved"
+        case "defer":
+            nextStatus = "deferred"
+        default:
+            nextStatus = "denied"
+        }
         let updated = Proposal(
             proposalId: current.proposalId,
             createdAtIso: current.createdAtIso,
             agentId: current.agentId,
             title: current.title,
             intent: current.intent,
-            status: decision == "approve" ? "approved" : "denied",
+            status: nextStatus,
             priorityScore: current.priorityScore,
             priorityExplanation: current.priorityExplanation,
             rank: current.rank,
-            priorityFactors: current.priorityFactors
+            priorityFactors: current.priorityFactors,
+            proposalType: current.proposalType,
+            gapDetails: current.gapDetails
         )
 
         proposals[index] = updated
@@ -797,7 +959,7 @@ final class ProposalPoller {
 
         let newDecision = JeevesDecisionEvent(
             id: "demo-decision-\(UUID().uuidString)",
-            kind: decision == "approve" ? .autoApproved : .autoDenied,
+            kind: decision == "approve" ? .autoApproved : (decision == "defer" ? .escalated : .autoDenied),
             title: current.title,
             timestamp: Date()
         )

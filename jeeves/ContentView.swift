@@ -12,7 +12,7 @@ struct ContentView: View {
     @Query private var connections: [GatewayConnection]
     @State private var hasBootstrappedStartupConnection = false
     @State private var isBootstrappingConnection = true
-    @State private var selectedTab: AppScreen = .chat
+    @State private var selectedTab: AppScreen = .stream
     @State private var auxiliaryScreen: AppScreen?
 
     private var primaryTabs: Set<AppScreen> {
@@ -133,7 +133,7 @@ struct ContentView: View {
             List(selection: $selectedTab) {
                 Section("Jeeves") {
                     Label("Jeeves", systemImage: "sun.max").tag(AppScreen.chat)
-                    Label(TextKeys.Stream.header, systemImage: "list.bullet").tag(AppScreen.stream)
+                    Label("Mission Control", systemImage: "scope").tag(AppScreen.stream)
                     Label("Radar", systemImage: "binoculars").tag(AppScreen.observatory)
                     Label("Knowledge", systemImage: "book.closed.fill").tag(AppScreen.house)
                 }
@@ -154,11 +154,11 @@ struct ContentView: View {
         .tint(Color.jeevesGold)
         #else
         TabView(selection: $selectedTab) {
+            Tab("Mission Control", systemImage: "scope", value: .stream) {
+                StreamView()
+            }
             Tab("Jeeves", systemImage: "sun.max", value: .chat) {
                 JeevesView()
-            }
-            Tab(TextKeys.Stream.header, systemImage: "list.bullet", value: .stream) {
-                StreamView()
             }
             Tab("Radar", systemImage: "binoculars", value: .observatory) {
                 CLASHD27RadarView()

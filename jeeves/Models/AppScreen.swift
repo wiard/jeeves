@@ -43,8 +43,8 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
     /// Known sub-sections addressable by the orchestrator.
     var sections: [String] {
         switch self {
-        case .stream:      return ["proposals", "radar", "emergence", "signals", "discoveries", "knowledge"]
-        case .lobby:       return ["extensions", "challenges", "environments"]
+        case .stream:      return ["discovery", "governance", "knowledge", "trust", "proposals", "radar", "emergence", "signals", "discoveries"]
+        case .lobby:       return ["gaps", "extensions", "challenges", "environments"]
         case .observatory: return ["oracle", "loop", "fabric", "lobby", "signals", "knowledge", "radar", "discovery", "alerts"]
         case .house:       return ["kernel", "budget", "channels", "killSwitch"]
         case .aiBrowser:   return ["marketplace", "deployments", "myAgents"]

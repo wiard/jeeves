@@ -11,7 +11,86 @@ struct Proposal: Codable, Identifiable {
     let priorityExplanation: String?
     let rank: Int?
     let priorityFactors: ProposalPriorityFactors?
+    let proposalType: String?
+    let gapDetails: GapProposalDetails?
     var id: String { proposalId }
+
+    init(
+        proposalId: String,
+        createdAtIso: String,
+        agentId: String,
+        title: String,
+        intent: ProposalIntent,
+        status: String,
+        priorityScore: Double?,
+        priorityExplanation: String?,
+        rank: Int?,
+        priorityFactors: ProposalPriorityFactors?,
+        proposalType: String? = nil,
+        gapDetails: GapProposalDetails? = nil
+    ) {
+        self.proposalId = proposalId
+        self.createdAtIso = createdAtIso
+        self.agentId = agentId
+        self.title = title
+        self.intent = intent
+        self.status = status
+        self.priorityScore = priorityScore
+        self.priorityExplanation = priorityExplanation
+        self.rank = rank
+        self.priorityFactors = priorityFactors
+        self.proposalType = proposalType
+        self.gapDetails = gapDetails
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        proposalId = container.decodeFirstString(for: ["proposalId", "proposal_id", "id"]) ?? UUID().uuidString
+        createdAtIso = container.decodeFirstString(for: ["createdAtIso", "created_at_iso", "createdAt", "created_at"])
+            ?? ISO8601DateFormatter().string(from: Date())
+        agentId = container.decodeFirstString(for: ["agentId", "agent_id", "sourceAgentId", "source_agent_id", "agent"])
+            ?? "unknown-agent"
+        title = container.decodeFirstString(for: ["title", "name"]) ?? "Untitled proposal"
+
+        if let decodedIntent = container.decodeFirstDecodable(ProposalIntent.self, for: ["intent"]) {
+            intent = decodedIntent
+        } else {
+            intent = ProposalIntent(
+                kind: container.decodeFirstString(for: ["kind", "intentKind", "intent_kind"]) ?? "proposal",
+                key: container.decodeFirstString(for: ["key", "intentKey", "intent_key"]) ?? "proposal.review",
+                risk: container.decodeFirstString(for: ["risk", "riskLevel", "risk_level"]) ?? "unknown",
+                requiresConsent: container.decodeFirstBool(for: ["requiresConsent", "requires_consent"]) ?? true
+            )
+        }
+
+        status = container.decodeFirstString(for: ["status"]) ?? "pending"
+        priorityScore = container.decodeFirstDouble(for: ["priorityScore", "priority_score", "score"])
+        priorityExplanation = container.decodeFirstString(
+            for: ["priorityExplanation", "priority_explanation", "summary", "why", "reason"]
+        )
+        rank = container.decodeFirstInt(for: ["rank"])
+        priorityFactors = container.decodeFirstDecodable(
+            ProposalPriorityFactors.self,
+            for: ["priorityFactors", "priority_factors"]
+        )
+        proposalType = container.decodeFirstString(
+            for: ["proposalType", "proposal_type", "type", "proposalClass", "proposal_class"]
+        )
+
+        let metadata = container.decodeFirstDictionary(
+            for: ["gap", "gapDetails", "gap_details", "metadata", "details", "payload"]
+        )
+        gapDetails = container.decodeFirstDecodable(
+            GapProposalDetails.self,
+            for: ["gap", "gapDetails", "gap_details"]
+        ) ?? GapProposalDetails.fromContainer(
+            container,
+            metadata: metadata,
+            priorityFactors: priorityFactors,
+            fallbackSummary: priorityExplanation,
+            title: title
+        )
+    }
 
     var createdAt: Date? {
         ISO8601DateFormatter().date(from: createdAtIso)
@@ -20,6 +99,20 @@ struct Proposal: Codable, Identifiable {
     var isPending: Bool { status == "pending" }
     var isApproved: Bool { status == "approved" }
     var isDenied: Bool { status == "denied" }
+    var isDeferred: Bool { status == "deferred" || status == "defer" }
+
+    var isGapDiscovery: Bool {
+        if let proposalType, proposalType.lowercased().contains("gap") {
+            return true
+        }
+        if gapDetails != nil {
+            return true
+        }
+        let gapSignals = "\(intent.kind) \(intent.key) \(title)".lowercased()
+        return gapSignals.contains("gap")
+            || gapSignals.contains("hypothesis")
+            || gapSignals.contains("verification")
+    }
 
     var displayPriority: String {
         guard let score = priorityScore, score > 0 else { return "" }
@@ -36,6 +129,21 @@ struct ProposalIntent: Codable {
     let key: String
     let risk: String
     let requiresConsent: Bool
+
+    init(kind: String, key: String, risk: String, requiresConsent: Bool) {
+        self.kind = kind
+        self.key = key
+        self.risk = risk
+        self.requiresConsent = requiresConsent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        kind = container.decodeFirstString(for: ["kind", "type"]) ?? "proposal"
+        key = container.decodeFirstString(for: ["key", "intentKey", "intent_key", "name"]) ?? "proposal.review"
+        risk = container.decodeFirstString(for: ["risk", "riskLevel", "risk_level"]) ?? "unknown"
+        requiresConsent = container.decodeFirstBool(for: ["requiresConsent", "requires_consent"]) ?? true
+    }
 }
 
 struct ProposalPriorityFactors: Codable {
@@ -47,6 +155,227 @@ struct ProposalPriorityFactors: Codable {
     let ageUrgency: Double?
     let duplicatePressure: Double?
     let governanceValue: Double?
+    let entropy: Double?
+    let serendipity: Double?
+}
+
+struct GapProposalDetails: Codable {
+    let summary: String
+    let sourceEvidence: [GapEvidenceReference]
+    let cubeCell: String
+    let scores: GapProposalScores
+    let hypothesis: String
+    let verificationPlan: [String]
+    let killTests: [String]
+    let recommendedAction: String
+
+    init(
+        summary: String,
+        sourceEvidence: [GapEvidenceReference],
+        cubeCell: String,
+        scores: GapProposalScores,
+        hypothesis: String,
+        verificationPlan: [String],
+        killTests: [String],
+        recommendedAction: String
+    ) {
+        self.summary = summary
+        self.sourceEvidence = sourceEvidence
+        self.cubeCell = cubeCell
+        self.scores = scores
+        self.hypothesis = hypothesis
+        self.verificationPlan = verificationPlan
+        self.killTests = killTests
+        self.recommendedAction = recommendedAction
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        let summary = container.decodeFirstString(for: ["summary", "why", "operatorSummary", "operator_summary"])
+            ?? "Governed gap proposal awaiting operator review."
+        let sourceEvidence = container.decodeFirstDecodableArray(
+            GapEvidenceReference.self,
+            for: ["sourceEvidence", "source_evidence", "evidence", "evidenceRefs", "evidence_refs"]
+        ) ?? []
+        let cubeCell = container.decodeFirstString(for: ["cubeCell", "cube_cell", "cell"]) ?? "Unmapped"
+        let scores = container.decodeFirstDecodable(GapProposalScores.self, for: ["scores", "scorecard"])
+            ?? GapProposalScores(
+                novelty: container.decodeFirstDouble(for: ["novelty"]) ?? 0,
+                collision: container.decodeFirstDouble(for: ["collision"]) ?? 0,
+                residue: container.decodeFirstDouble(for: ["residue"]) ?? 0,
+                gravity: container.decodeFirstDouble(for: ["gravity"]) ?? 0,
+                evidence: container.decodeFirstDouble(for: ["evidence"]) ?? 0,
+                entropy: container.decodeFirstDouble(for: ["entropy"]) ?? 0,
+                serendipity: container.decodeFirstDouble(for: ["serendipity"]) ?? 0
+            )
+        let hypothesis = container.decodeFirstString(for: ["hypothesis", "thesis"])
+            ?? "This gap may warrant a bounded investigation through governance."
+        let verificationPlan = container.decodeFirstStringArray(
+            for: ["verificationPlan", "verification_plan", "verificationSteps", "verification_steps"]
+        )
+        let killTests = container.decodeFirstStringArray(for: ["killTests", "kill_tests", "falsifiers"])
+        let recommendedAction = container.decodeFirstString(
+            for: ["recommendedAction", "recommended_action", "recommendation"]
+        ) ?? "Open a bounded verification action through openclashd-v2."
+
+        self.init(
+            summary: summary,
+            sourceEvidence: sourceEvidence,
+            cubeCell: cubeCell,
+            scores: scores,
+            hypothesis: hypothesis,
+            verificationPlan: verificationPlan,
+            killTests: killTests,
+            recommendedAction: recommendedAction
+        )
+    }
+
+    fileprivate static func fromContainer(
+        _ container: KeyedDecodingContainer<FlexibleCodingKey>,
+        metadata: [String: AnyCodableValue]?,
+        priorityFactors: ProposalPriorityFactors?,
+        fallbackSummary: String?,
+        title: String
+    ) -> GapProposalDetails? {
+        let summary = container.decodeFirstString(
+            for: ["gapSummary", "gap_summary", "summary", "why", "operatorSummary", "operator_summary"]
+        ) ?? metadataString(
+            metadata,
+            keys: ["gap_summary", "summary", "operator_summary", "why_matters", "why"]
+        ) ?? fallbackSummary
+
+        let cubeCell = container.decodeFirstString(for: ["cubeCell", "cube_cell", "cell"])
+            ?? metadataString(metadata, keys: ["cube_cell", "cubeCell", "cell", "linked_cell"])
+        let hypothesis = container.decodeFirstString(for: ["hypothesis", "thesis"])
+            ?? metadataString(metadata, keys: ["hypothesis", "thesis"])
+        let recommendedAction = container.decodeFirstString(
+            for: ["recommendedAction", "recommended_action", "recommendation"]
+        ) ?? metadataString(metadata, keys: ["recommended_action", "recommendedAction", "recommendation"])
+
+        let verificationPlan = container.decodeFirstStringArray(
+            for: ["verificationPlan", "verification_plan", "verificationSteps", "verification_steps"]
+        )
+        let metadataVerification = metadataStrings(
+            metadata,
+            keys: ["verification_plan", "verificationPlan", "verification_steps"]
+        )
+        let killTests = container.decodeFirstStringArray(for: ["killTests", "kill_tests", "falsifiers"])
+        let metadataKillTests = metadataStrings(metadata, keys: ["kill_tests", "killTests", "falsifiers", "kill_switch_tests"])
+        let evidence = container.decodeFirstDecodableArray(
+            GapEvidenceReference.self,
+            for: ["sourceEvidence", "source_evidence", "evidence", "evidenceRefs", "evidence_refs"]
+        ) ?? metadataEvidence(metadata)
+
+        let scores = container.decodeFirstDecodable(GapProposalScores.self, for: ["scores", "scorecard"])
+            ?? GapProposalScores.fromMetadata(metadata, priorityFactors: priorityFactors)
+
+        guard let summary else { return nil }
+
+        return GapProposalDetails(
+            summary: summary,
+            sourceEvidence: evidence.isEmpty ? [
+                GapEvidenceReference(label: "Source", value: title)
+            ] : evidence,
+            cubeCell: cubeCell ?? "Unmapped",
+            scores: scores,
+            hypothesis: hypothesis ?? "Investigate whether this gap blocks trustworthy action or knowledge creation.",
+            verificationPlan: verificationPlan.isEmpty ? metadataVerification : verificationPlan,
+            killTests: killTests.isEmpty ? metadataKillTests : killTests,
+            recommendedAction: recommendedAction ?? "Defer execution until an operator approves bounded verification."
+        )
+    }
+}
+
+struct GapEvidenceReference: Codable, Identifiable {
+    let label: String
+    let value: String
+    let url: String?
+    var id: String { "\(label)|\(value)" }
+
+    init(label: String, value: String, url: String? = nil) {
+        self.label = label
+        self.value = value
+        self.url = url
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        label = container.decodeFirstString(for: ["label", "title", "name"]) ?? "Evidence"
+        value = container.decodeFirstString(for: ["value", "reference", "summary", "id", "source"]) ?? "Unknown evidence"
+        url = container.decodeFirstString(for: ["url", "href"])
+    }
+}
+
+struct GapProposalScores: Codable {
+    let novelty: Double
+    let collision: Double
+    let residue: Double
+    let gravity: Double
+    let evidence: Double
+    let entropy: Double
+    let serendipity: Double
+
+    init(
+        novelty: Double,
+        collision: Double,
+        residue: Double,
+        gravity: Double,
+        evidence: Double,
+        entropy: Double,
+        serendipity: Double
+    ) {
+        self.novelty = novelty
+        self.collision = collision
+        self.residue = residue
+        self.gravity = gravity
+        self.evidence = evidence
+        self.entropy = entropy
+        self.serendipity = serendipity
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        novelty = container.decodeFirstDouble(for: ["novelty"]) ?? 0
+        collision = container.decodeFirstDouble(for: ["collision"]) ?? 0
+        residue = container.decodeFirstDouble(for: ["residue"]) ?? 0
+        gravity = container.decodeFirstDouble(for: ["gravity"]) ?? 0
+        evidence = container.decodeFirstDouble(for: ["evidence"]) ?? 0
+        entropy = container.decodeFirstDouble(for: ["entropy"]) ?? 0
+        serendipity = container.decodeFirstDouble(for: ["serendipity"]) ?? 0
+    }
+
+    static func fromMetadata(
+        _ metadata: [String: AnyCodableValue]?,
+        priorityFactors: ProposalPriorityFactors?
+    ) -> GapProposalScores {
+        if let scoreObject = metadataObject(metadata, keys: ["scores", "scorecard"]) {
+            return GapProposalScores(
+                novelty: normalizedScore(metadataDouble(scoreObject, keys: ["novelty"])),
+                collision: normalizedScore(metadataDouble(scoreObject, keys: ["collision"])),
+                residue: normalizedScore(metadataDouble(scoreObject, keys: ["residue"])),
+                gravity: normalizedScore(metadataDouble(scoreObject, keys: ["gravity"])),
+                evidence: normalizedScore(metadataDouble(scoreObject, keys: ["evidence"])),
+                entropy: normalizedScore(metadataDouble(scoreObject, keys: ["entropy"])),
+                serendipity: normalizedScore(metadataDouble(scoreObject, keys: ["serendipity"]))
+            )
+        }
+
+        return GapProposalScores(
+            novelty: normalizedScore(priorityFactors?.novelty),
+            collision: normalizedScore(priorityFactors?.duplicatePressure),
+            residue: normalizedScore(priorityFactors?.crossDomainRelevance),
+            gravity: normalizedScore(priorityFactors?.governanceValue ?? priorityFactors?.riskScore),
+            evidence: normalizedScore(priorityFactors?.evidenceStrength),
+            entropy: normalizedScore(priorityFactors?.entropy ?? priorityFactors?.escalationSignal),
+            serendipity: normalizedScore(priorityFactors?.serendipity ?? priorityFactors?.ageUrgency)
+        )
+    }
+
+    private static func normalizedScore(_ raw: Double?) -> Double {
+        guard let raw else { return 0.5 }
+        if raw > 1 { return min(max(raw / 100, 0), 1) }
+        return min(max(raw, 0), 1)
+    }
 }
 
 struct Challenge: Codable, Identifiable {
@@ -102,6 +431,37 @@ struct ActionSummary: Decodable, Identifiable {
     let executionState: String
     let receipt: ActionReceipt?
     var id: String { actionId }
+
+    init(actionId: String, actionKind: String, executionState: String, receipt: ActionReceipt?) {
+        self.actionId = actionId
+        self.actionKind = actionKind
+        self.executionState = executionState
+        self.receipt = receipt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case actionId
+        case actionKind
+        case executionState
+        case receipt
+        case action_id
+        case action_kind
+        case execution_state
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        actionId = (try? container.decode(String.self, forKey: .actionId))
+            ?? (try? container.decode(String.self, forKey: .action_id))
+            ?? UUID().uuidString
+        actionKind = (try? container.decode(String.self, forKey: .actionKind))
+            ?? (try? container.decode(String.self, forKey: .action_kind))
+            ?? "unknown"
+        executionState = (try? container.decode(String.self, forKey: .executionState))
+            ?? (try? container.decode(String.self, forKey: .execution_state))
+            ?? "unknown"
+        receipt = try? container.decodeIfPresent(ActionReceipt.self, forKey: .receipt)
+    }
 
     var isCompleted: Bool { executionState == "completed" }
     var isFailed: Bool { executionState == "failed" }
@@ -232,10 +592,82 @@ struct DecidedProposal: Decodable, Identifiable {
     let intent: ProposalIntent?
     let priorityScore: Double?
     let action: ActionSummary?
+    let proposalType: String?
+    let gapDetails: GapProposalDetails?
     var id: String { proposalId }
+
+    init(
+        proposalId: String,
+        title: String,
+        agentId: String,
+        status: String,
+        decidedAtIso: String?,
+        decisionReason: String?,
+        intent: ProposalIntent?,
+        priorityScore: Double?,
+        action: ActionSummary?,
+        proposalType: String? = nil,
+        gapDetails: GapProposalDetails? = nil
+    ) {
+        self.proposalId = proposalId
+        self.title = title
+        self.agentId = agentId
+        self.status = status
+        self.decidedAtIso = decidedAtIso
+        self.decisionReason = decisionReason
+        self.intent = intent
+        self.priorityScore = priorityScore
+        self.action = action
+        self.proposalType = proposalType
+        self.gapDetails = gapDetails
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
+        proposalId = container.decodeFirstString(for: ["proposalId", "proposal_id", "id"]) ?? UUID().uuidString
+        title = container.decodeFirstString(for: ["title", "name"]) ?? proposalId
+        agentId = container.decodeFirstString(for: ["agentId", "agent_id", "sourceAgentId", "source_agent_id", "agent"])
+            ?? "unknown-agent"
+        status = container.decodeFirstString(for: ["status"]) ?? "unknown"
+        decidedAtIso = container.decodeFirstString(for: ["decidedAtIso", "decided_at_iso", "decisionAtIso", "decision_at_iso"])
+        decisionReason = container.decodeFirstString(for: ["decisionReason", "decision_reason", "reason"])
+        intent = container.decodeFirstDecodable(ProposalIntent.self, for: ["intent"])
+        priorityScore = container.decodeFirstDouble(for: ["priorityScore", "priority_score", "score"])
+        action = container.decodeFirstDecodable(ActionSummary.self, for: ["action", "result"])
+        proposalType = container.decodeFirstString(
+            for: ["proposalType", "proposal_type", "type", "proposalClass", "proposal_class"]
+        )
+        let metadata = container.decodeFirstDictionary(
+            for: ["gap", "gapDetails", "gap_details", "metadata", "details", "payload"]
+        )
+        gapDetails = container.decodeFirstDecodable(
+            GapProposalDetails.self,
+            for: ["gap", "gapDetails", "gap_details"]
+        ) ?? GapProposalDetails.fromContainer(
+            container,
+            metadata: metadata,
+            priorityFactors: nil,
+            fallbackSummary: decisionReason,
+            title: title
+        )
+    }
 
     var isApproved: Bool { status == "approved" }
     var isDenied: Bool { status == "denied" }
+    var isDeferred: Bool { status == "deferred" || status == "defer" }
+
+    var isGapDiscovery: Bool {
+        if let proposalType, proposalType.lowercased().contains("gap") {
+            return true
+        }
+        if gapDetails != nil {
+            return true
+        }
+        let gapSignals = "\(intent?.kind ?? "") \(intent?.key ?? "") \(title)".lowercased()
+        return gapSignals.contains("gap")
+            || gapSignals.contains("hypothesis")
+            || gapSignals.contains("verification")
+    }
 
     var decidedAt: Date? {
         guard let iso = decidedAtIso else { return nil }
@@ -784,6 +1216,224 @@ extension AnyCodableValue {
             return nil
         }
     }
+}
+
+private struct FlexibleCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        intValue = nil
+    }
+
+    init?(intValue: Int) {
+        stringValue = "\(intValue)"
+        self.intValue = intValue
+    }
+}
+
+private extension KeyedDecodingContainer where Key == FlexibleCodingKey {
+    func decodeFirstString(for keys: [String]) -> String? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decodeIfPresent(String.self, forKey: codingKey) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstDouble(for keys: [String]) -> Double? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decodeIfPresent(Double.self, forKey: codingKey) {
+                return value
+            }
+            if let value = try? decodeIfPresent(Int.self, forKey: codingKey) {
+                return Double(value)
+            }
+            if let value = try? decodeIfPresent(String.self, forKey: codingKey),
+               let parsed = Double(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return parsed
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstInt(for keys: [String]) -> Int? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decodeIfPresent(Int.self, forKey: codingKey) {
+                return value
+            }
+            if let value = try? decodeIfPresent(Double.self, forKey: codingKey) {
+                return Int(value.rounded())
+            }
+            if let value = try? decodeIfPresent(String.self, forKey: codingKey),
+               let parsed = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return parsed
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstBool(for keys: [String]) -> Bool? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decodeIfPresent(Bool.self, forKey: codingKey) {
+                return value
+            }
+            if let value = try? decodeIfPresent(Int.self, forKey: codingKey) {
+                return value != 0
+            }
+            if let value = try? decodeIfPresent(String.self, forKey: codingKey) {
+                let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if ["true", "1", "yes"].contains(normalized) { return true }
+                if ["false", "0", "no"].contains(normalized) { return false }
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstStringArray(for keys: [String]) -> [String] {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let values = try? decode([String].self, forKey: codingKey), !values.isEmpty {
+                return values
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+            if let value = try? decodeIfPresent(String.self, forKey: codingKey) {
+                let chunks = value
+                    .replacingOccurrences(of: "|", with: ",")
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if !chunks.isEmpty { return chunks }
+            }
+        }
+        return []
+    }
+
+    func decodeFirstDecodable<T: Decodable>(_ type: T.Type, for keys: [String]) -> T? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decode(T.self, forKey: codingKey) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstDecodableArray<T: Decodable>(_ type: T.Type, for keys: [String]) -> [T]? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decode([T].self, forKey: codingKey) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    func decodeFirstDictionary(for keys: [String]) -> [String: AnyCodableValue]? {
+        for key in keys {
+            guard let codingKey = FlexibleCodingKey(stringValue: key) else { continue }
+            if let value = try? decode([String: AnyCodableValue].self, forKey: codingKey) {
+                return value
+            }
+        }
+        return nil
+    }
+}
+
+private func metadataString(_ metadata: [String: AnyCodableValue]?, keys: [String]) -> String? {
+    guard let metadata else { return nil }
+    let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+    for key in keys {
+        if let value = normalized[key.lowercased()]?.scalarStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !value.isEmpty {
+            return value
+        }
+    }
+    return nil
+}
+
+private func metadataStrings(_ metadata: [String: AnyCodableValue]?, keys: [String]) -> [String] {
+    guard let metadata else { return [] }
+    let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+    for key in keys {
+        if let values = normalized[key.lowercased()]?.stringArrayValue, !values.isEmpty {
+            return values
+        }
+    }
+    return []
+}
+
+private func metadataDouble(_ metadata: [String: AnyCodableValue]?, keys: [String]) -> Double? {
+    guard let metadata else { return nil }
+    let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+    for key in keys {
+        guard let value = normalized[key.lowercased()] else { continue }
+        switch value {
+        case .double(let raw):
+            return raw
+        case .int(let raw):
+            return Double(raw)
+        case .string(let raw):
+            if let parsed = Double(raw.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return parsed
+            }
+        default:
+            continue
+        }
+    }
+    return nil
+}
+
+private func metadataObject(_ metadata: [String: AnyCodableValue]?, keys: [String]) -> [String: AnyCodableValue]? {
+    guard let metadata else { return nil }
+    let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+    for key in keys {
+        if case .object(let object) = normalized[key.lowercased()] {
+            return object
+        }
+    }
+    return nil
+}
+
+private func metadataEvidence(_ metadata: [String: AnyCodableValue]?) -> [GapEvidenceReference] {
+    guard let metadata else { return [] }
+    let normalized = Dictionary(uniqueKeysWithValues: metadata.map { ($0.key.lowercased(), $0.value) })
+    let evidenceKeys = ["source_evidence", "sourceevidence", "evidence", "evidence_refs", "evidencerefs"]
+
+    for key in evidenceKeys {
+        guard let value = normalized[key] else { continue }
+        switch value {
+        case .array(let rows):
+            let mapped = rows.compactMap { row -> GapEvidenceReference? in
+                switch row {
+                case .object(let object):
+                    let label = metadataString(object, keys: ["label", "title", "name"]) ?? "Evidence"
+                    let ref = metadataString(object, keys: ["value", "reference", "summary", "source"]) ?? "Unknown evidence"
+                    let url = metadataString(object, keys: ["url", "href"])
+                    return GapEvidenceReference(label: label, value: ref, url: url)
+                case .string(let line):
+                    return GapEvidenceReference(label: "Evidence", value: line)
+                default:
+                    return nil
+                }
+            }
+            if !mapped.isEmpty { return mapped }
+        case .string(let line):
+            return [GapEvidenceReference(label: "Evidence", value: line)]
+        default:
+            continue
+        }
+    }
+
+    return []
 }
 
 struct ProposalsEnvelope: Decodable {

@@ -4,7 +4,7 @@ enum TextKeys {
     static let appTitle = "Jeeves"
 
     enum Stream {
-        static let header = "Stream"
+        static let header = "Mission Control"
         static let empty = "Het huis is stil."
         static let autoApproved = "Automatisch goedgekeurd"
         static let autoDenied = "Automatisch geweigerd"
@@ -27,6 +27,7 @@ enum TextKeys {
         static let blocked = "Geblokkeerd door beleid"
         static let approveReason = "Goedgekeurd door Jeeves iPhone"
         static let denyReason = "Afgewezen door Jeeves iPhone"
+        static let deferReason = "Uitgesteld door Jeeves iPhone"
         static let pendingQueue = "Wachtende voorstellen"
         static let recentDecisions = "Recente beslissingen"
         static let noDecisions = "Nog geen beslissingen."

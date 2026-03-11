@@ -4,6 +4,7 @@ struct LobbyView: View {
     private enum MissionZone {
         case system
         case radar
+        case gapInbox
         case incomingTools
         case aiBrowser
         case marketplace
@@ -15,6 +16,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "SYSTEM"
             case .radar: return "RADAR"
+            case .gapInbox: return "GAP INBOX"
             case .incomingTools: return "INCOMING TOOLS"
             case .aiBrowser: return "AI BROWSER"
             case .marketplace: return "MARKETPLACE"
@@ -28,6 +30,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "Terminal telemetry"
             case .radar: return "Radar — Emerging Signals"
+            case .gapInbox: return "Governed discovery review lane"
             case .incomingTools: return "Forensic intake workbench"
             case .aiBrowser: return "Intention catalog — certified + emerging"
             case .marketplace: return "Featured shelf + category browse"
@@ -41,6 +44,7 @@ struct LobbyView: View {
             switch self {
             case .system: return .blue
             case .radar: return .cyan
+            case .gapInbox: return .jeevesGold
             case .incomingTools: return .cyan
             case .aiBrowser: return .blue
             case .marketplace: return .cyan
@@ -54,6 +58,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "terminal"
             case .radar: return "dot.radiowaves.left.and.right"
+            case .gapInbox: return "scope"
             case .incomingTools: return "shippingbox"
             case .aiBrowser: return "magnifyingglass.circle"
             case .marketplace: return "storefront"
@@ -67,6 +72,7 @@ struct LobbyView: View {
             switch self {
             case .system: return "zone-system"
             case .radar: return "zone-radar"
+            case .gapInbox: return "zone-gap-inbox"
             case .incomingTools: return "zone-incoming-tools"
             case .aiBrowser: return "zone-ai-browser"
             case .marketplace: return "zone-marketplace"
@@ -188,6 +194,7 @@ struct LobbyView: View {
     @State private var showKnowledgeGraph = false
     @State private var loadingKnowledgeGraph = false
     @State private var selectedRadarSignal: RadarSignalSummary?
+    @State private var selectedGapRecord: GapReviewRecord?
     @State private var selectedIncomingTool: IncomingToolSummary?
     @State private var incomingToolActionInFlightId: String?
     @State private var incomingToolActionErrorMessage: String?
@@ -276,6 +283,8 @@ struct LobbyView: View {
                                 .id(MissionZone.system.anchorId)
                             radarZoneSection
                                 .id(MissionZone.radar.anchorId)
+                            gapInboxZoneSection
+                                .id(MissionZone.gapInbox.anchorId)
                             incomingToolsZoneSection
                                 .id(MissionZone.incomingTools.anchorId)
                             aiBrowserZoneSection
@@ -358,6 +367,19 @@ struct LobbyView: View {
                     decision: decision,
                     onKnowledgeTap: { objectId in
                         selectedDecision = nil
+                        fetchAndShowKnowledgeGraph(objectId: objectId)
+                    }
+                )
+            }
+            .sheet(item: $selectedGapRecord) { record in
+                GapProposalDetailSheet(
+                    record: record,
+                    isActionInFlight: decidingProposalId == record.proposalId,
+                    onAction: { action in
+                        handleGapDecision(record, action: action)
+                    },
+                    onKnowledgeTap: { objectId in
+                        selectedGapRecord = nil
                         fetchAndShowKnowledgeGraph(objectId: objectId)
                     }
                 )
@@ -488,6 +510,19 @@ struct LobbyView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var gapInboxZoneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            zoneHeader(.gapInbox)
+            GapInboxPanel(
+                pendingRecords: gapPendingRecords,
+                historyRecords: gapHistoryRecords,
+                onOpen: { record in
+                    selectedGapRecord = record
+                }
+            )
         }
     }
 
@@ -883,6 +918,35 @@ struct LobbyView: View {
 
     private var pendingExtensionProposals: [ExtensionProposal] {
         poller.extensionProposals.filter(\.isPending)
+    }
+
+    private var gapPendingRecords: [GapReviewRecord] {
+        poller.pendingProposals.compactMap { proposal in
+            GapReviewRecord.fromProposal(
+                proposal,
+                decided: poller.decidedProposals.first(where: { $0.proposalId == proposal.proposalId }),
+                knowledge: poller.recentKnowledgeObjects
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.primaryScore != rhs.primaryScore {
+                return lhs.primaryScore > rhs.primaryScore
+            }
+            return lhs.createdAtIso > rhs.createdAtIso
+        }
+    }
+
+    private var gapHistoryRecords: [GapReviewRecord] {
+        poller.decidedProposals.compactMap { decision in
+            GapReviewRecord.fromDecision(
+                decision,
+                proposal: poller.proposals.first(where: { $0.proposalId == decision.proposalId }),
+                knowledge: poller.recentKnowledgeObjects
+            )
+        }
+        .sorted { lhs, rhs in
+            (lhs.decidedAtIso ?? lhs.createdAtIso) > (rhs.decidedAtIso ?? rhs.createdAtIso)
+        }
     }
 
     private var decisionsToday: Int {
@@ -3738,8 +3802,23 @@ struct LobbyView: View {
     private func handleSwipe(proposal: Proposal, direction: SwipeDirection) {
         guard decidingProposalId == nil else { return }
         let decision = direction == .right ? "approve" : "deny"
+        requestProposalDecision(proposal: proposal, decision: decision)
+    }
 
-        if proposal.intent.risk == "orange" {
+    private func handleGapDecision(_ record: GapReviewRecord, action: GapDecisionAction) {
+        guard let proposal = poller.pendingProposals.first(where: { $0.proposalId == record.proposalId }) else {
+            decisionErrorMessage = "Voorstel is niet meer beschikbaar in de governance-queue."
+            showDecisionError = true
+            return
+        }
+        selectedGapRecord = nil
+        requestProposalDecision(proposal: proposal, decision: action.decisionValue)
+    }
+
+    private func requestProposalDecision(proposal: Proposal, decision: String) {
+        guard decidingProposalId == nil else { return }
+
+        if proposal.intent.risk == "orange" && decision == "approve" {
             pendingDecision = (proposal.proposalId, decision)
             showOrangeConfirm = true
             return
@@ -3751,11 +3830,21 @@ struct LobbyView: View {
     private func executeDecision(proposalId: String, decision: String) {
         if decision == "approve" {
             JeevesHaptics.approved()
+        } else if decision == "defer" {
+            JeevesHaptics.consentPrompt()
         } else {
             JeevesHaptics.swipeDeny()
         }
 
-        let reason = decision == "approve" ? TextKeys.Lobby.approveReason : TextKeys.Lobby.denyReason
+        let reason: String
+        switch decision {
+        case "approve":
+            reason = TextKeys.Lobby.approveReason
+        case "defer":
+            reason = TextKeys.Lobby.deferReason
+        default:
+            reason = TextKeys.Lobby.denyReason
+        }
         decidingProposalId = proposalId
         Task {
             let result = await poller.decide(
