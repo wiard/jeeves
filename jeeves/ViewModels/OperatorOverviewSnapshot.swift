@@ -4,14 +4,63 @@ import Foundation
 struct OperatorOverviewSnapshot {
     static let loopLine = "Discovery -> Proposal -> Approval -> Action -> Knowledge"
 
-    enum Tone: String {
+    enum Stage: String, CaseIterable, Identifiable {
         case discovery
-        case governance
+        case proposal
+        case approval
+        case action
         case knowledge
-        case trust
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .discovery:
+                return "Discovery"
+            case .proposal:
+                return "Proposal"
+            case .approval:
+                return "Approval"
+            case .action:
+                return "Action"
+            case .knowledge:
+                return "Knowledge"
+            }
+        }
+
+        var source: String {
+            switch self {
+            case .discovery:
+                return "clashd27"
+            case .proposal:
+                return "proposals.ts"
+            case .approval:
+                return "governance kernel"
+            case .action:
+                return "action-executor.ts"
+            case .knowledge:
+                return "knowledge persistence"
+            }
+        }
     }
 
-    struct HeaderMetric: Identifiable {
+    enum Tone: Equatable {
+        case calm
+        case active
+        case watch
+        case critical
+    }
+
+    struct StatusBar {
+        let healthLabel: String
+        let tone: Tone
+        let lastTick: String
+        let summary: String
+        let activeStageLine: String
+        let operatorLine: String
+    }
+
+    struct MetricItem: Identifiable {
         let id: String
         let label: String
         let value: String
@@ -23,343 +72,358 @@ struct OperatorOverviewSnapshot {
         }
     }
 
-    struct OverviewCard: Identifiable {
-        let id: Tone
+    struct StageCard: Identifiable {
+        let stage: Stage
         let tone: Tone
-        let eyebrow: String
-        let title: String
-        let metric: String
+        let primaryMetric: String
+        let status: String
         let headline: String
         let detail: String
+        let metrics: [MetricItem]
+        let isActive: Bool
+        let needsAttention: Bool
+
+        var id: String { stage.id }
     }
 
-    struct FlowItem: Identifiable {
-        let id: String
+    struct LoopStage: Identifiable {
+        let stage: Stage
+        let metric: String
+        let isActive: Bool
         let tone: Tone
-        let label: String
-        let title: String
-        let detail: String
-        let badge: String
 
-        init(tone: Tone, label: String, title: String, detail: String, badge: String) {
-            self.id = "\(tone.rawValue)-\(label)"
-            self.tone = tone
-            self.label = label
-            self.title = title
-            self.detail = detail
-            self.badge = badge
-        }
+        var id: String { stage.id }
     }
 
     let summary: String
-    let focusLine: String
-    let updatedLine: String
-    let headerMetrics: [HeaderMetric]
-    let overviewCards: [OverviewCard]
-    let flowItems: [FlowItem]
+    let statusBar: StatusBar
+    let loopStages: [LoopStage]
+    let stageCards: [StageCard]
 
     init(poller: ProposalPoller) {
-        let discoveryCandidate = poller.radarDiscoveryCandidates.first
-        let topSignal = poller.radarStatus?.store?.topSignals.first
-        let topActivation = poller.radarActivations.first
-        let topPendingProposal = poller.pendingProposals.first
-        let topGapProposal = poller.gapProposals.first(where: \.isPending)
-        let latestDecision = poller.decidedProposals.first
-        let latestAction = poller.recentActions.first ?? poller.decidedProposals.compactMap(\.action).first
-        let latestKnowledge = poller.recentKnowledgeObjects.first
-        let discoveryCount = max(poller.radarDiscoveryCandidates.count, poller.radarStatus?.store?.activationCount ?? 0)
-        let pendingApprovalCount = max(poller.pendingProposals.count, poller.conductorState?.consentPending ?? 0)
-        let recentKnowledgeCount = poller.recentKnowledgeObjects.count
-        let recentChangeCount = max(poller.recentActions.count, poller.decidedProposals.count)
-        let trustVisibleCount = (poller.safeClashFeed?.certified.count ?? 0) + (poller.safeClashFeed?.emerging.count ?? 0)
-        let lastUpdatedAt = poller.lastSuccessfulRefreshAt
-
-        summary = "A calm summary of internet and telemetry signals flowing through CLASHD27 discovery, openclashd-v2 governance, SafeClash receipts, and resulting knowledge without moving authority into Jeeves."
-        focusLine = Self.focusLine(
-            discoveryCandidate: discoveryCandidate,
-            topSignal: topSignal,
-            topPendingProposal: topPendingProposal,
-            topGapProposal: topGapProposal,
-            latestKnowledge: latestKnowledge
+        let discoverySignalsLive = max(
+            poller.radarDiscoveryCandidates.count,
+            poller.radarStatus?.store?.activationCount ?? 0,
+            poller.radarActivations.count
         )
-        updatedLine = "Updated \(Self.relativeDateString(lastUpdatedAt))"
+        let collisionCount = max(poller.radarCollisions.count, poller.radarStatus?.store?.collisionCount ?? 0)
+        let emergenceCount = max(
+            poller.radarEmergence.count,
+            poller.radarStatus?.store?.emergenceCount ?? 0,
+            poller.knowledgeStatus?.emergenceClustersCount ?? 0
+        )
+        let createdProposals = max(poller.proposals.count, poller.pendingProposals.count + poller.decidedProposals.count)
+        let pendingApprovals = max(poller.pendingProposals.count, poller.conductorState?.consentPending ?? 0)
+        let filteredProposals = poller.decidedProposals.filter { $0.isDenied || $0.isDeferred }.count
+        let highRiskPending = poller.pendingProposals.filter(Self.isHighRisk).count
+        let escalationAlerts = poller.gapProposals.filter(\.isPending).count + (poller.activeEmergenceAlert == nil ? 0 : 1)
+        let actionsExecutedToday = poller.recentActions.filter(Self.completedToday).count
+        let runningActions = poller.recentActions.filter(Self.isRunningAction).count
+        let failedActions = poller.recentActions.filter(\.isFailed).count
+        let knowledgeObjectsVisible = poller.recentKnowledgeObjects.count
+        let newKnowledgeToday = poller.recentKnowledgeObjects.filter(Self.createdToday).count
+        let linkedChallenges = poller.knowledgeStatus?.lastKnowledgeChallenges.count ?? 0
+        let trustVisible = (poller.safeClashFeed?.certified.count ?? 0) + (poller.safeClashFeed?.emerging.count ?? 0)
 
-        headerMetrics = [
-            HeaderMetric(label: "Discovery", value: "\(discoveryCount) live"),
-            HeaderMetric(label: "Governance", value: "\(pendingApprovalCount) pending"),
-            HeaderMetric(label: "Knowledge", value: recentKnowledgeCount == 0 ? "quiet" : "\(recentKnowledgeCount) recent"),
-            HeaderMetric(
-                label: "Trust",
-                value: trustVisibleCount == 0
-                    ? Self.killSwitchLabel(isActive: poller.conductorState?.killSwitch.active ?? false)
-                    : "\(trustVisibleCount) visible"
+        let activeStage = Self.activeStage(
+            pendingApprovals: pendingApprovals,
+            runningActions: runningActions,
+            createdProposals: createdProposals,
+            discoverySignalsLive: discoverySignalsLive,
+            newKnowledgeToday: newKnowledgeToday
+        )
+        let healthTone = Self.healthTone(poller: poller, pendingApprovals: pendingApprovals, failedActions: failedActions)
+        let topSignal = poller.radarDiscoveryCandidates.first?.candidateType
+            ?? poller.radarStatus?.store?.topSignals.first?.title
+            ?? poller.radarActivations.first?.title
+            ?? "No live signal"
+        let topProposal = poller.pendingProposals.first?.title
+            ?? poller.decidedProposals.first?.title
+            ?? "No proposal pressure"
+        let latestKnowledge = poller.recentKnowledgeObjects.first?.title ?? "No recent knowledge object"
+
+        summary = "System health, live pipeline pressure, and operator review at a glance."
+
+        statusBar = StatusBar(
+            healthLabel: Self.healthLabel(for: healthTone),
+            tone: healthTone,
+            lastTick: Self.relativeDateString(poller.lastSuccessfulRefreshAt),
+            summary: "\(discoverySignalsLive) discoveries • \(pendingApprovals) approvals pending",
+            activeStageLine: "Pipeline active in \(activeStage.title)",
+            operatorLine: Self.operatorLine(
+                pendingApprovals: pendingApprovals,
+                failedActions: failedActions,
+                killSwitchActive: poller.conductorState?.killSwitch.active ?? false
             )
-        ]
-
-        let discoveryHeadline = discoveryCandidate?.candidateType
-            ?? topSignal?.title
-            ?? topActivation?.title
-            ?? "Waiting for CLASHD27 discovery output"
-        let discoveryDetail = Self.discoveryDetail(
-            discoveryCandidate: discoveryCandidate,
-            topSignal: topSignal,
-            poller: poller
         )
 
-        let governanceHeadline = topPendingProposal?.title
-            ?? topGapProposal?.title
-            ?? "No proposals are waiting for approval"
-        let governanceDetail = Self.governanceDetail(
-            topPendingProposal: topPendingProposal,
-            topGapProposal: topGapProposal,
-            latestAction: latestAction,
-            conductorState: poller.conductorState
-        )
-
-        let knowledgeHeadline = latestKnowledge?.title
-            ?? poller.knowledgeStatus?.lastKnowledgeChallenges.first?.title
-            ?? "No recent knowledge objects surfaced"
-        let knowledgeDetail = Self.knowledgeDetail(
-            latestKnowledge: latestKnowledge,
-            knowledgeStatus: poller.knowledgeStatus
-        )
-
-        let trustHeadline = Self.trustHeadline(poller: poller, latestDecision: latestDecision, latestAction: latestAction)
-        let trustDetail = Self.trustDetail(
-            poller: poller,
-            latestDecision: latestDecision,
-            latestAction: latestAction
-        )
-
-        overviewCards = [
-            OverviewCard(
-                id: .discovery,
-                tone: .discovery,
-                eyebrow: "Discovery",
-                title: "What is forming",
-                metric: discoveryCount == 0 ? "quiet" : "\(discoveryCount) live",
-                headline: discoveryHeadline,
-                detail: discoveryDetail
-            ),
-            OverviewCard(
-                id: .governance,
-                tone: .governance,
-                eyebrow: "Governance",
-                title: "What needs approval",
-                metric: "\(pendingApprovalCount) pending",
-                headline: governanceHeadline,
-                detail: governanceDetail
-            ),
-            OverviewCard(
-                id: .knowledge,
-                tone: .knowledge,
-                eyebrow: "Knowledge",
-                title: "What was learned",
-                metric: recentKnowledgeCount == 0 ? "quiet" : "\(recentKnowledgeCount) recent",
-                headline: knowledgeHeadline,
-                detail: knowledgeDetail
-            ),
-            OverviewCard(
-                id: .trust,
-                tone: .trust,
-                eyebrow: "Trust",
-                title: "What changed",
-                metric: recentChangeCount == 0 ? "quiet" : "\(recentChangeCount) recent",
-                headline: trustHeadline,
-                detail: trustDetail
-            )
-        ]
-
-        flowItems = [
-            FlowItem(
-                tone: .discovery,
-                label: "Signal",
-                title: discoveryHeadline,
-                detail: discoveryCandidate?.explanation
-                    ?? topSignal.map { "\($0.source) residue \(Self.scoreString($0.residue))." }
-                    ?? topActivation?.summary
-                    ?? "No discovery signal is currently leading the queue.",
-                badge: discoveryCandidate.map { "score \(Self.scoreString($0.candidateScore))" }
-                    ?? topSignal.map { "residue \(Self.scoreString($0.residue))" }
-                    ?? "waiting"
-            ),
-            FlowItem(
-                tone: .governance,
-                label: "Proposal",
-                title: governanceHeadline,
-                detail: topPendingProposal?.priorityExplanation
-                    ?? topGapProposal?.summary
-                    ?? "No pending proposal is applying operator pressure.",
-                badge: topPendingProposal?.displayPriority.isEmpty == false
-                    ? topPendingProposal?.displayPriority ?? "pending"
-                    : "\(pendingApprovalCount) pending"
-            ),
-            FlowItem(
-                tone: .governance,
-                label: "Approval",
-                title: latestDecision?.title ?? topPendingProposal?.title ?? "Awaiting approval",
-                detail: Self.approvalDetail(
-                    latestDecision: latestDecision,
-                    topPendingProposal: topPendingProposal,
-                    topGapProposal: topGapProposal
+        loopStages = Stage.allCases.map { stage in
+            LoopStage(
+                stage: stage,
+                metric: Self.loopMetric(
+                    for: stage,
+                    discoverySignalsLive: discoverySignalsLive,
+                    createdProposals: createdProposals,
+                    pendingApprovals: pendingApprovals,
+                    runningActions: runningActions,
+                    knowledgeObjectsVisible: knowledgeObjectsVisible
                 ),
-                badge: latestDecision?.status.uppercased() ?? (topPendingProposal != nil || topGapProposal != nil ? "PENDING" : "IDLE")
+                isActive: stage == activeStage,
+                tone: Self.stageTone(
+                    for: stage,
+                    isActive: stage == activeStage,
+                    needsAttention: stage == .approval ? pendingApprovals > 0 : (stage == .action ? failedActions > 0 : false)
+                )
+            )
+        }
+
+        stageCards = [
+            StageCard(
+                stage: .discovery,
+                tone: Self.stageTone(for: .discovery, isActive: activeStage == .discovery, needsAttention: discoverySignalsLive > 0),
+                primaryMetric: "\(discoverySignalsLive)",
+                status: discoverySignalsLive == 0 ? "Quiet" : "Signals live",
+                headline: topSignal,
+                detail: Self.discoveryDetail(poller: poller),
+                metrics: [
+                    MetricItem(label: "Signals", value: "\(discoverySignalsLive)"),
+                    MetricItem(label: "Collisions", value: "\(collisionCount)"),
+                    MetricItem(label: "Emerging", value: "\(emergenceCount)")
+                ],
+                isActive: activeStage == .discovery,
+                needsAttention: false
             ),
-            FlowItem(
-                tone: .trust,
-                label: "Action",
-                title: latestAction?.actionKind.replacingOccurrences(of: "_", with: " ").capitalized
+            StageCard(
+                stage: .proposal,
+                tone: Self.stageTone(for: .proposal, isActive: activeStage == .proposal, needsAttention: createdProposals > 0),
+                primaryMetric: "\(createdProposals)",
+                status: createdProposals == 0 ? "Quiet" : "Proposals created",
+                headline: topProposal,
+                detail: Self.proposalDetail(poller: poller),
+                metrics: [
+                    MetricItem(label: "Created", value: "\(createdProposals)"),
+                    MetricItem(label: "Awaiting", value: "\(pendingApprovals)"),
+                    MetricItem(label: "Filtered", value: "\(filteredProposals)")
+                ],
+                isActive: activeStage == .proposal,
+                needsAttention: false
+            ),
+            StageCard(
+                stage: .approval,
+                tone: Self.stageTone(for: .approval, isActive: activeStage == .approval, needsAttention: pendingApprovals > 0),
+                primaryMetric: "\(pendingApprovals)",
+                status: pendingApprovals == 0 ? "Queue clear" : "Review required",
+                headline: poller.pendingProposals.first?.title ?? "No pending approval",
+                detail: Self.approvalDetail(poller: poller),
+                metrics: [
+                    MetricItem(label: "Pending", value: "\(pendingApprovals)"),
+                    MetricItem(label: "High risk", value: "\(highRiskPending)"),
+                    MetricItem(label: "Escalations", value: "\(escalationAlerts)")
+                ],
+                isActive: activeStage == .approval,
+                needsAttention: pendingApprovals > 0
+            ),
+            StageCard(
+                stage: .action,
+                tone: Self.stageTone(for: .action, isActive: activeStage == .action, needsAttention: failedActions > 0),
+                primaryMetric: "\(actionsExecutedToday)",
+                status: failedActions > 0 ? "Failures visible" : (runningActions > 0 ? "Running now" : "Bounded"),
+                headline: poller.recentActions.first?.actionKind.replacingOccurrences(of: "_", with: " ").capitalized
                     ?? "No recent bounded action",
-                detail: latestAction?.receipt?.resultSummary
-                    ?? latestAction?.executionState.capitalized
-                    ?? "Awaiting the next governed execution receipt.",
-                badge: latestAction?.executionState.uppercased() ?? "IDLE"
+                detail: Self.actionDetail(poller: poller, trustVisible: trustVisible),
+                metrics: [
+                    MetricItem(label: "Today", value: "\(actionsExecutedToday)"),
+                    MetricItem(label: "Running", value: "\(runningActions)"),
+                    MetricItem(label: "Failures", value: "\(failedActions)")
+                ],
+                isActive: activeStage == .action,
+                needsAttention: failedActions > 0
             ),
-            FlowItem(
-                tone: .knowledge,
-                label: "Knowledge",
-                title: latestKnowledge?.title ?? "No recent knowledge object",
-                detail: latestKnowledge?.summary.isEmpty == false
-                    ? latestKnowledge?.summary ?? ""
-                    : "Knowledge will appear here once an action or investigation produces an addressable object.",
-                badge: latestKnowledge?.kind.replacingOccurrences(of: "_", with: " ").uppercased() ?? "QUIET"
+            StageCard(
+                stage: .knowledge,
+                tone: Self.stageTone(for: .knowledge, isActive: activeStage == .knowledge, needsAttention: newKnowledgeToday > 0),
+                primaryMetric: "\(knowledgeObjectsVisible)",
+                status: knowledgeObjectsVisible == 0 ? "Quiet" : "Objects visible",
+                headline: latestKnowledge,
+                detail: Self.knowledgeDetail(poller: poller),
+                metrics: [
+                    MetricItem(label: "Visible", value: "\(knowledgeObjectsVisible)"),
+                    MetricItem(label: "New today", value: "\(newKnowledgeToday)"),
+                    MetricItem(label: "Challenges", value: "\(linkedChallenges)")
+                ],
+                isActive: activeStage == .knowledge,
+                needsAttention: false
             )
         ]
     }
 
-    private static func focusLine(
-        discoveryCandidate: RadarDiscoveryCandidate?,
-        topSignal: RadarTopSignal?,
-        topPendingProposal: Proposal?,
-        topGapProposal: GovernedGapEntry?,
-        latestKnowledge: KnowledgeObject?
-    ) -> String {
-        let discovery = discoveryCandidate?.candidateType ?? topSignal?.title ?? "no leading discovery"
-        let approval = topPendingProposal?.title ?? topGapProposal?.title ?? "no approval queue"
-        let knowledge = latestKnowledge?.title ?? "no new knowledge object"
-        return "\(discovery) is forming, \(approval) needs review, and \(knowledge) is the latest visible knowledge."
+    private static func discoveryDetail(poller: ProposalPoller) -> String {
+        let sources = poller.radarSources.prefix(3).map(\.source).joined(separator: ", ")
+        let sourceLine = sources.isEmpty ? "Sources quiet." : "Sources: \(sources)."
+        let topSignal = poller.radarStatus?.store?.topSignals.first.map { "\($0.source) residue \(scoreString($0.residue))" }
+        return "\(topSignal ?? "Discovery pressure is being tracked live.") \(sourceLine)"
     }
 
-    private static func discoveryDetail(
-        discoveryCandidate: RadarDiscoveryCandidate?,
-        topSignal: RadarTopSignal?,
-        poller: ProposalPoller
-    ) -> String {
-        let candidateDetail = discoveryCandidate?.explanation
-        let signalDetail = topSignal.map { "\($0.source) residue \(scoreString($0.residue))" }
-        let discoveryLane = [candidateDetail, signalDetail]
-            .compactMap { value in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            .first ?? "No discovery explanation is available yet."
-        let topSources = poller.radarSources
-            .prefix(3)
-            .map(\.source)
-            .joined(separator: ", ")
-        let sourceLine = topSources.isEmpty ? "Sources are still quiet." : "Source flow: \(topSources)."
-        return "\(discoveryLane) \(poller.radarDiscoveryCandidates.count) candidates, \(poller.radarActivations.count) activations, \(poller.radarEmergence.count) emergence traces. \(sourceLine)"
+    private static func proposalDetail(poller: ProposalPoller) -> String {
+        if let proposal = poller.pendingProposals.first {
+            return proposal.priorityExplanation ?? "Proposal is staged for review in the governance queue."
+        }
+        if let decision = poller.decidedProposals.first {
+            return decision.decisionReason ?? "Recent proposal decisions remain visible in the governed history."
+        }
+        return "No proposal traffic is pressing the operator right now."
     }
 
-    private static func governanceDetail(
-        topPendingProposal: Proposal?,
-        topGapProposal: GovernedGapEntry?,
-        latestAction: ActionSummary?,
-        conductorState: ConductorState?
-    ) -> String {
-        let proposalContext = topPendingProposal?.priorityExplanation
-            ?? topGapProposal?.summary
-            ?? "The queue is currently clear."
-        let cycleStage = conductorState?.cycleStage.replacingOccurrences(of: "_", with: " ").capitalized ?? "Unknown stage"
-        let actionState = latestAction?.executionState.replacingOccurrences(of: "_", with: " ").capitalized ?? "No recent action"
-        return "\(proposalContext) Kernel stage: \(cycleStage). Latest bounded action: \(actionState)."
+    private static func approvalDetail(poller: ProposalPoller) -> String {
+        if let proposal = poller.pendingProposals.first {
+            return proposal.priorityExplanation ?? "Explicit human approval is required before any bounded action can proceed."
+        }
+        if let decision = poller.decidedProposals.first {
+            return decision.decisionReason ?? "\(decision.status.capitalized) decision recorded."
+        }
+        return "The approval queue is currently clear."
     }
 
-    private static func knowledgeDetail(
-        latestKnowledge: KnowledgeObject?,
-        knowledgeStatus: KnowledgeStatus?
-    ) -> String {
-        let scanLine: String
-        if let scanIso = knowledgeStatus?.lastScanAtIso {
-            scanLine = relativeDateString(scanIso)
-        } else {
-            scanLine = "awaiting scan"
+    private static func actionDetail(poller: ProposalPoller, trustVisible: Int) -> String {
+        if let action = poller.recentActions.first {
+            let receiptLine = action.receipt?.resultSummary ?? action.executionState.capitalized
+            return "\(receiptLine) SafeClash visibility \(trustVisible)."
         }
-        let cells = knowledgeStatus?.topCubeCells.prefix(2).joined(separator: ", ")
-        let discoveryLine = (cells?.isEmpty == false) ? "Top cube cells: \(cells!)." : "No hot cube cells surfaced."
-        let summary = latestKnowledge?.summary.isEmpty == false
-            ? latestKnowledge?.summary ?? ""
-            : "Knowledge remains visible and attributable once an action produces it."
-        return "\(summary) \(discoveryLine) Last scan \(scanLine). Knowledge remains visible for later discovery scans."
+        return "No recent execution receipt. SafeClash visibility \(trustVisible)."
     }
 
-    private static func trustHeadline(
-        poller: ProposalPoller,
-        latestDecision: DecidedProposal?,
-        latestAction: ActionSummary?
-    ) -> String {
-        if let latestAction {
-            return latestAction.actionKind.replacingOccurrences(of: "_", with: " ").capitalized
+    private static func knowledgeDetail(poller: ProposalPoller) -> String {
+        if let object = poller.recentKnowledgeObjects.first {
+            return object.summary.isEmpty ? "Knowledge object stored and visible to the operator." : object.summary
         }
-        if let latestDecision {
-            return latestDecision.title
-        }
-        if poller.conductorState?.killSwitch.active == true {
-            return "Kill switch active"
-        }
-        let certified = poller.safeClashFeed?.certified.count ?? 0
-        let emerging = poller.safeClashFeed?.emerging.count ?? 0
-        if certified + emerging > 0 {
-            return "\(certified) certified and \(emerging) emerging SafeClash entries"
-        }
-        return "No recent governed change"
+        let lastScan = relativeDateString(poller.knowledgeStatus?.lastScanAtIso ?? "")
+        return "No recent knowledge object. Last knowledge scan \(lastScan)."
     }
 
-    private static func trustDetail(
-        poller: ProposalPoller,
-        latestDecision: DecidedProposal?,
-        latestAction: ActionSummary?
-    ) -> String {
-        let killSwitch = killSwitchLabel(isActive: poller.conductorState?.killSwitch.active ?? false)
-        let budget = poller.conductorState.map { String(format: "%.0f", $0.budget.remaining) } ?? "unknown"
-        let receipt = latestAction?.receipt.map { relativeDateString($0.completedAtIso) } ?? "no fresh receipt"
-        let attestations = (poller.safeClashFeed?.certified.count ?? 0) + (poller.safeClashFeed?.emerging.count ?? 0)
-        let changeLine: String
-        if let latestAction {
-            changeLine = latestAction.receipt?.resultSummary
-                ?? "\(latestAction.executionState.capitalized) \(receipt)"
-        } else if let latestDecision {
-            let status = latestDecision.status.replacingOccurrences(of: "_", with: " ")
-            changeLine = latestDecision.decisionReason ?? "\(status.capitalized) decision recorded."
-        } else {
-            changeLine = "No recent decision or receipt is visible."
+    private static func activeStage(
+        pendingApprovals: Int,
+        runningActions: Int,
+        createdProposals: Int,
+        discoverySignalsLive: Int,
+        newKnowledgeToday: Int
+    ) -> Stage {
+        if pendingApprovals > 0 {
+            return .approval
         }
-        return "\(changeLine) \(killSwitch). Budget remaining \(budget). SafeClash visibility \(attestations)."
+        if runningActions > 0 {
+            return .action
+        }
+        if createdProposals > 0 {
+            return .proposal
+        }
+        if discoverySignalsLive > 0 {
+            return .discovery
+        }
+        if newKnowledgeToday > 0 {
+            return .knowledge
+        }
+        return .discovery
     }
 
-    private static func approvalDetail(
-        latestDecision: DecidedProposal?,
-        topPendingProposal: Proposal?,
-        topGapProposal: GovernedGapEntry?
-    ) -> String {
-        if let latestDecision {
-            let status = latestDecision.status.replacingOccurrences(of: "_", with: " ").capitalized
-            if let reason = latestDecision.decisionReason, !reason.isEmpty {
-                return "\(status). \(reason)"
-            }
-            return "\(status) decision is visible in the governed history."
+    private static func healthTone(poller: ProposalPoller, pendingApprovals: Int, failedActions: Int) -> Tone {
+        if poller.isDegraded || poller.lastRefreshError != nil {
+            return .critical
         }
-        if let topPendingProposal {
-            return topPendingProposal.priorityExplanation ?? "Awaiting explicit human approval through openclashd-v2."
+        if poller.conductorState?.killSwitch.active == true || failedActions > 0 {
+            return .watch
         }
-        if let topGapProposal {
-            return topGapProposal.summary
+        if pendingApprovals > 0 {
+            return .active
         }
-        return "No approval event is currently visible."
+        return .calm
     }
 
-    private static func killSwitchLabel(isActive: Bool) -> String {
-        isActive ? "kill switch active" : "kill switch clear"
+    private static func stageTone(for stage: Stage, isActive: Bool, needsAttention: Bool) -> Tone {
+        if needsAttention {
+            return .watch
+        }
+        if isActive {
+            return .active
+        }
+        if stage == .knowledge {
+            return .calm
+        }
+        return .calm
+    }
+
+    private static func healthLabel(for tone: Tone) -> String {
+        switch tone {
+        case .calm:
+            return "Healthy"
+        case .active:
+            return "Healthy"
+        case .watch:
+            return "Guarded"
+        case .critical:
+            return "Attention"
+        }
+    }
+
+    private static func operatorLine(pendingApprovals: Int, failedActions: Int, killSwitchActive: Bool) -> String {
+        if killSwitchActive {
+            return "Kill switch is active."
+        }
+        if pendingApprovals > 0 {
+            return "Operator review is required now."
+        }
+        if failedActions > 0 {
+            return "Review the latest action failures."
+        }
+        return "No operator decision is required right now."
+    }
+
+    private static func loopMetric(
+        for stage: Stage,
+        discoverySignalsLive: Int,
+        createdProposals: Int,
+        pendingApprovals: Int,
+        runningActions: Int,
+        knowledgeObjectsVisible: Int
+    ) -> String {
+        switch stage {
+        case .discovery:
+            return "\(discoverySignalsLive)"
+        case .proposal:
+            return "\(createdProposals)"
+        case .approval:
+            return "\(pendingApprovals)"
+        case .action:
+            return "\(runningActions)"
+        case .knowledge:
+            return "\(knowledgeObjectsVisible)"
+        }
+    }
+
+    private static func isHighRisk(_ proposal: Proposal) -> Bool {
+        let risk = proposal.intent.risk.lowercased()
+        if risk.contains("high") || risk.contains("critical") {
+            return true
+        }
+        return (proposal.priorityFactors?.riskScore ?? 0) >= 0.75
+    }
+
+    private static func isRunningAction(_ action: ActionSummary) -> Bool {
+        let state = action.executionState.lowercased()
+        return state == "running" || state == "queued" || state == "pending" || state == "started" || state == "in_progress"
+    }
+
+    private static func completedToday(_ action: ActionSummary) -> Bool {
+        guard let iso = action.receipt?.completedAtIso else { return false }
+        return createdToday(iso: iso)
+    }
+
+    private static func createdToday(_ object: KnowledgeObject) -> Bool {
+        createdToday(iso: object.createdAtIso)
+    }
+
+    private static func createdToday(iso: String) -> Bool {
+        guard let date = isoFormatter.date(from: iso) else { return false }
+        return Calendar.current.isDateInToday(date)
     }
 
     private static func scoreString(_ value: Double) -> String {
@@ -372,7 +436,8 @@ struct OperatorOverviewSnapshot {
     }
 
     private static func relativeDateString(_ iso: String) -> String {
-        relativeDateString(isoFormatter.date(from: iso))
+        guard !iso.isEmpty else { return "awaiting scan" }
+        return relativeDateString(isoFormatter.date(from: iso))
     }
 
     private static let isoFormatter = ISO8601DateFormatter()

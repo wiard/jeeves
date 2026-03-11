@@ -1,6 +1,36 @@
 import Foundation
 import Observation
 
+struct MissionControlSystemLoopSnapshot {
+    enum Stage: String, CaseIterable {
+        case discovery = "Discovery"
+        case proposal = "Proposal"
+        case approval = "Approval"
+        case action = "Action"
+        case knowledge = "Knowledge"
+
+        var eventLabel: String {
+            switch self {
+            case .discovery:
+                return "Signals live"
+            case .proposal:
+                return "Proposals created"
+            case .approval:
+                return "Pending approvals"
+            case .action:
+                return "Actions processed"
+            case .knowledge:
+                return "Knowledge objects"
+            }
+        }
+    }
+
+    let currentStage: Stage
+    let eventCount: Int
+    let stageSummary: String
+    let lastTransitionAt: Date?
+}
+
 @MainActor
 @Observable
 final class MissionControlViewModel {
@@ -121,4 +151,110 @@ final class MissionControlViewModel {
         let token = endpoint.token?.trimmingCharacters(in: .whitespacesAndNewlines)
         return SafeClashClient(baseURL: baseURL, token: (token?.isEmpty == false) ? token : nil)
     }
+
+    static func systemLoopSnapshot(
+        poller: ProposalPoller,
+        gateway: GatewayManager
+    ) -> MissionControlSystemLoopSnapshot {
+        let pendingApprovals = max(
+            poller.pendingProposals.count,
+            poller.conductorState?.consentPending ?? gateway.currentStatus?.consent.pending ?? 0
+        )
+        let discoveryEvents = max(
+            poller.radarDiscoveryCandidates.count,
+            poller.radarActivations.count,
+            poller.radarStatus?.store?.activationCount ?? 0
+        )
+        let proposalEvents = max(
+            poller.proposals.count,
+            poller.pendingProposals.count + poller.decidedProposals.count
+        )
+        let knowledgeEvents = poller.recentKnowledgeObjects.count
+
+        if pendingApprovals > 0 {
+            return MissionControlSystemLoopSnapshot(
+                currentStage: .approval,
+                eventCount: pendingApprovals,
+                stageSummary: "\(pendingApprovals) proposal\(pendingApprovals == 1 ? "" : "s") waiting for operator review.",
+                lastTransitionAt: latestDate(
+                    parseISO(poller.pendingProposals.first?.createdAtIso),
+                    parseISO(poller.conductorState?.updatedAtIso)
+                )
+            )
+        }
+
+        let runningActions = poller.recentActions.filter { action in
+            let state = action.executionState.lowercased()
+            return state == "running" || state == "queued" || state == "pending" || state == "in_progress"
+        }
+        if !runningActions.isEmpty {
+            return MissionControlSystemLoopSnapshot(
+                currentStage: .action,
+                eventCount: runningActions.count,
+                stageSummary: "\(runningActions.count) bounded action\(runningActions.count == 1 ? "" : "s") currently executing.",
+                lastTransitionAt: latestDate(
+                    runningActions.compactMap { parseISO($0.receipt?.completedAtIso) } + [poller.lastSuccessfulRefreshAt].compactMap { $0 }
+                )
+            )
+        }
+
+        if proposalEvents > 0 && (!poller.pendingProposals.isEmpty || !poller.decidedProposals.isEmpty) {
+            return MissionControlSystemLoopSnapshot(
+                currentStage: .proposal,
+                eventCount: proposalEvents,
+                stageSummary: "\(proposalEvents) proposal event\(proposalEvents == 1 ? "" : "s") visible in the governed queue.",
+                lastTransitionAt: latestDate(
+                    parseISO(poller.pendingProposals.first?.createdAtIso),
+                    parseISO(poller.decidedProposals.first?.decidedAtIso)
+                )
+            )
+        }
+
+        if discoveryEvents > 0 {
+            return MissionControlSystemLoopSnapshot(
+                currentStage: .discovery,
+                eventCount: discoveryEvents,
+                stageSummary: "\(discoveryEvents) live discovery event\(discoveryEvents == 1 ? "" : "s") flowing from CLASHD27.",
+                lastTransitionAt: latestDate(
+                    parseISO(poller.radarActivations.first?.timestampIso),
+                    parseISO(poller.radarStatus?.collector?.lastRun),
+                    poller.lastSuccessfulRefreshAt
+                )
+            )
+        }
+
+        if knowledgeEvents > 0 {
+            return MissionControlSystemLoopSnapshot(
+                currentStage: .knowledge,
+                eventCount: knowledgeEvents,
+                stageSummary: "\(knowledgeEvents) recent knowledge object\(knowledgeEvents == 1 ? "" : "s") visible to the operator.",
+                lastTransitionAt: latestDate(
+                    parseISO(poller.recentKnowledgeObjects.first?.createdAtIso),
+                    parseISO(poller.knowledgeStatus?.lastScanAtIso)
+                )
+            )
+        }
+
+        return MissionControlSystemLoopSnapshot(
+            currentStage: .discovery,
+            eventCount: 0,
+            stageSummary: "Waiting for the next governed system event.",
+            lastTransitionAt: poller.lastSuccessfulRefreshAt
+        )
+    }
+
+    private static func parseISO(_ iso: String?) -> Date? {
+        guard let iso, !iso.isEmpty else { return nil }
+        return isoFormatter.date(from: iso)
+    }
+
+    private static func latestDate(_ dates: Date?...) -> Date? {
+        latestDate(dates.compactMap { $0 })
+    }
+
+    private static func latestDate(_ dates: [Date]) -> Date? {
+        dates.max()
+    }
+
+    private static let isoFormatter = ISO8601DateFormatter()
 }

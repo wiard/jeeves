@@ -23,23 +23,16 @@ struct OperatorHomeView: View {
                 .ignoresSafeArea()
 
                 if isBootstrapping {
-                    ProgressView("Overview preparing...")
+                    ProgressView("Mission Control preparing...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     content
                 }
             }
-            .navigationTitle("Overview")
+            .navigationTitle("Mission Control")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Mission Control") {
-                        presentedDestination = .missionControl
-                    }
-                }
-            }
             .refreshable {
                 await refresh()
             }
@@ -78,59 +71,112 @@ struct OperatorHomeView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                InstrumentRoleHeader(
-                    eyebrow: "Entry Layer",
-                    title: "Governed System Overview",
-                    summary: snapshot.summary,
-                    accent: .blue,
-                    metrics: snapshot.headerMetrics.map { metric in
-                        InstrumentRoleMetric(label: metric.label, value: metric.value)
-                    }
-                )
+                statusBar
                 .calmAppear()
 
-                loopCard
+                OperatorLatestFlowStrip(items: snapshot.loopStages)
                     .calmAppear(delay: 0.05)
 
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(Array(snapshot.overviewCards.enumerated()), id: \.element.id) { index, card in
+                    ForEach(Array(snapshot.stageCards.enumerated()), id: \.element.id) { index, card in
                         OperatorOverviewCard(card: card)
                             .calmAppear(delay: 0.08 + (Double(index) * 0.04))
                     }
                 }
 
-                OperatorLatestFlowStrip(items: snapshot.flowItems)
-                    .calmAppear(delay: 0.24)
-
                 deepLinksPanel
-                    .calmAppear(delay: 0.28)
+                    .calmAppear(delay: 0.32)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
     }
 
-    private var loopCard: some View {
-        InstrumentSectionPanel(
-            eyebrow: "Governed Loop",
-            title: "The system stays legible at first glance",
-            subtitle: snapshot.focusLine,
-            accent: .blue
-        ) {
-            Text(OperatorOverviewSnapshot.loopLine)
-                .font(.jeevesMono)
-                .foregroundStyle(.primary)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color.white.opacity(0.55))
-                )
+    private var statusBar: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("SYSTEM STATUS")
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(statusAccent)
 
-            Text(snapshot.updatedLine)
-                .font(.jeevesCaption)
-                .foregroundStyle(.secondary)
+                    Text("\(snapshot.statusBar.healthLabel) • Last tick \(snapshot.statusBar.lastTick)")
+                        .font(.jeevesHeadline)
+
+                    Text(snapshot.summary)
+                        .font(.jeevesBody)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(snapshot.statusBar.healthLabel.uppercased())
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(statusAccent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(statusAccent.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            ViewThatFits {
+                HStack(spacing: 10) {
+                    statusPill(snapshot.statusBar.summary, tint: .blue)
+                    statusPill(snapshot.statusBar.activeStageLine, tint: statusAccent)
+                    statusPill(snapshot.statusBar.operatorLine, tint: operatorTint)
+                }
+
+                VStack(spacing: 10) {
+                    statusPill(snapshot.statusBar.summary, tint: .blue)
+                    statusPill(snapshot.statusBar.activeStageLine, tint: statusAccent)
+                    statusPill(snapshot.statusBar.operatorLine, tint: operatorTint)
+                }
+            }
         }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(statusAccent.opacity(0.16), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 18, y: 10)
+    }
+
+    private func statusPill(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.jeevesCaption)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(tint.opacity(0.08))
+            )
+    }
+
+    private var statusAccent: Color {
+        switch snapshot.statusBar.tone {
+        case .calm:
+            return .green
+        case .active:
+            return .blue
+        case .watch:
+            return .orange
+        case .critical:
+            return .red
+        }
+    }
+
+    private var operatorTint: Color {
+        if snapshot.statusBar.operatorLine == "No operator decision is required right now." {
+            return .green
+        }
+        return .orange
     }
 
     private var deepLinksPanel: some View {

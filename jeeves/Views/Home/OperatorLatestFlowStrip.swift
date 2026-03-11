@@ -1,90 +1,72 @@
 import SwiftUI
 
 struct OperatorLatestFlowStrip: View {
-    let items: [OperatorOverviewSnapshot.FlowItem]
+    let items: [OperatorOverviewSnapshot.LoopStage]
 
     var body: some View {
         InstrumentSectionPanel(
-            eyebrow: "Latest Flow",
-            title: "From signal to approval to visible knowledge",
-            subtitle: "A compact strip showing the most recent governed path through discovery, approval, action, and knowledge.",
+            eyebrow: "System Loop",
+            title: "Discovery -> Proposal -> Approval -> Action -> Knowledge",
+            subtitle: "The highlighted stage is where the pipeline is currently active.",
             accent: .blue
         ) {
             ViewThatFits {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        flowCell(for: item)
+                        loopCell(for: item)
 
                         if index < items.count - 1 {
-                            Image(systemName: "arrow.right")
+                            Image(systemName: "chevron.right")
                                 .font(.jeevesMonoSmall)
-                                .foregroundStyle(Color.secondary)
-                                .padding(.top, 22)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        flowCell(for: item)
-
-                        if index < items.count - 1 {
-                            Divider()
-                        }
+                    ForEach(items) { item in
+                        loopCell(for: item)
                     }
                 }
             }
         }
     }
 
-    private func flowCell(for item: OperatorOverviewSnapshot.FlowItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                Text(item.label.uppercased())
-                    .font(.jeevesMonoSmall)
-                    .foregroundStyle(accentColor(for: item.tone))
+    private func loopCell(for item: OperatorOverviewSnapshot.LoopStage) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.stage.title.uppercased())
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(item.isActive ? .white : accentColor(for: item))
 
-                Spacer(minLength: 8)
-
-                Text(item.badge)
-                    .font(.jeevesMonoSmall)
-                    .foregroundStyle(accentColor(for: item.tone))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(accentColor(for: item.tone).opacity(0.12))
-                    .clipShape(Capsule())
-            }
-
-            Text(item.title)
+            Text(item.metric)
                 .font(.jeevesHeadline)
-
-            Text(item.detail)
-                .font(.jeevesCaption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(item.isActive ? .white : .primary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(accentColor(for: item.tone).opacity(0.14), lineWidth: 1)
-                )
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(item.isActive ? accentColor(for: item) : accentColor(for: item).opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(accentColor(for: item).opacity(item.isActive ? 0 : 0.14), lineWidth: 1)
         )
     }
 
-    private func accentColor(for tone: OperatorOverviewSnapshot.Tone) -> Color {
-        switch tone {
+    private func accentColor(for item: OperatorOverviewSnapshot.LoopStage) -> Color {
+        switch item.stage {
         case .discovery:
             return .cyan
-        case .governance:
-            return .orange
+        case .proposal:
+            return .blue
+        case .approval:
+            return item.isActive ? .orange : .orange
+        case .action:
+            return item.tone == .watch ? .red : .jeevesGold
         case .knowledge:
             return .green
-        case .trust:
-            return .jeevesGold
         }
     }
 }

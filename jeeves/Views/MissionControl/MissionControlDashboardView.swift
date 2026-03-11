@@ -50,44 +50,25 @@ struct MissionControlDashboardView: View {
     }
 
     private var dashboardContent: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    InstrumentRoleHeader(
-                        eyebrow: "Operator Surface",
-                        title: "Mission Control",
-                        summary: "Discovery from CLASHD27, governance from openclashd-v2, knowledge flow, and SafeClash trust signals surfaced without moving authority into Jeeves.",
-                        accent: .blue,
-                        metrics: [
-                            InstrumentRoleMetric(label: "Discovery", value: "\(discoveryMetric)"),
-                            InstrumentRoleMetric(label: "Governance", value: "\(pendingApprovalCount) pending"),
-                            InstrumentRoleMetric(label: "Knowledge", value: knowledgeMetric),
-                            InstrumentRoleMetric(label: "Trust", value: trustMetric)
-                        ]
-                    )
+        ScrollView {
+            VStack(spacing: 16) {
+                systemStatusCard
                     .calmAppear()
 
-                    MissionControlCommandDeck(
-                        loopLine: "Discovery -> Proposal -> Human Approval -> Action -> Receipt -> Knowledge",
-                        focusLine: operatorFocusLine,
-                        surfaces: surfaceStates
-                    )
-                    .calmAppear(delay: 0.05)
+                SystemLoopStrip(snapshot: systemLoopSnapshot)
+                    .calmAppear(delay: 0.03)
 
-                    LazyVGrid(columns: columns(for: proxy.size.width), alignment: .leading, spacing: 16) {
-                        discoveryPanel
-                            .calmAppear(delay: 0.08)
-                        governancePanel
-                            .calmAppear(delay: 0.12)
-                        knowledgePanel
-                            .calmAppear(delay: 0.16)
-                        trustPanel
-                            .calmAppear(delay: 0.2)
-                    }
+                ForEach(Array(stageCards.enumerated()), id: \.element.id) { index, card in
+                    MissionControlCompactStageCard(
+                        card: card,
+                        isActive: systemLoopSnapshot.currentStage == card.stage
+                    )
+                    .calmAppear(delay: 0.05 + (Double(index) * 0.04))
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
         }
     }
 
@@ -794,6 +775,144 @@ struct MissionControlDashboardView: View {
         return "Operator focus: the governed loop is calm and all authority boundaries remain intact."
     }
 
+    private var systemStatusCard: some View {
+        MissionControlSystemStatusCard(
+            healthLabel: systemHealthLabel,
+            healthTint: systemHealthTint,
+            summary: operatorFocusLine,
+            metrics: [
+                .init(label: "Refresh", value: refreshStatusLabel, tint: .blue),
+                .init(label: "Pending", value: "\(pendingApprovalCount)", tint: .orange),
+                .init(label: "Trust", value: trustMetric.uppercased(), tint: trustTint)
+            ]
+        )
+    }
+
+    private var systemLoopSnapshot: MissionControlSystemLoopSnapshot {
+        MissionControlViewModel.systemLoopSnapshot(poller: poller, gateway: gateway)
+    }
+
+    private var stageCards: [MissionControlCompactStageModel] {
+        [
+            MissionControlCompactStageModel(
+                stage: .discovery,
+                title: "Discovery",
+                status: discoveryStateLabel,
+                primaryMetric: "\(discoveryMetric)",
+                accent: discoveryTint,
+                summary: topDiscoverySignal.map {
+                    "\($0.title) · \($0.source)"
+                } ?? "No strong discovery pressure visible.",
+                metrics: [
+                    .init(label: "Collisions", value: "\(collisionCount)", tint: .cyan),
+                    .init(label: "Emergence", value: "\(emergenceCount)", tint: .purple),
+                    .init(label: "Gaps", value: "\(gapCandidateCount)", tint: .orange)
+                ]
+            ),
+            MissionControlCompactStageModel(
+                stage: .proposal,
+                title: "Proposal",
+                status: proposalQueueCount > 0 ? "QUEUE" : "CLEAR",
+                primaryMetric: "\(proposalQueueCount)",
+                accent: .blue,
+                summary: topPendingProposal?.title ?? "No proposal queue pressure.",
+                metrics: [
+                    .init(label: "Gap", value: "\(pendingGapCount)", tint: .orange),
+                    .init(label: "Decided", value: "\(poller.decidedProposals.count)", tint: .green),
+                    .init(label: "Cycle", value: compactCycleLabel, tint: .blue)
+                ]
+            ),
+            MissionControlCompactStageModel(
+                stage: .approval,
+                title: "Approval",
+                status: pendingApprovalCount > 0 ? "REVIEW" : "STEADY",
+                primaryMetric: "\(pendingApprovalCount)",
+                accent: .orange,
+                summary: pendingApprovalCount > 0
+                    ? "Operator review required in governed queue."
+                    : "No approval backlog visible.",
+                metrics: [
+                    .init(label: "Approved", value: "\(approvedCount)", tint: .green),
+                    .init(label: "Denied", value: "\(deniedCount)", tint: .red),
+                    .init(label: "Risk", value: killSwitchActive ? "STOP" : (budgetHardStop ? "HARD" : "OK"), tint: governanceTint)
+                ]
+            ),
+            MissionControlCompactStageModel(
+                stage: .action,
+                title: "Action",
+                status: runningActionCount > 0 ? "RUNNING" : (recentBoundedActions.isEmpty ? "QUIET" : "LAST"),
+                primaryMetric: "\(max(runningActionCount, recentReceipts.count))",
+                accent: .jeevesGold,
+                summary: recentBoundedActions.first.map {
+                    $0.actionKind.replacingOccurrences(of: "_", with: " ").capitalized
+                } ?? "No recent bounded action surfaced.",
+                metrics: [
+                    .init(label: "Running", value: "\(runningActionCount)", tint: .jeevesGold),
+                    .init(label: "Receipts", value: "\(recentReceipts.count)", tint: .green),
+                    .init(label: "Failed", value: "\(failedActionCount)", tint: .red)
+                ]
+            ),
+            MissionControlCompactStageModel(
+                stage: .knowledge,
+                title: "Knowledge",
+                status: knowledgeStateLabel,
+                primaryMetric: "\(knowledgeSignals24h)",
+                accent: knowledgeTint,
+                summary: mostRecentKnowledgeObject?.title ?? "Awaiting fresh governed knowledge.",
+                metrics: [
+                    .init(label: "Clusters", value: "\(knowledgeClusterCount)", tint: .purple),
+                    .init(label: "Fresh", value: "\(poller.recentKnowledgeObjects.count)", tint: .blue),
+                    .init(label: "Top cell", value: compactTopKnowledgeCell, tint: .green)
+                ]
+            )
+        ]
+    }
+
+    private var systemHealthLabel: String {
+        if killSwitchActive { return "STOPPED" }
+        if poller.isDegraded { return "DEGRADED" }
+        if !gateway.isConnected { return "OFFLINE" }
+        if model.trustSnapshot.isPlaceholder { return "PARTIAL" }
+        if pendingApprovalCount > 0 { return "ATTENTION" }
+        return "HEALTHY"
+    }
+
+    private var systemHealthTint: Color {
+        if killSwitchActive { return .red }
+        if poller.isDegraded || !gateway.isConnected { return .orange }
+        if model.trustSnapshot.isPlaceholder { return .blue }
+        if pendingApprovalCount > 0 { return .orange }
+        return .green
+    }
+
+    private var refreshStatusLabel: String {
+        guard let date = poller.lastSuccessfulRefreshAt else { return "WAIT" }
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date()).uppercased()
+    }
+
+    private var proposalQueueCount: Int {
+        max(poller.proposals.count, poller.pendingProposals.count + poller.decidedProposals.count)
+    }
+
+    private var compactCycleLabel: String {
+        (poller.conductorState?.cycleStage ?? "steady").uppercased()
+    }
+
+    private var runningActionCount: Int {
+        poller.recentActions.filter {
+            let state = $0.executionState.lowercased()
+            return state == "running" || state == "queued" || state == "pending" || state == "in_progress"
+        }.count
+    }
+
+    private var failedActionCount: Int {
+        recentBoundedActions.filter(\.isFailed).count
+    }
+
+    private var compactTopKnowledgeCell: String {
+        knowledgeSnapshot?.topCubeCells.first?.uppercased() ?? "--"
+    }
+
     private var surfaceStates: [MissionControlCommandDeck.Surface] {
         [
             .init(title: "Discovery", value: discoveryStateLabel, tint: discoveryTint),
@@ -844,6 +963,175 @@ struct MissionControlDashboardView: View {
         default:
             return .secondary
         }
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+}
+
+private struct MissionControlCompactStageModel: Identifiable {
+    struct Metric: Identifiable {
+        let id: String
+        let label: String
+        let value: String
+        let tint: Color
+
+        init(label: String, value: String, tint: Color) {
+            self.id = label
+            self.label = label
+            self.value = value
+            self.tint = tint
+        }
+    }
+
+    let stage: MissionControlSystemLoopSnapshot.Stage
+    let title: String
+    let status: String
+    let primaryMetric: String
+    let accent: Color
+    let summary: String
+    let metrics: [Metric]
+
+    var id: MissionControlSystemLoopSnapshot.Stage { stage }
+}
+
+private struct MissionControlSystemStatusCard: View {
+    let healthLabel: String
+    let healthTint: Color
+    let summary: String
+    let metrics: [MissionControlCompactStageModel.Metric]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SYSTEM STATUS")
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(healthTint)
+                    Text("Mission Control")
+                        .font(.jeevesHeadline)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(healthLabel)
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(healthTint)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(healthTint.opacity(0.10))
+                    )
+            }
+
+            Text(summary)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            MissionControlCompactMetricRow(metrics: metrics)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(healthTint.opacity(0.18), lineWidth: 1)
+        )
+    }
+}
+
+private struct MissionControlCompactStageCard: View {
+    let card: MissionControlCompactStageModel
+    let isActive: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.title.uppercased())
+                        .font(.jeevesMonoSmall)
+                        .foregroundStyle(card.accent)
+                    Text(card.primaryMetric)
+                        .font(.jeevesMetric)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(isActive ? "ACTIVE" : card.status)
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(isActive ? .white : card.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(isActive ? card.accent : card.accent.opacity(0.10))
+                    )
+            }
+
+            Text(card.summary)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            MissionControlCompactMetricRow(metrics: card.metrics)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(card.accent.opacity(isActive ? 0.30 : 0.12), lineWidth: 1)
+        )
+    }
+}
+
+private struct MissionControlCompactMetricRow: View {
+    let metrics: [MissionControlCompactStageModel.Metric]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(metrics.prefix(3)) { metric in
+                metricPill(metric)
+            }
+        }
+    }
+
+    private func metricPill(_ metric: MissionControlCompactStageModel.Metric) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(metric.label.uppercased())
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(metric.value)
+                .font(.jeevesBody.weight(.semibold))
+                .foregroundStyle(metric.tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(metric.tint.opacity(0.08))
+        )
     }
 }
 
