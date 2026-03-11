@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 struct OperatorOverviewSnapshot {
-    static let loopLine = "Discovery -> Proposal -> Human Approval -> Action -> Receipt -> Knowledge"
+    static let loopLine = "Discovery -> Proposal -> Approval -> Action -> Knowledge"
 
     enum Tone: String {
         case discovery
@@ -34,12 +34,21 @@ struct OperatorOverviewSnapshot {
     }
 
     struct FlowItem: Identifiable {
-        let id: Tone
+        let id: String
         let tone: Tone
         let label: String
         let title: String
         let detail: String
         let badge: String
+
+        init(tone: Tone, label: String, title: String, detail: String, badge: String) {
+            self.id = "\(tone.rawValue)-\(label)"
+            self.tone = tone
+            self.label = label
+            self.title = title
+            self.detail = detail
+            self.badge = badge
+        }
     }
 
     let summary: String
@@ -55,15 +64,17 @@ struct OperatorOverviewSnapshot {
         let topActivation = poller.radarActivations.first
         let topPendingProposal = poller.pendingProposals.first
         let topGapProposal = poller.gapProposals.first(where: \.isPending)
+        let latestDecision = poller.decidedProposals.first
         let latestAction = poller.recentActions.first ?? poller.decidedProposals.compactMap(\.action).first
         let latestKnowledge = poller.recentKnowledgeObjects.first
         let discoveryCount = max(poller.radarDiscoveryCandidates.count, poller.radarStatus?.store?.activationCount ?? 0)
         let pendingApprovalCount = max(poller.pendingProposals.count, poller.conductorState?.consentPending ?? 0)
         let recentKnowledgeCount = poller.recentKnowledgeObjects.count
+        let recentChangeCount = max(poller.recentActions.count, poller.decidedProposals.count)
         let trustVisibleCount = (poller.safeClashFeed?.certified.count ?? 0) + (poller.safeClashFeed?.emerging.count ?? 0)
         let lastUpdatedAt = poller.lastSuccessfulRefreshAt
 
-        summary = "A calm summary of CLASHD27 discovery, openclashd-v2 governance, recent receipts, and resulting knowledge without moving authority into Jeeves."
+        summary = "A calm summary of internet and telemetry signals flowing through CLASHD27 discovery, openclashd-v2 governance, SafeClash receipts, and resulting knowledge without moving authority into Jeeves."
         focusLine = Self.focusLine(
             discoveryCandidate: discoveryCandidate,
             topSignal: topSignal,
@@ -113,8 +124,12 @@ struct OperatorOverviewSnapshot {
             knowledgeStatus: poller.knowledgeStatus
         )
 
-        let trustHeadline = Self.trustHeadline(poller: poller)
-        let trustDetail = Self.trustDetail(poller: poller, latestAction: latestAction)
+        let trustHeadline = Self.trustHeadline(poller: poller, latestDecision: latestDecision, latestAction: latestAction)
+        let trustDetail = Self.trustDetail(
+            poller: poller,
+            latestDecision: latestDecision,
+            latestAction: latestAction
+        )
 
         overviewCards = [
             OverviewCard(
@@ -148,8 +163,8 @@ struct OperatorOverviewSnapshot {
                 id: .trust,
                 tone: .trust,
                 eyebrow: "Trust",
-                title: "What remains bounded",
-                metric: headerMetrics[3].value,
+                title: "What changed",
+                metric: recentChangeCount == 0 ? "quiet" : "\(recentChangeCount) recent",
                 headline: trustHeadline,
                 detail: trustDetail
             )
@@ -157,7 +172,6 @@ struct OperatorOverviewSnapshot {
 
         flowItems = [
             FlowItem(
-                id: .discovery,
                 tone: .discovery,
                 label: "Signal",
                 title: discoveryHeadline,
@@ -170,7 +184,6 @@ struct OperatorOverviewSnapshot {
                     ?? "waiting"
             ),
             FlowItem(
-                id: .governance,
                 tone: .governance,
                 label: "Proposal",
                 title: governanceHeadline,
@@ -182,7 +195,17 @@ struct OperatorOverviewSnapshot {
                     : "\(pendingApprovalCount) pending"
             ),
             FlowItem(
-                id: .trust,
+                tone: .governance,
+                label: "Approval",
+                title: latestDecision?.title ?? topPendingProposal?.title ?? "Awaiting approval",
+                detail: Self.approvalDetail(
+                    latestDecision: latestDecision,
+                    topPendingProposal: topPendingProposal,
+                    topGapProposal: topGapProposal
+                ),
+                badge: latestDecision?.status.uppercased() ?? (topPendingProposal != nil || topGapProposal != nil ? "PENDING" : "IDLE")
+            ),
+            FlowItem(
                 tone: .trust,
                 label: "Action",
                 title: latestAction?.actionKind.replacingOccurrences(of: "_", with: " ").capitalized
@@ -193,7 +216,6 @@ struct OperatorOverviewSnapshot {
                 badge: latestAction?.executionState.uppercased() ?? "IDLE"
             ),
             FlowItem(
-                id: .knowledge,
                 tone: .knowledge,
                 label: "Knowledge",
                 title: latestKnowledge?.title ?? "No recent knowledge object",
@@ -231,7 +253,12 @@ struct OperatorOverviewSnapshot {
                 return value
             }
             .first ?? "No discovery explanation is available yet."
-        return "\(discoveryLane) \(poller.radarDiscoveryCandidates.count) candidates, \(poller.radarActivations.count) activations, \(poller.radarEmergence.count) emergence traces."
+        let topSources = poller.radarSources
+            .prefix(3)
+            .map(\.source)
+            .joined(separator: ", ")
+        let sourceLine = topSources.isEmpty ? "Sources are still quiet." : "Source flow: \(topSources)."
+        return "\(discoveryLane) \(poller.radarDiscoveryCandidates.count) candidates, \(poller.radarActivations.count) activations, \(poller.radarEmergence.count) emergence traces. \(sourceLine)"
     }
 
     private static func governanceDetail(
@@ -263,10 +290,20 @@ struct OperatorOverviewSnapshot {
         let summary = latestKnowledge?.summary.isEmpty == false
             ? latestKnowledge?.summary ?? ""
             : "Knowledge remains visible and attributable once an action produces it."
-        return "\(summary) \(discoveryLine) Last scan \(scanLine)."
+        return "\(summary) \(discoveryLine) Last scan \(scanLine). Knowledge remains visible for later discovery scans."
     }
 
-    private static func trustHeadline(poller: ProposalPoller) -> String {
+    private static func trustHeadline(
+        poller: ProposalPoller,
+        latestDecision: DecidedProposal?,
+        latestAction: ActionSummary?
+    ) -> String {
+        if let latestAction {
+            return latestAction.actionKind.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+        if let latestDecision {
+            return latestDecision.title
+        }
         if poller.conductorState?.killSwitch.active == true {
             return "Kill switch active"
         }
@@ -275,14 +312,50 @@ struct OperatorOverviewSnapshot {
         if certified + emerging > 0 {
             return "\(certified) certified and \(emerging) emerging SafeClash entries"
         }
-        return "Execution remains under openclashd-v2 governance"
+        return "No recent governed change"
     }
 
-    private static func trustDetail(poller: ProposalPoller, latestAction: ActionSummary?) -> String {
+    private static func trustDetail(
+        poller: ProposalPoller,
+        latestDecision: DecidedProposal?,
+        latestAction: ActionSummary?
+    ) -> String {
         let killSwitch = killSwitchLabel(isActive: poller.conductorState?.killSwitch.active ?? false)
         let budget = poller.conductorState.map { String(format: "%.0f", $0.budget.remaining) } ?? "unknown"
         let receipt = latestAction?.receipt.map { relativeDateString($0.completedAtIso) } ?? "no fresh receipt"
-        return "\(killSwitch). Budget remaining \(budget). Latest receipt \(receipt)."
+        let attestations = (poller.safeClashFeed?.certified.count ?? 0) + (poller.safeClashFeed?.emerging.count ?? 0)
+        let changeLine: String
+        if let latestAction {
+            changeLine = latestAction.receipt?.resultSummary
+                ?? "\(latestAction.executionState.capitalized) \(receipt)"
+        } else if let latestDecision {
+            let status = latestDecision.status.replacingOccurrences(of: "_", with: " ")
+            changeLine = latestDecision.decisionReason ?? "\(status.capitalized) decision recorded."
+        } else {
+            changeLine = "No recent decision or receipt is visible."
+        }
+        return "\(changeLine) \(killSwitch). Budget remaining \(budget). SafeClash visibility \(attestations)."
+    }
+
+    private static func approvalDetail(
+        latestDecision: DecidedProposal?,
+        topPendingProposal: Proposal?,
+        topGapProposal: GovernedGapEntry?
+    ) -> String {
+        if let latestDecision {
+            let status = latestDecision.status.replacingOccurrences(of: "_", with: " ").capitalized
+            if let reason = latestDecision.decisionReason, !reason.isEmpty {
+                return "\(status). \(reason)"
+            }
+            return "\(status) decision is visible in the governed history."
+        }
+        if let topPendingProposal {
+            return topPendingProposal.priorityExplanation ?? "Awaiting explicit human approval through openclashd-v2."
+        }
+        if let topGapProposal {
+            return topGapProposal.summary
+        }
+        return "No approval event is currently visible."
     }
 
     private static func killSwitchLabel(isActive: Bool) -> String {

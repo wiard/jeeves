@@ -6,8 +6,8 @@ struct OperatorLatestFlowStrip: View {
     var body: some View {
         InstrumentSectionPanel(
             eyebrow: "Latest Flow",
-            title: "From forming signal to visible knowledge",
-            subtitle: "A compact strip showing the most recent governed path through the loop.",
+            title: "From signal to approval to visible knowledge",
+            subtitle: "A compact strip showing the most recent governed path through discovery, approval, action, and knowledge.",
             accent: .blue
         ) {
             ViewThatFits {
