@@ -5,104 +5,89 @@ struct SystemLoopStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("SYSTEM LOOP")
-                    .font(.jeevesMonoSmall)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 4)
-
-                Text(snapshot.currentStage.rawValue.uppercased())
-                    .font(.jeevesMonoSmall)
-                    .foregroundStyle(accentColor)
-            }
-
-            HStack(spacing: 6) {
-                ForEach(MissionControlSystemLoopSnapshot.Stage.allCases, id: \.self) { stage in
-                    stagePill(stage)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Text(snapshot.currentStage.eventLabel)
-                    .font(.jeevesMonoSmall)
-                    .foregroundStyle(.secondary)
-
-                Text("\(snapshot.eventCount)")
-                    .font(.jeevesBody.weight(.semibold))
-                    .foregroundStyle(accentColor)
-
-                Spacer(minLength: 4)
-
-                if let date = snapshot.lastTransitionAt {
-                    Text(Self.relativeFormatter.localizedString(for: date, relativeTo: Date()))
-                        .font(.jeevesMonoSmall)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            headerRow
+            stageRow
+            subtitleText
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(accentColor.opacity(0.18), lineWidth: 1)
-        )
+        .background(backgroundCard)
     }
 
-    private func stagePill(_ stage: MissionControlSystemLoopSnapshot.Stage) -> some View {
-        let isActive = stage == snapshot.currentStage
-        return Text(stage.rawValue)
-            .font(.jeevesMonoSmall)
-            .foregroundStyle(isActive ? .white : .primary.opacity(0.7))
-            .lineLimit(1)
-            .minimumScaleFactor(0.65)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity)
-            .background(
-                Capsule()
-                    .fill(isActive ? accentColor : accentColor.opacity(0.08))
-            )
+    private var headerRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("SYSTEM LOOP")
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(snapshot.currentStage.rawValue.uppercased())
+                .font(.caption.monospaced())
+                .foregroundStyle(stageTint)
+        }
+    }
+
+    private var stageRow: some View {
+        HStack(spacing: 8) {
+            stagePill(.discovery)
+            stagePill(.proposal)
+            stagePill(.approval)
+            stagePill(.action)
+            stagePill(.knowledge)
+        }
+    }
+
+    private var subtitleText: some View {
+        Text(snapshot.stageSummary)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+    }
+
+    private var backgroundCard: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(0.96))
             .overlay(
-                Capsule()
-                    .stroke(accentColor.opacity(isActive ? 0 : 0.14), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(stageTint.opacity(0.14), lineWidth: 1)
             )
+            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 2)
     }
 
-    private var accentColor: Color {
-        switch snapshot.currentStage {
+    @ViewBuilder
+    private func stagePill(_ stage: MissionControlSystemLoopSnapshot.Stage) -> some View {
+        let active = stage == snapshot.currentStage
+        let tint = tint(for: stage)
+
+        Text(stage.rawValue)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(active ? tint.opacity(0.15) : Color.black.opacity(0.04))
+            .foregroundStyle(active ? tint : Color.primary)
+            .clipShape(Capsule())
+    }
+
+    private var stageTint: Color {
+        tint(for: snapshot.currentStage)
+    }
+
+    private func tint(for stage: MissionControlSystemLoopSnapshot.Stage) -> Color {
+        switch stage {
         case .discovery:
-            return .cyan
-        case .proposal:
             return .blue
+        case .proposal:
+            return .brown
         case .approval:
             return .orange
         case .action:
-            return .jeevesGold
-        case .knowledge:
             return .green
+        case .knowledge:
+            return .mint
         }
     }
-
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter
-    }()
-}
-
-#Preview {
-    SystemLoopStrip(
-        snapshot: MissionControlSystemLoopSnapshot(
-            currentStage: .approval,
-            eventCount: 5,
-            stageSummary: "5 proposals waiting for operator review.",
-            lastTransitionAt: Date().addingTimeInterval(-12)
-        )
-    )
-    .padding(.horizontal, 16)
 }

@@ -155,7 +155,7 @@ struct ContentView: View {
         #else
         TabView(selection: $selectedTab) {
             Tab("Mission Control", systemImage: "scope", value: .stream) {
-                StreamView()
+                MissionControlDashboardView()
             }
             Tab("Jeeves", systemImage: "sun.max", value: .chat) {
                 JeevesView()
@@ -194,7 +194,7 @@ struct ContentView: View {
     @ViewBuilder
     private func screenView(for screen: AppScreen) -> some View {
         switch screen {
-        case .stream:      StreamView()
+        case .stream:      MissionControlDashboardView()
         case .lobby:       LobbyView()
         case .chat:        JeevesView()
         case .observatory: CLASHD27RadarView()

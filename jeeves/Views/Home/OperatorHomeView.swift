@@ -23,13 +23,13 @@ struct OperatorHomeView: View {
                 .ignoresSafeArea()
 
                 if isBootstrapping {
-                    ProgressView("Mission Control preparing...")
+                    ProgressView("Operator overview preparing...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     content
                 }
             }
-            .navigationTitle("Mission Control")
+            .navigationTitle("Overview")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -183,7 +183,7 @@ struct OperatorHomeView: View {
         InstrumentSectionPanel(
             eyebrow: "Deep Links",
             title: "Enter the intact operational surfaces",
-            subtitle: "This home layer is only a summary. The existing rooms remain the places for detailed work.",
+            subtitle: "This home layer is only a summary. Mission Control and the other rooms remain the places for detailed work.",
             accent: .jeevesGold
         ) {
             ForEach(OperatorHomeDestination.allCases) { destination in
@@ -232,7 +232,6 @@ struct OperatorHomeView: View {
 }
 
 private enum OperatorHomeDestination: String, CaseIterable, Identifiable {
-    case missionControl
     case lobby
     case radar
     case knowledge
@@ -242,8 +241,6 @@ private enum OperatorHomeDestination: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .missionControl:
-            return "Mission Control"
         case .lobby:
             return "Lobby / Gap Inbox"
         case .radar:
@@ -257,8 +254,6 @@ private enum OperatorHomeDestination: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .missionControl:
-            return "The deeper operational room for discovery, governance, knowledge, and trust detail."
         case .lobby:
             return "Pending review, governed gap intake, and the operator decision lane."
         case .radar:
@@ -272,8 +267,6 @@ private enum OperatorHomeDestination: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .missionControl:
-            return "scope"
         case .lobby:
             return "tray.full"
         case .radar:
@@ -288,8 +281,6 @@ private enum OperatorHomeDestination: String, CaseIterable, Identifiable {
     @ViewBuilder
     var view: some View {
         switch self {
-        case .missionControl:
-            MissionControlDashboardView()
         case .lobby:
             LobbyView()
         case .radar:
