@@ -10,6 +10,7 @@ struct LobbyView: View {
         case marketplace
         case deployments
         case decisions
+        case security
         case knowledge
 
         var title: String {
@@ -22,6 +23,7 @@ struct LobbyView: View {
             case .marketplace: return "MARKETPLACE"
             case .deployments: return "DEPLOYMENTS"
             case .decisions: return "DECISIONS"
+            case .security: return "SECURITY"
             case .knowledge: return "KNOWLEDGE"
             }
         }
@@ -36,6 +38,7 @@ struct LobbyView: View {
             case .marketplace: return "Featured shelf + category browse"
             case .deployments: return "Proposal-to-knowledge deployment trail"
             case .decisions: return "Governed approvals"
+            case .security: return "Security findings awaiting operator review"
             case .knowledge: return "Resulting knowledge"
             }
         }
@@ -50,6 +53,7 @@ struct LobbyView: View {
             case .marketplace: return .cyan
             case .deployments: return .consentGreen
             case .decisions: return .jeevesGold
+            case .security: return .consentRed
             case .knowledge: return .consentGreen
             }
         }
@@ -64,6 +68,7 @@ struct LobbyView: View {
             case .marketplace: return "storefront"
             case .deployments: return "shippingbox.circle"
             case .decisions: return "checkmark.shield"
+            case .security: return "lock.shield"
             case .knowledge: return "book.closed"
             }
         }
@@ -78,6 +83,7 @@ struct LobbyView: View {
             case .marketplace: return "zone-marketplace"
             case .deployments: return "zone-deployments"
             case .decisions: return "zone-decisions"
+            case .security: return "zone-security"
             case .knowledge: return "zone-knowledge"
             }
         }
@@ -295,6 +301,8 @@ struct LobbyView: View {
                                 .id(MissionZone.deployments.anchorId)
                             decisionsZoneSection
                                 .id(MissionZone.decisions.anchorId)
+                            securityZoneSection
+                                .id(MissionZone.security.anchorId)
                             knowledgeZoneSection
                                 .id(MissionZone.knowledge.anchorId)
                         }
@@ -533,6 +541,21 @@ struct LobbyView: View {
             triageSections
             pendingQueueSection
             extensionProposalsSection
+        }
+    }
+
+    private var securityZoneSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            zoneHeader(.security)
+            SecurityInboxView(
+                proposals: securityProposals,
+                onApprove: { proposal in
+                    requestProposalDecision(proposal: proposal, decision: "approve")
+                },
+                onDeny: { proposal in
+                    requestProposalDecision(proposal: proposal, decision: "deny")
+                }
+            )
         }
     }
 
@@ -921,6 +944,14 @@ struct LobbyView: View {
         poller.extensionProposals.filter(\.isPending)
     }
 
+    private var securityProposals: [Proposal] {
+        poller.proposals.filter(isSecurityProposal)
+    }
+
+    private var pendingSecurityProposalCount: Int {
+        securityProposals.filter(\.isPending).count
+    }
+
     private var fallbackGapPendingRecords: [GapReviewRecord] {
         poller.pendingProposals.compactMap { proposal in
             GapReviewRecord.fromProposal(
@@ -1109,6 +1140,21 @@ struct LobbyView: View {
 
     private var telemetryDegradedTint: Color {
         poller.isDegraded ? .consentRed : .blue
+    }
+
+    private func isSecurityProposal(_ proposal: Proposal) -> Bool {
+        if proposal.agentId == "clashd27-security" {
+            return true
+        }
+        if let category = proposal.metadata?["category"]?.scalarStringValue?.lowercased(),
+           category == "security" {
+            return true
+        }
+        if let capability = proposal.metadata?["capability"]?.scalarStringValue?.lowercased(),
+           capability == "security_remediation" {
+            return true
+        }
+        return proposal.intent.key.lowercased().contains("security")
     }
 
     private var lastDiscoveryLabel: String {
@@ -1372,6 +1418,9 @@ struct LobbyView: View {
 
     private func triageSourceLabel(agentId: String) -> String {
         let lower = agentId.lowercased()
+        if lower.contains("grid") || lower.contains("node") {
+            return "GRID"
+        }
         if lower.contains("clashd27") || lower.contains("radar") {
             return "CLASHD27"
         }
@@ -3825,17 +3874,28 @@ struct LobbyView: View {
             Image(systemName: icon)
                 .font(.jeevesBody.weight(.semibold))
                 .foregroundStyle(tint)
+                .shadow(color: tint.opacity(0.28), radius: 4)
             Text(title)
                 .font(.jeevesHeadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.white.opacity(0.98))
             if let count, count > 0 {
                 Text("\(count)")
-                    .font(.jeevesCaption)
+                    .font(.system(.caption, design: .monospaced).weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(tint)
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [tint.opacity(0.95), tint.opacity(0.68)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
                     .clipShape(Capsule())
+                    .shadow(color: tint.opacity(0.26), radius: 4, y: 2)
             }
             Spacer()
         }
@@ -3846,12 +3906,26 @@ struct LobbyView: View {
             Image(systemName: systemImage)
             Text(label)
         }
-        .font(.jeevesCaption.weight(.medium))
+        .font(.system(.caption, design: .monospaced).weight(.medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(tint.opacity(0.18))
-        .foregroundStyle(tint)
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.26), Color.white.opacity(0.04)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .foregroundStyle(tint.opacity(0.98))
         .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(tint.opacity(0.26), lineWidth: 1)
+        )
+        .shadow(color: tint.opacity(0.18), radius: 4, y: 2)
     }
 
     // MARK: - Actions
@@ -4280,6 +4354,18 @@ struct LobbyView: View {
                     zone: .marketplace
                 )
             }
+
+            HStack(spacing: 8) {
+                browserSurfaceButton(
+                    title: "Security Inbox",
+                    subtitle: "Pending review",
+                    icon: "lock.shield",
+                    tint: .consentRed,
+                    zone: .security,
+                    badgeCount: pendingSecurityProposalCount
+                )
+                Spacer(minLength: 0)
+            }
         }
         .controlRoomPanel(padding: 12)
     }
@@ -4289,15 +4375,27 @@ struct LobbyView: View {
         subtitle: String,
         icon: String,
         tint: Color,
-        zone: MissionZone
+        zone: MissionZone,
+        badgeCount: Int? = nil
     ) -> some View {
         Button {
             requestedZoneAnchor = zone.anchorId
         } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: icon)
-                    .font(.jeevesCaption.weight(.semibold))
-                    .foregroundStyle(tint)
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.jeevesCaption.weight(.semibold))
+                        .foregroundStyle(tint)
+                    if let badgeCount {
+                        Text("\(badgeCount)")
+                            .font(.jeevesMonoSmall.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(tint.opacity(0.78))
+                            .clipShape(Capsule())
+                    }
+                }
                 Text(title)
                     .font(.jeevesCaption.weight(.semibold))
                     .foregroundStyle(.white)
@@ -6625,7 +6723,13 @@ private struct SwipeCard: View {
     }
 
     private var sourceLabel: String {
+        if let sourceType = metadataString(["source_type"])?.lowercased(), sourceType == "grid_signal" {
+            return "GRID"
+        }
         let lower = proposal.agentId.lowercased()
+        if lower.contains("grid") || lower.contains("node") {
+            return "GRID"
+        }
         if lower.contains("clashd27") || lower.contains("radar") {
             return "CLASHD27"
         }
@@ -6638,6 +6742,42 @@ private struct SwipeCard: View {
     private var noveltyValue: String {
         guard let novelty = proposal.priorityFactors?.novelty else { return "n/a" }
         return String(format: "%.2f", novelty)
+    }
+
+    private var isGridProposal: Bool {
+        if let sourceType = metadataString(["source_type"])?.lowercased(), sourceType == "grid_signal" {
+            return true
+        }
+        let lower = "\(proposal.agentId) \(proposal.intent.key)".lowercased()
+        return lower.contains("grid") || lower.contains("node")
+    }
+
+    private var severityColor: Color {
+        switch metadataString(["severity"])?.lowercased() {
+        case "critical":
+            return .consentRed
+        case "high":
+            return .consentOrange
+        case "medium":
+            return .blue
+        case "low":
+            return .secondary
+        default:
+            return riskColor
+        }
+    }
+
+    private var displayNarrative: String? {
+        if let evidence = metadataString(["evidence"]), !evidence.isEmpty {
+            return evidence
+        }
+        if let explanation = proposal.priorityExplanation, !explanation.isEmpty {
+            return explanation
+        }
+        if let remediation = metadataString(["remediation_proposal"]), !remediation.isEmpty {
+            return remediation
+        }
+        return nil
     }
 
     private var governanceValue: String {
@@ -6692,6 +6832,18 @@ private struct SwipeCard: View {
         proposal.status.uppercased()
     }
 
+    private func metadataString(_ keys: [String]) -> String? {
+        guard let metadata = proposal.metadata else { return nil }
+        for key in keys {
+            guard let value = metadata[key]?.scalarStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                continue
+            }
+            return value
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -6711,27 +6863,27 @@ private struct SwipeCard: View {
             }
 
             HStack(spacing: 6) {
-                Text("Agent:")
+                Text(isGridProposal ? "Node:" : "Agent:")
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(proposal.agentId)
+                Text(isGridProposal ? (metadataString(["node_id"]) ?? proposal.agentId) : proposal.agentId)
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
-            if let explanation = proposal.priorityExplanation, !explanation.isEmpty {
-                Text(explanation)
+            if let narrative = displayNarrative {
+                Text(narrative)
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
 
             HStack {
-                Text("Intent:")
+                Text(isGridProposal ? "Signal:" : "Intent:")
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(proposal.intent.key)
+                Text(metadataString(["signal_type"]) ?? proposal.intent.key)
                     .font(.jeevesMono)
             }
 
@@ -6744,16 +6896,35 @@ private struct SwipeCard: View {
                     .foregroundStyle(riskColor)
             }
 
+            if isGridProposal {
+                HStack {
+                    Text("Region:")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text(metadataString(["region"]) ?? "unknown")
+                        .font(.jeevesMono)
+                }
+
+                HStack {
+                    Text("Severity:")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text((metadataString(["severity"]) ?? "unknown").uppercased())
+                        .font(.jeevesMono)
+                        .foregroundStyle(severityColor)
+                }
+            }
+
             HStack(spacing: 10) {
                 metricChip(text: "Novelty \(noveltyValue)", tint: .purple)
                 metricChip(text: "Gov \(governanceValue)", tint: .teal)
             }
 
             HStack(alignment: .top, spacing: 6) {
-                Text("Cells:")
+                Text(isGridProposal ? "Location:" : "Cells:")
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(relatedCellsLabel)
+                Text(isGridProposal ? (metadataString(["location"]) ?? "not specified") : relatedCellsLabel)
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -7546,17 +7717,24 @@ private struct ControlRoomBackdrop: View {
             )
 
             RadialGradient(
-                colors: [Color.jeevesGold.opacity(0.16), .clear],
+                colors: [Color.orange.opacity(0.12), .clear],
                 center: .topTrailing,
                 startRadius: 10,
                 endRadius: 420
             )
 
             RadialGradient(
-                colors: [Color.blue.opacity(0.14), .clear],
+                colors: [Color.blue.opacity(0.12), .clear],
                 center: .bottomLeading,
                 startRadius: 20,
                 endRadius: 480
+            )
+
+            RadialGradient(
+                colors: [Color.white.opacity(0.018), .clear],
+                center: .center,
+                startRadius: 12,
+                endRadius: 320
             )
         }
         .ignoresSafeArea()
@@ -7571,12 +7749,24 @@ private struct ControlRoomPanelModifier: ViewModifier {
             .padding(padding)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.08),
+                                Color.blue.opacity(0.035),
+                                Color.orange.opacity(0.025),
+                                Color.black.opacity(0.12)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(Color.white.opacity(0.14), lineWidth: 1)
                     )
             )
+            .shadow(color: Color.blue.opacity(0.08), radius: 8, y: 3)
     }
 }
 

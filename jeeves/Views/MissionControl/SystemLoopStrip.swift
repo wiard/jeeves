@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SystemLoopStrip: View {
     let snapshot: MissionControlSystemLoopSnapshot
+    @State private var pulseActive = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -12,13 +13,19 @@ struct SystemLoopStrip: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(backgroundCard)
+        .onAppear {
+            guard !pulseActive else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                pulseActive = true
+            }
+        }
     }
 
     private var headerRow: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("SYSTEM LOOP")
                 .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.white.opacity(0.62))
 
             Spacer()
 
@@ -41,18 +48,24 @@ struct SystemLoopStrip: View {
     private var subtitleText: some View {
         Text(snapshot.stageSummary)
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.white.opacity(0.62))
             .lineLimit(2)
     }
 
     private var backgroundCard: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.white.opacity(0.96))
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.08), stageTint.opacity(0.14), Color.black.opacity(0.14)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(stageTint.opacity(0.14), lineWidth: 1)
+                    .stroke(stageTint.opacity(0.24), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 2)
+            .shadow(color: stageTint.opacity(0.14), radius: 10, y: 3)
     }
 
     @ViewBuilder
@@ -67,9 +80,32 @@ struct SystemLoopStrip: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
-            .background(active ? tint.opacity(0.15) : Color.black.opacity(0.04))
-            .foregroundStyle(active ? tint : Color.primary)
+            .background(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: active
+                                ? [tint.opacity(0.30), Color.black.opacity(0.12)]
+                                : [tint.opacity(0.10), Color.black.opacity(0.08)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .foregroundStyle(active ? Color.white.opacity(0.98) : Color.white.opacity(0.74))
             .clipShape(Capsule())
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: active ? (pulseActive ? 10 : 8) : 6, height: active ? (pulseActive ? 10 : 8) : 6)
+                    .shadow(color: tint.opacity(active ? 0.4 : 0.14), radius: active ? 6 : 2)
+                    .padding(.top, 5)
+                    .padding(.trailing, 5)
+            }
+            .overlay(
+                Capsule()
+                    .stroke(tint.opacity(active ? 0.34 : 0.12), lineWidth: 1)
+            )
     }
 
     private var stageTint: Color {
@@ -81,13 +117,13 @@ struct SystemLoopStrip: View {
         case .discovery:
             return .blue
         case .proposal:
-            return .brown
+            return .blue
         case .approval:
             return .orange
         case .action:
-            return .green
+            return .blue
         case .knowledge:
-            return .mint
+            return .green
         }
     }
 }

@@ -13,6 +13,7 @@ struct Proposal: Codable, Identifiable {
     let priorityFactors: ProposalPriorityFactors?
     let proposalType: String?
     let gapDetails: GapProposalDetails?
+    let metadata: [String: AnyCodableValue]?
     var id: String { proposalId }
 
     init(
@@ -27,7 +28,8 @@ struct Proposal: Codable, Identifiable {
         rank: Int?,
         priorityFactors: ProposalPriorityFactors?,
         proposalType: String? = nil,
-        gapDetails: GapProposalDetails? = nil
+        gapDetails: GapProposalDetails? = nil,
+        metadata: [String: AnyCodableValue]? = nil
     ) {
         self.proposalId = proposalId
         self.createdAtIso = createdAtIso
@@ -41,6 +43,7 @@ struct Proposal: Codable, Identifiable {
         self.priorityFactors = priorityFactors
         self.proposalType = proposalType
         self.gapDetails = gapDetails
+        self.metadata = metadata
     }
 
     init(from decoder: Decoder) throws {
@@ -77,9 +80,16 @@ struct Proposal: Codable, Identifiable {
             for: ["proposalType", "proposal_type", "type", "proposalClass", "proposal_class"]
         )
 
-        let metadata = container.decodeFirstDictionary(
+        var metadata = container.decodeFirstDictionary(
             for: ["gap", "gapDetails", "gap_details", "metadata", "details", "payload"]
         )
+        if metadata == nil,
+           let intentKey = FlexibleCodingKey(stringValue: "intent"),
+           let payloadKey = FlexibleCodingKey(stringValue: "payload"),
+           let intentContainer = try? container.nestedContainer(keyedBy: FlexibleCodingKey.self, forKey: intentKey) {
+            metadata = intentContainer.decodeFirstDictionary(for: [payloadKey.stringValue])
+        }
+        self.metadata = metadata
         gapDetails = container.decodeFirstDecodable(
             GapProposalDetails.self,
             for: ["gap", "gapDetails", "gap_details"]

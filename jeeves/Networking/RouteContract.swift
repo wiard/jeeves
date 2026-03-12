@@ -21,6 +21,17 @@ enum RouteContract {
     // MARK: - Health
 
     static let health = Route.get("/api/health")
+    static let status = Route.get("/api/status")
+    static let knowledge = Route.get("/api/knowledge")
+    static func knowledgeDetail(_ objectId: String) -> Route {
+        .get("/api/knowledge/\(objectId)")
+    }
+    static let proposals = Route.get("/api/proposals")
+    static func proposeDecide(_ proposalId: String) -> Route {
+        .post("/api/proposals/\(proposalId)/decide")
+    }
+    static let radar = Route.get("/api/radar")
+    static let audit = Route.get("/api/audit")
 
     // MARK: - Conductor
 

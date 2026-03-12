@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OperatorLatestFlowStrip: View {
     let items: [OperatorOverviewSnapshot.LoopStage]
+    @State private var pulseActive = false
 
     var body: some View {
         InstrumentSectionPanel(
@@ -30,43 +31,81 @@ struct OperatorLatestFlowStrip: View {
                 }
             }
         }
+        .overlay(alignment: .topLeading) {
+            Circle()
+                .fill(Color.blue.opacity(0.12))
+                .frame(width: 140, height: 140)
+                .blur(radius: 46)
+                .offset(x: -28, y: -32)
+                .allowsHitTesting(false)
+        }
+        .onAppear {
+            guard !pulseActive else { return }
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: true)) {
+                pulseActive = true
+            }
+        }
     }
 
     private func loopCell(for item: OperatorOverviewSnapshot.LoopStage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(item.stage.title.uppercased())
                 .font(.jeevesMonoSmall)
-                .foregroundStyle(item.isActive ? .white : accentColor(for: item))
+                .foregroundStyle(item.isActive ? Color.white.opacity(0.96) : Color.secondary)
 
             Text(item.metric)
-                .font(.jeevesHeadline)
-                .foregroundStyle(item.isActive ? .white : .primary)
+                .font(.system(.body, design: .monospaced).weight(.semibold))
+                .foregroundStyle(item.isActive ? Color.white.opacity(0.98) : monoTint)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(item.isActive ? accentColor(for: item) : accentColor(for: item).opacity(0.08))
+                .fill(
+                    LinearGradient(
+                        colors: item.isActive
+                            ? [accentColor(for: item).opacity(0.34), Color.black.opacity(0.16)]
+                            : [accentColor(for: item).opacity(0.12), Color.black.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(accentColor(for: item).opacity(item.isActive ? 0 : 0.14), lineWidth: 1)
+                .stroke(accentColor(for: item).opacity(item.isActive ? 0.42 : 0.16), lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            Circle()
+                .fill(accentColor(for: item))
+                .frame(
+                    width: item.isActive ? 11 + (pulseActive ? 2 : 0) : 8,
+                    height: item.isActive ? 11 + (pulseActive ? 2 : 0) : 8
+                )
+                .shadow(color: accentColor(for: item).opacity(item.isActive ? 0.45 : 0.16), radius: item.isActive ? 8 : 3)
+                .padding(10)
+        }
+        .shadow(color: accentColor(for: item).opacity(item.isActive ? 0.22 : 0.08), radius: item.isActive ? 10 : 4, y: 3)
+        .animation(.easeInOut(duration: 0.18), value: item.isActive)
     }
 
     private func accentColor(for item: OperatorOverviewSnapshot.LoopStage) -> Color {
         switch item.stage {
         case .discovery:
-            return .cyan
+            return .blue
         case .proposal:
             return .blue
         case .approval:
-            return item.isActive ? .orange : .orange
+            return .orange
         case .action:
-            return item.tone == .watch ? .red : .jeevesGold
+            return item.tone == .watch ? .red : .blue
         case .knowledge:
             return .green
         }
+    }
+
+    private var monoTint: Color {
+        Color(red: 147 / 255.0, green: 197 / 255.0, blue: 253 / 255.0)
     }
 }

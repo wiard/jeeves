@@ -4,17 +4,32 @@ struct MissionControlDashboardView: View {
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
     @State private var model = MissionControlViewModel()
+    @State private var pulseActive = false
 
     var body: some View {
         NavigationStack {
             ZStack {
                 InstrumentBackdrop(
                     colors: [
-                        Color(red: 0.95, green: 0.98, blue: 1.00),
-                        Color(red: 0.93, green: 0.97, blue: 0.99),
-                        Color(red: 0.98, green: 0.97, blue: 0.94)
+                        Color(red: 0.04, green: 0.05, blue: 0.08),
+                        Color(red: 0.03, green: 0.04, blue: 0.06),
+                        Color(red: 0.02, green: 0.03, blue: 0.05)
                     ]
                 )
+                .overlay(alignment: .topLeading) {
+                    Circle()
+                        .fill(Color.blue.opacity(0.10))
+                        .blur(radius: 68)
+                        .frame(width: 220, height: 220)
+                        .offset(x: -50, y: -80)
+                }
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(Color.orange.opacity(0.08))
+                        .blur(radius: 78)
+                        .frame(width: 240, height: 240)
+                        .offset(x: 60, y: -70)
+                }
                 .ignoresSafeArea()
 
                 if isBootstrapping {
@@ -53,6 +68,12 @@ struct MissionControlDashboardView: View {
                     Task { await refresh() }
                 }
             }
+            .onAppear {
+                guard !pulseActive else { return }
+                withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                    pulseActive = true
+                }
+            }
         }
     }
 
@@ -75,20 +96,38 @@ struct MissionControlDashboardView: View {
 
                 Text(statusBadge)
                     .font(.caption.monospaced())
-                    .foregroundStyle(statusTint)
+                    .foregroundStyle(Color.white.opacity(0.96))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(statusTint.opacity(0.12))
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [statusTint.opacity(0.34), Color.black.opacity(0.16)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        Circle()
+                            .fill(statusTint)
+                            .frame(width: pulseFrame, height: pulseFrame)
+                            .shadow(color: statusTint.opacity(0.45), radius: 7)
+                            .padding(.top, 5)
+                            .padding(.trailing, 5)
+                    }
                     .clipShape(Capsule())
+                    .shadow(color: statusTint.opacity(0.18), radius: 6, y: 2)
             }
 
             Text("\(statusBadge.capitalized) • Last tick \(lastTickLine)")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.white.opacity(0.98))
 
             Text("System health, live pipeline pressure, and operator review at a glance.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.white.opacity(0.62))
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
@@ -98,7 +137,7 @@ struct MissionControlDashboardView: View {
 
             Text(operatorLine)
                 .font(.footnote)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.white.opacity(0.9))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
@@ -108,22 +147,41 @@ struct MissionControlDashboardView: View {
 
     private func infoPill(_ text: String) -> some View {
         Text(text)
-            .font(.caption)
-            .foregroundStyle(.primary)
+            .font(.system(.caption, design: .monospaced).weight(.medium))
+            .foregroundStyle(monoTint)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(Color.black.opacity(0.04))
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.08), statusTint.opacity(0.10)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(statusTint.opacity(0.16), lineWidth: 1)
+            )
     }
 
     private func cardBackground(border: Color) -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.white.opacity(0.96))
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.08), border.opacity(0.10), Color.black.opacity(0.14)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(border.opacity(0.14), lineWidth: 1)
+                    .stroke(border.opacity(0.28), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.05), radius: 8, y: 2)
+            .shadow(color: border.opacity(0.14), radius: 10, y: 3)
     }
 
     private var statusBadge: String {
@@ -345,6 +403,14 @@ struct MissionControlDashboardView: View {
             await model.load(gateway: gateway, force: true)
         }
     }
+
+    private var monoTint: Color {
+        Color(red: 147 / 255.0, green: 197 / 255.0, blue: 253 / 255.0)
+    }
+
+    private var pulseFrame: CGFloat {
+        pulseActive && statusBadge != "HEALTHY" ? 10 : 8
+    }
 }
 
 struct MissionControlCompactStageCardModel: Identifiable {
@@ -360,6 +426,7 @@ struct MissionControlCompactStageCardModel: Identifiable {
 private struct MissionControlCompactStageCard: View {
     let card: MissionControlCompactStageCardModel
     let isActive: Bool
+    @State private var pulseActive = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -372,39 +439,70 @@ private struct MissionControlCompactStageCard: View {
 
                 Text(card.status.uppercased())
                     .font(.caption.monospaced())
-                    .foregroundStyle(stageTint)
+                    .foregroundStyle(Color.white.opacity(0.94))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
-                    .background(stageTint.opacity(0.12))
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [stageTint.opacity(0.34), Color.black.opacity(0.12)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        Circle()
+                            .fill(stageTint)
+                            .frame(width: badgeDotSize, height: badgeDotSize)
+                            .shadow(color: stageTint.opacity(0.45), radius: 6)
+                            .padding(.top, 4)
+                            .padding(.trailing, 4)
+                    }
                     .clipShape(Capsule())
+                    .shadow(color: glowTint.opacity(glowOpacity), radius: glowRadius)
             }
 
             HStack(alignment: .lastTextBaseline) {
                 Text(card.primaryMetric)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 30, weight: .bold, design: .monospaced))
+                    .foregroundStyle(monoTint)
 
                 Spacer(minLength: 12)
 
                 Text(card.title)
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.white.opacity(0.96))
             }
 
             Text(card.summary)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.white.opacity(0.62))
                 .lineLimit(1)
 
             HStack(spacing: 8) {
                 ForEach(card.pills.prefix(3), id: \.self) { pill in
                     Text(pill)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(monoTint.opacity(0.92))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
-                        .background(Color.black.opacity(0.04))
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.06), stageTint.opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        )
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(stageTint.opacity(0.16), lineWidth: 1)
+                        )
                 }
             }
         }
@@ -412,22 +510,76 @@ private struct MissionControlCompactStageCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.96))
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.08), stageTint.opacity(isActive ? 0.16 : 0.10), Color.black.opacity(0.16)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(stageTint.opacity(isActive ? 0.28 : 0.12), lineWidth: 1)
+                        .stroke(stageTint.opacity(isActive ? 0.34 : 0.18), lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.05), radius: 8, y: 2)
+                .shadow(color: glowTint.opacity(isActive ? 0.16 : 0.08), radius: isActive ? 10 : 6, y: 3)
         )
+        .overlay(alignment: .topLeading) {
+            Circle()
+                .fill(stageTint.opacity(isActive ? 0.16 : 0.08))
+                .frame(width: 96, height: 96)
+                .blur(radius: 28)
+                .offset(x: -18, y: -20)
+        }
+        .onAppear {
+            guard !pulseActive else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                pulseActive = true
+            }
+        }
     }
 
     private var stageTint: Color {
         switch card.stage {
         case .discovery: return .blue
-        case .proposal: return .brown
+        case .proposal: return .blue
         case .approval: return .orange
-        case .action: return .green
-        case .knowledge: return .mint
+        case .action: return .blue
+        case .knowledge: return .green
         }
+    }
+
+    private var monoTint: Color {
+        Color(red: 147 / 255.0, green: 197 / 255.0, blue: 253 / 255.0)
+    }
+
+    private var glowTint: Color {
+        if card.status.lowercased().contains("failure") || card.status.lowercased().contains("denied") {
+            return .red
+        }
+        return stageTint
+    }
+
+    private var glowOpacity: Double {
+        if card.stage == .approval && !card.primaryMetric.hasPrefix("0") {
+            return 0.22
+        }
+        if card.stage == .knowledge {
+            return 0.16
+        }
+        return isActive ? 0.18 : 0.10
+    }
+
+    private var glowRadius: CGFloat {
+        if card.stage == .action && card.status.lowercased().contains("active") {
+            return pulseActive ? 9 : 5
+        }
+        return 5
+    }
+
+    private var badgeDotSize: CGFloat {
+        if card.stage == .action && card.status.lowercased().contains("active") {
+            return pulseActive ? 10 : 8
+        }
+        return 8
     }
 }
