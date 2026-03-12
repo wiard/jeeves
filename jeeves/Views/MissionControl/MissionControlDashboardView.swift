@@ -308,7 +308,7 @@ struct MissionControlDashboardView: View {
         .init(
             id: "action",
             stage: .action,
-            title: "Action",
+            title: "Bounded Action",
             primaryMetric: "\(recentBoundedActions.count)",
             status: runningActionCount > 0 ? "active" : (recentBoundedActions.isEmpty ? "idle" : "completed"),
             summary: recentReceipts.first?.resultSummary ?? "No recent bounded action.",

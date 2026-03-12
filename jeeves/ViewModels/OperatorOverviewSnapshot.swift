@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 struct OperatorOverviewSnapshot {
-    static let loopLine = "Discovery -> Proposal -> Approval -> Action -> Knowledge"
+    static let loopLine = "Discovery -> Proposal -> Approval -> Bounded Action -> Knowledge"
 
     enum Stage: String, CaseIterable, Identifiable {
         case discovery
@@ -22,7 +22,7 @@ struct OperatorOverviewSnapshot {
             case .approval:
                 return "Approval"
             case .action:
-                return "Action"
+                return "Bounded Action"
             case .knowledge:
                 return "Knowledge"
             }

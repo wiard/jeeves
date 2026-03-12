@@ -824,7 +824,7 @@ struct LobbyView: View {
                 spacing: 8
             ) {
                 terminalTelemetryRow(label: "Queue", value: "\(queueSize)")
-                terminalTelemetryRow(label: "Decisions today", value: "\(decisionsToday)")
+                terminalTelemetryRow(label: "Approvals today", value: "\(decisionsToday)")
                 terminalTelemetryRow(label: "Last discovery", value: lastDiscoveryLabel)
                 terminalTelemetryRow(label: "Last refresh", value: lastRefreshLabel)
             }
@@ -2248,13 +2248,13 @@ struct LobbyView: View {
                         Text("Proposal created")
                             .font(.jeevesCaption.weight(.semibold))
                             .foregroundStyle(.white)
-                        Text("Proposal \(proposalId) is pending approval in DECISIONS.")
+                        Text("Proposal \(proposalId) is pending approval in APPROVALS.")
                             .font(.jeevesCaption2)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     HStack(spacing: 6) {
-                        Button("Open Decisions") {
+                        Button("Open Approvals") {
                             shouldScrollToDecisions = true
                         }
                         .buttonStyle(.bordered)
@@ -4174,7 +4174,7 @@ struct LobbyView: View {
                 objectId: "extension-decision-\(extensionId)",
                 kind: "extension_decision",
                 createdAtIso: now,
-                title: "Decision \(extensionId)",
+                title: "Approval \(extensionId)",
                 summary: "Beslissing geregistreerd in demo modus.",
                 sourceRefs: nil,
                 linkedObjectIds: nil,
@@ -4194,7 +4194,7 @@ struct LobbyView: View {
                 objectId: "extension-receipt-\(extensionId)",
                 kind: "extension_receipt",
                 createdAtIso: now,
-                title: "Receipt \(extensionId)",
+                title: "Bounded Action \(extensionId)",
                 summary: "Uitvoering niet automatisch geladen; alleen goedkeuring vastgelegd.",
                 sourceRefs: nil,
                 linkedObjectIds: nil,
@@ -4436,7 +4436,7 @@ struct LobbyView: View {
             }
 
             HStack(spacing: 8) {
-                Button("Open Decisions") {
+                Button("Open Approvals") {
                     requestedZoneAnchor = MissionZone.decisions.anchorId
                 }
                 .buttonStyle(.bordered)
@@ -7019,7 +7019,7 @@ private struct KnowledgeObjectCard: View {
         case "decision", "extension_decision":
             return "Approval"
         case "action_receipt", "extension_receipt":
-            return "Action"
+            return "Bounded Action"
         default:
             return "Knowledge"
         }
@@ -7338,9 +7338,9 @@ private struct KnowledgeGraphSheet: View {
 
     private func causalPathLabel(for graph: KnowledgeGraphResponse) -> String {
         if hasApprovalCheckpoint(in: graph) {
-            return "Discovery → Proposal → Approval → Action → Knowledge"
+            return "Discovery → Proposal → Approval → Bounded Action → Knowledge"
         }
-        return "Discovery → Proposal → Action → Knowledge"
+        return "Discovery → Proposal → Approval → Bounded Action → Knowledge"
     }
 
     private func hasApprovalCheckpoint(in graph: KnowledgeGraphResponse) -> Bool {
@@ -7364,7 +7364,7 @@ private enum LineageLane: String, CaseIterable, Identifiable {
         switch self {
         case .discovery: return "Discovery"
         case .proposal: return "Proposal"
-        case .action: return "Action"
+        case .action: return "Bounded Action"
         case .knowledge: return "Knowledge"
         }
     }

@@ -6,7 +6,7 @@ struct OperatorLatestFlowStrip: View {
     var body: some View {
         InstrumentSectionPanel(
             eyebrow: "System Loop",
-            title: "Discovery -> Proposal -> Approval -> Action -> Knowledge",
+            title: "Discovery -> Proposal -> Approval -> Bounded Action -> Knowledge",
             subtitle: "The highlighted stage is where the pipeline is currently active.",
             accent: .blue
         ) {
