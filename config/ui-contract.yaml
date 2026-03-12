@@ -1,0 +1,123 @@
+version: 1
+
+ui_contract:
+  purpose: >
+    Zorgt dat web en app dezelfde kernobjecten, statusvolgorde en mensgerichte
+    betekenis tonen, zodat operatorinteractie helder en consistent blijft.
+
+surfaces:
+  app:
+    role: operator_cockpit
+    priorities:
+      - proposal_review
+      - mission_control
+      - live_visibility
+      - approval_clarity
+
+  web:
+    role: calm_overview
+    priorities:
+      - readable_system_state
+      - proposal_visibility
+      - trust_context
+      - knowledge_access
+    future_migration_note: >
+      Billing en certificering migreren naar safeclash.com.
+      Kubus-documentatie en onderzoek migreren naar clashd27.com.
+      Tag migratiekandidaten in de codebase met: migration_target: safeclash_com
+      of migration_target: clashd27_com voordat die sites live gaan.
+
+canonical_objects:
+  signal:
+    label: Signal
+    description: Een relevante waarneming uit discovery of systeemtelemetrie.
+
+  proposal:
+    label: Proposal
+    description: Een menselijk toetsbaar voorstel voor actie of onderzoek.
+
+  approval_decision:
+    label: Approval
+    description: De expliciete menselijke beoordeling van een voorstel.
+
+  execution_receipt:
+    label: Action
+    description: Het gecontroleerde uitvoeringsresultaat binnen governance.
+
+  knowledge_object:
+    label: Knowledge
+    description: Een opgeslagen uitkomst met provenance en herleidbaarheid.
+
+canonical_flow:
+  ordered_states:
+    - signal
+    - proposal
+    - approval
+    - bounded_execution
+    - knowledge
+
+  loop_note: >
+    Knowledge voedt terug in discovery. De loop sluit.
+    Toon dit in de UI zodat de operator de cyclus begrijpt.
+
+state_labels:
+  idle: Idle
+  observed: Observed
+  prepared: Prepared
+  pending_review: Pending review
+  approved: Approved
+  denied: Denied
+  executing: Executing
+  completed: Completed
+  degraded: Degraded
+
+surface_requirements:
+  both_web_and_app:
+    must_use_same_object_names: true
+    must_use_same_flow_order: true
+    must_show_approval_explicitly: true
+    must_not_claim_execution_without_receipt: true
+    must_preserve_human_readability: true
+
+  app_only:
+    must_show:
+      - proposal_review_screen
+      - approval_controls
+      - mission_control_context
+      - execution_boundaries
+
+  web_only:
+    must_show:
+      - top_line_flow
+      - readable_overview
+      - latest_proposals
+      - trust_and_change_context
+
+fallback_rules:
+  gateway_unavailable:
+    ui_state: degraded
+    behavior:
+      - show_last_known_state
+      - mark_as_stale
+      - disable_mutating_actions
+
+  missing_receipt:
+    ui_state: degraded
+    behavior:
+      - do_not_claim_completion
+      - mark_action_as_pending_proof
+
+  partial_context:
+    ui_state: observed
+    behavior:
+      - show_uncertainty
+      - allow_investigation_view
+      - block_execution_language
+
+copy_rules:
+  explanation_pattern: >
+    Toon niet alleen wat er is gebeurd, maar ook waarom dit relevant is voor de mens.
+  forbidden_patterns:
+    - hidden approval
+    - unexplained status jumps
+    - technical-only wording without human meaning
