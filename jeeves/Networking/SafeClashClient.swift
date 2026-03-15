@@ -174,6 +174,42 @@ actor SafeClashClient {
         return []
     }
 
+    func fetchWallet(owner: String? = nil) async throws -> SafeClashWallet {
+        var query: [URLQueryItem] = []
+        if let owner, !owner.isEmpty {
+            query.append(URLQueryItem(name: "owner", value: owner))
+        }
+
+        let (data, _) = try await request(path: "/api/wallet", method: "GET", queryItems: query)
+        let decoder = JSONDecoder()
+        if let direct = try? decoder.decode(SafeClashWallet.self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(SafeClashWalletEnvelope.self, from: data),
+           let wallet = envelope.wallet {
+            return wallet
+        }
+        throw SafeClashClientError.cannotParseResponse
+    }
+
+    func fetchWalletLedger(owner: String? = nil, limit: Int = 5) async throws -> [SafeClashWalletLedgerEntry] {
+        var query = [URLQueryItem(name: "limit", value: String(max(1, min(limit, 20))))]
+        if let owner, !owner.isEmpty {
+            query.append(URLQueryItem(name: "owner", value: owner))
+        }
+
+        let (data, _) = try await request(path: "/api/wallet/ledger", method: "GET", queryItems: query)
+        let decoder = JSONDecoder()
+        if let direct = try? decoder.decode([SafeClashWalletLedgerEntry].self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(SafeClashWalletLedgerEnvelope.self, from: data),
+           let entries = envelope.entries {
+            return entries
+        }
+        throw SafeClashClientError.cannotParseResponse
+    }
+
     private func request(
         path: String,
         method: String,

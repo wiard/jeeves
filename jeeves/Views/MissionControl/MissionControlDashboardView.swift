@@ -4,31 +4,33 @@ struct MissionControlDashboardView: View {
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
     @State private var model = MissionControlViewModel()
+    @State private var injectionModel = ClashInjectionViewModel()
     @State private var pulseActive = false
+    @State private var selectedRecentSignal: RecentGridSignal?
 
     var body: some View {
         NavigationStack {
             ZStack {
                 InstrumentBackdrop(
                     colors: [
-                        Color(red: 0.04, green: 0.05, blue: 0.08),
-                        Color(red: 0.03, green: 0.04, blue: 0.06),
-                        Color(red: 0.02, green: 0.03, blue: 0.05)
+                        Color.jeevesMist,
+                        Color(red: 0.94, green: 0.97, blue: 0.99),
+                        Color(red: 0.97, green: 0.98, blue: 0.96)
                     ]
                 )
                 .overlay(alignment: .topLeading) {
                     Circle()
-                        .fill(Color.blue.opacity(0.10))
-                        .blur(radius: 68)
-                        .frame(width: 220, height: 220)
-                        .offset(x: -50, y: -80)
+                        .fill(Color.jeevesSky.opacity(0.10))
+                        .blur(radius: 88)
+                        .frame(width: 240, height: 240)
+                        .offset(x: -52, y: -84)
                 }
                 .overlay(alignment: .topTrailing) {
                     Circle()
-                        .fill(Color.orange.opacity(0.08))
-                        .blur(radius: 78)
-                        .frame(width: 240, height: 240)
-                        .offset(x: 60, y: -70)
+                        .fill(Color.jeevesMint.opacity(0.10))
+                        .blur(radius: 92)
+                        .frame(width: 250, height: 250)
+                        .offset(x: 62, y: -74)
                 }
                 .ignoresSafeArea()
 
@@ -39,6 +41,95 @@ struct MissionControlDashboardView: View {
                     ScrollView {
                         VStack(spacing: 16) {
                             systemStatusCard
+                            SystemReadinessCard(
+                                readiness: injectionModel.readiness,
+                                isLoading: injectionModel.isLoading,
+                                errorText: injectionModel.errorText
+                            )
+                            Clashd27ComputerCard(
+                                computer: injectionModel.computer,
+                                isLoading: injectionModel.isLoading,
+                                errorText: injectionModel.errorText
+                            )
+                            ClashInjectionCommandCard(
+                                readiness: injectionModel.readiness,
+                                targets: injectionModel.availableTargets,
+                                selectedTargetId: $injectionModel.selectedTargetId,
+                                selectedIntent: $injectionModel.selectedIntent,
+                                notes: $injectionModel.notes,
+                                isStarting: injectionModel.isStarting
+                            ) {
+                                Task {
+                                    await injectionModel.startInvestigation(gateway: gateway)
+                                }
+                            }
+                            InvestigationCycleView(
+                                session: injectionModel.session,
+                                computer: injectionModel.computer,
+                                cycle: injectionModel.cycle,
+                                findings: injectionModel.findings,
+                                consequences: injectionModel.consequences,
+                                residue: injectionModel.residue
+                            )
+                            ResidueMemoryView(
+                                entries: injectionModel.residueMemory
+                            )
+                            liveSignalsCard
+                            if let gapFinder = poller.gapFinderSnapshot {
+                                GapFinderPanel(
+                                    eyebrow: "Discovery Radar",
+                                    title: "Cross-domain matches and gap pressure",
+                                    subtitle: "Top overlaps, bridge questions, and entropy conflicts derived from live signals. The panel stays observational and never changes authority.",
+                                    accent: .jeevesSky,
+                                    snapshot: gapFinder
+                                )
+                            }
+                            IntelligencePhaseStrip(
+                                currentStage: intelligencePhase,
+                                summary: intelligencePhaseSummary
+                            )
+                            humanMeaningCard
+                            if let operatorMemory = poller.operatorMemorySnapshot {
+                                OperatorMemoryPanel(
+                                    title: "What the operator repeatedly values",
+                                    accent: .jeevesMint,
+                                    memory: operatorMemory
+                                )
+                            }
+                            if let collectiveMemory = poller.collectiveMemorySnapshot {
+                                CollectiveMemoryPanel(
+                                    title: "What the system keeps learning together",
+                                    accent: .jeevesGold,
+                                    memory: collectiveMemory
+                                )
+                            }
+                            if let civilization = poller.civilizationSnapshot {
+                                CivilizationPanel(
+                                    title: "What now matters beyond the moment",
+                                    accent: .jeevesSky,
+                                    snapshot: civilization
+                                )
+                            }
+                            if let planetary = poller.planetarySnapshot {
+                                PlanetaryPanel(
+                                    title: "What is becoming globally important",
+                                    accent: .jeevesMint,
+                                    snapshot: planetary
+                                )
+                            }
+                            if let cosmic = poller.cosmicSnapshot {
+                                CosmicPanel(
+                                    title: "What may matter across generations",
+                                    accent: .jeevesGold,
+                                    snapshot: cosmic
+                                )
+                            }
+                            bootstrapCard
+                            autonomyCard
+                            realityAlignmentCard
+                            walletCard
+                            residueCard
+                            recentSignalsCard
                             SystemLoopStrip(snapshot: systemLoopSnapshot)
 
                             MissionControlCompactStageCard(card: discoveryCard, isActive: systemLoopSnapshot.currentStage == .discovery)
@@ -47,9 +138,11 @@ struct MissionControlDashboardView: View {
                             MissionControlCompactStageCard(card: actionCard, isActive: systemLoopSnapshot.currentStage == .action)
                             MissionControlCompactStageCard(card: knowledgeCard, isActive: systemLoopSnapshot.currentStage == .knowledge)
                         }
+                        .frame(maxWidth: 560, alignment: .leading)
                         .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 28)
+                        .padding(.top, 16)
+                        .padding(.bottom, 32)
+                        .frame(maxWidth: .infinity)
                     }
                 }
             }
@@ -74,6 +167,14 @@ struct MissionControlDashboardView: View {
                     pulseActive = true
                 }
             }
+            .sheet(item: $selectedRecentSignal) { signal in
+                RecentGridSignalDetailSheet(
+                    signal: signal,
+                    pendingProposal: linkedProposal(for: signal),
+                    latestResidueEvent: latestResidueImpact(for: signal),
+                    regionResidue: regionResidue(for: signal.region)
+                )
+            }
         }
     }
 
@@ -83,6 +184,89 @@ struct MissionControlDashboardView: View {
 
     private var systemLoopSnapshot: MissionControlSystemLoopSnapshot {
         MissionControlViewModel.systemLoopSnapshot(poller: poller, gateway: gateway)
+    }
+
+    private var bootstrapSnapshot: GovernedBootstrapSnapshot {
+        GovernedBootstrapSnapshot.derive(
+            status: gateway.currentStatus,
+            proposals: poller.proposals,
+            residue: poller.gridResidueSummary
+        )
+    }
+
+    private var humanMeaningCard: some View {
+        HumanMeaningPanel(
+            title: "What Mission Control means now",
+            accent: statusTint,
+            explanation: HumanMeaningBuilder.missionControl(poller: poller, gateway: gateway)
+        )
+    }
+
+    private var liveSignalsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("LIVE GATEWAY SOURCES")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(monoTint)
+
+                Spacer()
+
+                Text(liveSignalsStatus)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(monoTint.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(monoTint.opacity(0.18), lineWidth: 1)
+                    )
+            }
+
+            Text(liveSignalsHeadline)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(liveSignalsSummaryLine)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let gravity = poller.signalsRuntimeSnapshot?.gravitySummary,
+               gravity.activeEdgeCount > 0 {
+                gravitySignalsStrip(gravity)
+            }
+
+            if isLoadingGovernedSignals {
+                ProgressView("Loading governed signal state...")
+                    .font(.footnote)
+                    .tint(monoTint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                JeevesLiveSignalsPanel(
+                    runtime: poller.signalsRuntimeSnapshot,
+                    operatorMemory: poller.operatorMemorySnapshot
+                )
+            }
+
+            if let error = liveSignalsErrorLine {
+                Text("Signals runtime status: \(error)")
+                    .font(.caption)
+                    .foregroundStyle(Color.red.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(liveSignalsFooterLine)
+                    .font(.caption)
+                    .foregroundStyle(Color.jeevesMutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: monoTint))
     }
 
     private var systemStatusCard: some View {
@@ -96,38 +280,35 @@ struct MissionControlDashboardView: View {
 
                 Text(statusBadge)
                     .font(.caption.monospaced())
-                    .foregroundStyle(Color.white.opacity(0.96))
+                    .foregroundStyle(Color.jeevesInk)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(
                         Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [statusTint.opacity(0.34), Color.black.opacity(0.16)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(statusTint.opacity(0.14))
                     )
                     .overlay(alignment: .topTrailing) {
                         Circle()
                             .fill(statusTint)
                             .frame(width: pulseFrame, height: pulseFrame)
-                            .shadow(color: statusTint.opacity(0.45), radius: 7)
+                            .shadow(color: statusTint.opacity(0.22), radius: 4)
                             .padding(.top, 5)
                             .padding(.trailing, 5)
                     }
                     .clipShape(Capsule())
-                    .shadow(color: statusTint.opacity(0.18), radius: 6, y: 2)
+                    .overlay(
+                        Capsule()
+                            .stroke(statusTint.opacity(0.18), lineWidth: 1)
+                    )
             }
 
             Text("\(statusBadge.capitalized) • Last tick \(lastTickLine)")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(Color.white.opacity(0.98))
+                .foregroundStyle(Color.jeevesInk)
 
             Text("System health, live pipeline pressure, and operator review at a glance.")
                 .font(.subheadline)
-                .foregroundStyle(Color.white.opacity(0.62))
+                .foregroundStyle(Color.jeevesSubtleText)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
@@ -137,12 +318,54 @@ struct MissionControlDashboardView: View {
 
             Text(operatorLine)
                 .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.9))
+                .foregroundStyle(Color.jeevesInk.opacity(0.88))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardBackground(border: statusTint))
+    }
+
+    private var bootstrapCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("BOOTSTRAP")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.cyan)
+
+                Spacer()
+
+                Text(bootstrapSnapshot.phase.displayLabel)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.cyan.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.cyan.opacity(0.16), lineWidth: 1)
+                    )
+            }
+
+            bootstrapLine(
+                label: "Current phase",
+                value: bootstrapSnapshot.phase.title
+            )
+            bootstrapLine(
+                label: "Proof achieved",
+                value: bootstrapSnapshot.proofAchieved
+            )
+            bootstrapLine(
+                label: "Next proof",
+                value: bootstrapSnapshot.nextProof
+            )
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: .cyan))
     }
 
     private func infoPill(_ text: String) -> some View {
@@ -153,35 +376,35 @@ struct MissionControlDashboardView: View {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.08), statusTint.opacity(0.10)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.jeevesCloud.opacity(0.7))
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(statusTint.opacity(0.16), lineWidth: 1)
+                    .stroke(statusTint.opacity(0.14), lineWidth: 1)
             )
+    }
+
+    private func bootstrapLine(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(.caption2.monospaced())
+                .foregroundStyle(Color.jeevesMutedText)
+            Text(value)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func cardBackground(border: Color) -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [Color.white.opacity(0.08), border.opacity(0.10), Color.black.opacity(0.14)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            .fill(Color.jeevesPanelStrong)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(border.opacity(0.28), lineWidth: 1)
+                    .stroke(border.opacity(0.18), lineWidth: 1)
             )
-            .shadow(color: border.opacity(0.14), radius: 10, y: 3)
+            .shadow(color: border.opacity(0.08), radius: 12, y: 6)
     }
 
     private var statusBadge: String {
@@ -194,8 +417,8 @@ struct MissionControlDashboardView: View {
     private var statusTint: Color {
         if killSwitchActive || budgetHardStop { return .red }
         if pendingApprovalCount > 0 { return .orange }
-        if discoveryCount > 0 { return .blue }
-        return .green
+        if discoveryCount > 0 { return .jeevesSky }
+        return .jeevesMint
     }
 
     private var lastTickLine: String {
@@ -212,6 +435,29 @@ struct MissionControlDashboardView: View {
             return "Pipeline active in Discovery."
         }
         return "No operator decision is required right now."
+    }
+
+    private var intelligencePhase: IntelligencePhaseStage {
+        if killSwitchActive || budgetHardStop || pendingApprovalCount > 0 {
+            return .safety
+        }
+
+        if proposalCount > 0 || runningActionCount > 0 || !recentBoundedActions.isEmpty {
+            return .define
+        }
+
+        return .investigate
+    }
+
+    private var intelligencePhaseSummary: String {
+        switch intelligencePhase {
+        case .safety:
+            return "Safety is foregrounded because approval pressure or bounded stops must stay visible to the operator."
+        case .define:
+            return "Define is foregrounded because signals are already being shaped into proposals, execution scope, or governed follow-through."
+        case .investigate:
+            return "Investigate is foregrounded because the runtime is reading discovery pressure, residue, and recent signals without immediate safety intervention."
+        }
     }
 
     // MARK: - Data
@@ -273,7 +519,15 @@ struct MissionControlDashboardView: View {
         return []
     }
 
-    private var recentReceipts: [ActionReceipt] {
+    private var autonomyStateSnapshot: DecisionAutonomyStateSnapshot? {
+        poller.decisionAutonomyState
+    }
+
+    private var recentAutonomyDecisions: [AutonomousDecisionRecordSnapshot] {
+        autonomyStateSnapshot?.recentAutonomousDecisions ?? []
+    }
+
+    private var boundedActionReceipts: [ActionReceipt] {
         Array(recentBoundedActions.compactMap(\.receipt).prefix(3))
     }
 
@@ -286,6 +540,34 @@ struct MissionControlDashboardView: View {
 
     private var failedActionCount: Int {
         recentBoundedActions.filter(\.isFailed).count
+    }
+
+    private var topResidueRegion: GridResidueRegionSummary? {
+        poller.gridResidueSummary?.regions.first
+    }
+
+    private var topResidueNode: GridResidueNodeSummary? {
+        poller.gridResidueSummary?.nodes.first
+    }
+
+    private var residueFieldSnapshot: GridResidueFieldSnapshot? {
+        poller.gridResidueField
+    }
+
+    private var topResidueRegions: [GridResidueRegionSummary] {
+        Array((residueFieldSnapshot?.topRegions ?? poller.gridResidueSummary?.regions ?? []).prefix(3))
+    }
+
+    private var topResidueNodes: [GridResidueNodeSummary] {
+        Array((residueFieldSnapshot?.topNodes ?? poller.gridResidueSummary?.nodes ?? []).prefix(3))
+    }
+
+    private var repeatedResiduePatterns: [GridResidueRepeatedPatternSummary] {
+        Array((residueFieldSnapshot?.repeatedPatterns ?? []).prefix(3))
+    }
+
+    private var topResidueSignalFamilies: [GridResidueFieldSignalFamilySummary] {
+        Array((residueFieldSnapshot?.topSignalFamilies ?? []).prefix(3))
     }
 
     private var knowledgeSnapshot: KnowledgeStatus? {
@@ -369,11 +651,11 @@ struct MissionControlDashboardView: View {
             title: "Bounded Action",
             primaryMetric: "\(recentBoundedActions.count)",
             status: runningActionCount > 0 ? "active" : (recentBoundedActions.isEmpty ? "idle" : "completed"),
-            summary: recentReceipts.first?.resultSummary ?? "No recent bounded action.",
+            summary: boundedActionReceipts.first?.resultSummary ?? "No recent bounded action.",
             pills: [
                 "\(runningActionCount) running",
                 "\(failedActionCount) failed",
-                "\(recentReceipts.count) receipts"
+                "\(boundedActionReceipts.count) receipts"
             ]
         )
     }
@@ -396,6 +678,7 @@ struct MissionControlDashboardView: View {
 
     private func refresh() async {
         await poller.refresh(gateway: gateway)
+        await injectionModel.refresh(gateway: gateway)
         if let feed = poller.safeClashFeed {
             model.trustSnapshot = MissionControlViewModel.snapshot(from: feed)
             model.hasLoaded = true
@@ -404,12 +687,1012 @@ struct MissionControlDashboardView: View {
         }
     }
 
+    private var liveSignalsStatus: String {
+        if isLoadingGovernedSignals {
+            return "LOADING"
+        }
+        if let runtime = poller.signalsRuntimeSnapshot {
+            return (runtime.lastError?.isEmpty == false) ? "DEGRADED" : "CONNECTED"
+        }
+        if gateway.isConnected && poller.operatorMemorySnapshot != nil {
+            return "CONNECTED"
+        }
+        if liveSignalsErrorLine != nil {
+            return "DEGRADED"
+        }
+        return gateway.isConnected ? "STANDBY" : "IDLE"
+    }
+
+    private var liveSignalsHeadline: String {
+        guard let runtime = poller.signalsRuntimeSnapshot else {
+            if poller.operatorMemorySnapshot != nil {
+                return "Operator memory is visible through the governed gateway"
+            }
+            return gateway.isConnected
+                ? "Governed gateway is connected and waiting for live signal pressure"
+                : "Governed gateway is standing by"
+        }
+        if let gravity = poller.signalsRuntimeSnapshot?.gravitySummary,
+           gravity.activeEdgeCount > 0,
+           let research = poller.signalsRuntimeSnapshot?.researchLane,
+           research.signalCount24h > 0 {
+            return "\(runtime.activeSourceCount) governed sources · \(research.signalCount24h) research signals · \(gravity.activeEdgeCount) gravity links"
+        }
+        if let gravity = poller.signalsRuntimeSnapshot?.gravitySummary,
+           gravity.activeEdgeCount > 0 {
+            return "\(runtime.activeSourceCount) governed sources · \(runtime.totalSignals) total signals · \(gravity.activeEdgeCount) gravity links"
+        }
+        if let research = poller.signalsRuntimeSnapshot?.researchLane, research.signalCount24h > 0 {
+            return "\(runtime.activeSourceCount) governed sources · \(runtime.totalSignals) total signals · \(research.signalCount24h) research signals"
+        }
+        return "\(runtime.activeSourceCount) governed sources · \(runtime.totalSignals) total signals"
+    }
+
+    private var liveSignalsSummaryLine: String {
+        if let gravity = poller.signalsRuntimeSnapshot?.gravitySummary,
+           gravity.activeEdgeCount > 0 {
+            let strongest = gravity.strongestEdge?.explanation ?? "The strongest pull is still being explained."
+            let researchText: String
+            if let research = poller.signalsRuntimeSnapshot?.researchLane, research.signalCount24h > 0 {
+                researchText = "\(research.activitySpikeCount) elevated research candidate\(research.activitySpikeCount == 1 ? "" : "s") are also visible."
+            } else {
+                researchText = "Signals remain read-only until a human approves a proposal."
+            }
+            return "\(gravity.crossDomainPullCount) cross-domain pull event\(gravity.crossDomainPullCount == 1 ? "" : "s") are shaping discovery pressure. \(strongest) \(researchText)"
+        }
+        if let research = poller.signalsRuntimeSnapshot?.researchLane, research.signalCount24h > 0 {
+            let domains = research.topDomains.prefix(3).map(humanizeDomain).joined(separator: ", ")
+            let sources = research.sourceBreakdown
+                .prefix(3)
+                .map { "\($0.source.capitalized) \($0.signalCount)" }
+                .joined(separator: " · ")
+            let domainLine = domains.isEmpty ? "Hot domains are still forming." : "Hot domains: \(domains)."
+            let sourceLine = sources.isEmpty ? "Research lane is active." : "Sources: \(sources)."
+            return "\(research.activitySpikeCount) elevated research candidate\(research.activitySpikeCount == 1 ? "" : "s") surfaced in the governed loop. \(domainLine) \(sourceLine)"
+        }
+
+        guard let runtime = poller.signalsRuntimeSnapshot else {
+            return "This panel now reads governed gateway state only: discovery telemetry, proposal pressure, and operator memory that already passed through the canonical trust boundary."
+        }
+
+        let sourceWord = runtime.activeSourceCount == 1 ? "source" : "sources"
+        let failureLine: String
+        if let error = runtime.lastError, !error.isEmpty {
+            failureLine = "Latest runtime issue: \(error)."
+        } else {
+            failureLine = "No runtime errors are currently visible."
+        }
+        let memoryLine: String
+        if let operatorMemory = poller.operatorMemorySnapshot {
+            memoryLine = "Operator focus is currently strongest on \(humanizeDomain(operatorMemory.operatorFocusMemory.strongestFocus))."
+        } else {
+            memoryLine = "Operator memory will appear here as governed decisions accumulate."
+        }
+        return "\(runtime.activeSourceCount) governed \(sourceWord) are currently visible. \(failureLine) \(memoryLine)"
+    }
+
+    private var liveSignalsFooterLine: String {
+        if let gravity = poller.signalsRuntimeSnapshot?.gravitySummary,
+           gravity.activeEdgeCount > 0 {
+            return "Persistence trend \(gravity.persistenceTrend.capitalized) · anomaly magnet \(formatPercent(gravity.anomalyMagnetScore)) · gravity only strengthens discovery, never authority."
+        }
+        if let research = poller.signalsRuntimeSnapshot?.researchLane, research.signalCount24h > 0 {
+            return "Latest research lane update \(research.latestDetectedAtIso ?? "unknown") · signals stay read-only until human approval."
+        }
+        if let runtime = poller.signalsRuntimeSnapshot {
+            return "Governed signal update \(runtime.lastRunAtIso ?? runtime.startedAtIso ?? "unknown") · discovery stays read-only until human approval."
+        }
+        if let operatorMemory = poller.operatorMemorySnapshot {
+            return "Remembered operator focus: \(humanizeDomain(operatorMemory.operatorFocusMemory.strongestFocus)) · openclashd-v2 remains the trust root."
+        }
+        return "openclashd-v2 is the trust root; Jeeves only renders governed gateway state."
+    }
+
+    private var isLoadingGovernedSignals: Bool {
+        !poller.hasLoadedOnce
+            && poller.signalsRuntimeSnapshot == nil
+            && poller.operatorMemorySnapshot == nil
+    }
+
+    private var liveSignalsErrorLine: String? {
+        if let runtimeError = poller.signalsRuntimeSnapshot?.lastError,
+           !runtimeError.isEmpty {
+            return runtimeError
+        }
+        return poller.lastRefreshError
+    }
+
+    private func humanizeDomain(_ value: String) -> String {
+        value
+            .split(whereSeparator: { $0 == " " || $0 == "_" || $0 == "-" })
+            .map { $0.capitalized }
+            .joined(separator: " ")
+    }
+
+    private func gravitySignalsStrip(_ gravity: DiscoveryGravitySummary) -> some View {
+        HStack(spacing: 10) {
+            gravityMetric(label: "Links", value: "\(gravity.activeEdgeCount)")
+            gravityMetric(label: "Cross-domain", value: "\(gravity.crossDomainPullCount)")
+            gravityMetric(label: "Trend", value: gravity.persistenceTrend.capitalized)
+            gravityMetric(label: "Magnet", value: formatPercent(gravity.anomalyMagnetScore))
+        }
+    }
+
+    private func gravityMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.caption2.monospaced())
+                .foregroundStyle(Color.jeevesMutedText)
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.jeevesInk)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.jeevesCloud.opacity(0.68))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.jeevesLine.opacity(0.56), lineWidth: 1)
+        )
+    }
+
     private var monoTint: Color {
-        Color(red: 147 / 255.0, green: 197 / 255.0, blue: 253 / 255.0)
+        .jeevesSky
     }
 
     private var pulseFrame: CGFloat {
         pulseActive && statusBadge != "HEALTHY" ? 10 : 8
+    }
+
+    private var realityAuditSnapshot: RealityAuditStateSnapshot? {
+        poller.realityAuditState
+    }
+
+    private var recentRealityAudits: [RealityAuditSnapshot] {
+        realityAuditSnapshot?.recentAudits ?? []
+    }
+
+    private var highestRealityAnomalies: [RealityAuditSnapshot] {
+        realityAuditSnapshot?.highestAnomalyDecisions ?? []
+    }
+
+    private var autonomyCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("AUTONOMY STATE")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.orange)
+
+                Spacer()
+
+                Text(autonomyStatus)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.orange.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+                    )
+            }
+
+            Text(autonomyHeadline)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(autonomySummaryLine)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Allowed automatic decisions")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+                Text(autonomyAllowedDomainsLine)
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesInk.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Still human-only")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+                Text(autonomyHumanOnlyLine)
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesInk.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Recent autonomous decisions")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                if recentAutonomyDecisions.isEmpty {
+                    Text("No bounded autonomous decisions recorded yet.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                } else {
+                    ForEach(recentAutonomyDecisions.prefix(3)) { decision in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(decision.decisionType.replacingOccurrences(of: "_", with: " "))
+                                    .font(.system(.caption, design: .monospaced).weight(.medium))
+                                    .foregroundStyle(monoTint.opacity(0.95))
+
+                                Spacer(minLength: 8)
+
+                                Text(decision.outcomeStatus)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(autonomyOutcomeColor(decision.outcomeStatus))
+                            }
+
+                            Text(decision.summary)
+                                .font(.caption)
+                                .foregroundStyle(Color.jeevesInk.opacity(0.84))
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Text("\(decision.theme) · \(decision.outcomeSignal)")
+                                .font(.caption2)
+                                .foregroundStyle(Color.jeevesMutedText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: .orange))
+    }
+
+    private var realityAlignmentCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("REALITY ALIGNMENT")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.pink)
+
+                Spacer()
+
+                Text(realityAlignmentStatus)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.pink.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.pink.opacity(0.18), lineWidth: 1)
+                    )
+            }
+
+            Text(realityAlignmentHeadline)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(realityAlignmentSummaryLine)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Top contradictions")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                if highestRealityAnomalies.isEmpty {
+                    Text("No counter-analysis warnings recorded yet.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                } else {
+                    ForEach(highestRealityAnomalies.prefix(3)) { audit in
+                        Text("\(audit.theme) · \(audit.contradictionSignals.isEmpty ? "no major contradiction" : audit.contradictionSignals.joined(separator: ", "))")
+                            .font(.caption)
+                            .foregroundStyle(Color.jeevesInk.opacity(0.84))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Confidence adjustments")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                if recentRealityAudits.isEmpty {
+                    Text("Adjusted confidence will appear here after bounded autonomous decisions are audited.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                } else {
+                    ForEach(recentRealityAudits.prefix(3)) { audit in
+                        HStack(alignment: .top) {
+                            Text("\(String(format: "%.2f", audit.originalConfidence)) → \(String(format: "%.2f", audit.adjustedConfidence))")
+                                .font(.system(.caption, design: .monospaced).weight(.medium))
+                                .foregroundStyle(realityAnomalyColor(audit.anomalyScore))
+                            Text(audit.auditSummary)
+                                .font(.caption)
+                                .foregroundStyle(Color.jeevesInk.opacity(0.8))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Entropy warnings")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+                Text(realityEntropyWarningLine)
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesInk.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: .pink))
+    }
+
+    private var walletCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("SAFECLASH WALLET")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.mint)
+
+                Spacer()
+
+                Text(walletStatus)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.mint.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.mint.opacity(0.18), lineWidth: 1)
+                    )
+            }
+
+            HStack(alignment: .lastTextBaseline) {
+                Text(walletBalanceLine)
+                    .font(.system(size: 30, weight: .bold, design: .monospaced))
+                    .foregroundStyle(monoTint)
+
+                Spacer(minLength: 12)
+
+                Text("Operator wallet")
+                    .font(.headline)
+                    .foregroundStyle(Color.jeevesInk)
+            }
+
+            Text(walletSummaryLine)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                walletPill(latestWalletReceiptLine)
+                walletPill(lastWalletProposalLine)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: .mint))
+    }
+
+    private var residueCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("RESIDUE FIELD")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.green)
+
+                Spacer()
+
+                Text(residueStatus)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.green.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.green.opacity(0.18), lineWidth: 1)
+                    )
+            }
+
+            Text(residueHeadline)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(residueSummaryLine)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Field maturity")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+                Text(residueFieldMaturityLine)
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesInk.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !topResidueSignalFamilies.isEmpty {
+                    Text("Signal families: \(topResidueSignalFamilies.map(\.family).joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Top nodes by residue")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                if topResidueNodes.isEmpty {
+                    Text("No node residue recorded yet.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                } else {
+                    ForEach(topResidueNodes, id: \.nodeId) { entry in
+                        residueRankRow(primary: entry.nodeId, residue: entry.residue)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Top regions by residue")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                if topResidueRegions.isEmpty {
+                    Text("No regional residue recorded yet.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                } else {
+                    ForEach(topResidueRegions, id: \.region) { entry in
+                        residueRankRow(primary: entry.region, residue: entry.residue)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Repeated patterns")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                if repeatedResiduePatterns.isEmpty {
+                    Text("No repeated confirmed field patterns yet.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.jeevesSubtleText)
+                } else {
+                    ForEach(repeatedResiduePatterns) { pattern in
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("\(pattern.region) · \(pattern.signalFamily)")
+                                    .font(.system(.caption, design: .monospaced).weight(.medium))
+                                    .foregroundStyle(monoTint.opacity(0.95))
+                                Text("\(pattern.confirmedCount) confirmed of \(pattern.occurrenceCount) · avg \(String(format: "%.2f", pattern.averageConfidence))")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.jeevesMutedText)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Text("repeat")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(Color.green.opacity(0.88))
+                        }
+                    }
+                }
+            }
+
+            if !poller.gridResidueEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Recent residue events")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color.jeevesMutedText)
+
+                    ForEach(poller.gridResidueEvents.prefix(3)) { event in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("\(event.region) · \(event.nodeId)")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(monoTint.opacity(0.95))
+
+                            Spacer(minLength: 8)
+
+                            Text(String(format: "+%.2f", event.residueValue))
+                                .font(.system(.caption, design: .monospaced).weight(.medium))
+                                .foregroundStyle(Color.green.opacity(0.92))
+                        }
+
+                        Text(shortResidueTimestamp(event.timestamp))
+                            .font(.caption2)
+                            .foregroundStyle(Color.jeevesMutedText)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: .green))
+    }
+
+    private func residueRankRow(primary: String, residue: Double) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(primary)
+                .font(.system(.caption, design: .monospaced).weight(.medium))
+                .foregroundStyle(monoTint.opacity(0.95))
+
+            Spacer(minLength: 8)
+
+            Text("+\(formatResidue(residue))")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(Color.green.opacity(0.92))
+        }
+    }
+
+    private var recentSignalsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("RECENT SIGNALS")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.blue)
+
+                Spacer()
+
+                Text(recentSignalsStatus)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue.opacity(0.14))
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.blue.opacity(0.18), lineWidth: 1)
+                    )
+            }
+
+            Text(recentSignalsHeadline)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(recentSignalsSummaryLine)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if poller.recentGridSignals.isEmpty {
+                Text("No recent grid signals are visible yet.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesSubtleText)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(poller.recentGridSignals.prefix(4)) { signal in
+                        Button {
+                            selectedRecentSignal = signal
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(signal.nodeId) · \(signal.signalType)")
+                                        .font(.system(.caption, design: .monospaced).weight(.medium))
+                                        .foregroundStyle(monoTint.opacity(0.95))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    Text("\(signal.region) · \(signal.severity) · \(shortResidueTimestamp(signal.timestamp))")
+                                        .font(.caption2)
+                                        .foregroundStyle(Color.jeevesMutedText)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color.jeevesMutedText)
+                            }
+                            .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: .blue))
+    }
+
+    private func walletPill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(monoTint.opacity(0.92))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.jeevesCloud.opacity(0.7))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.mint.opacity(0.14), lineWidth: 1)
+            )
+    }
+
+    private var walletStatus: String {
+        poller.walletBalance == nil ? "UNAVAILABLE" : "READ ONLY"
+    }
+
+    private var walletBalanceLine: String {
+        guard let wallet = poller.walletBalance else { return "--" }
+        return String(format: "%.2f %@", wallet.balance, wallet.currency.uppercased())
+    }
+
+    private var walletSummaryLine: String {
+        guard let wallet = poller.walletBalance else {
+            return "SafeClash wallet data is not available yet. Jeeves remains informational and will refresh when wallet receipts appear."
+        }
+        if let latest = poller.recentReceipts.first, !latest.receiptId.isEmpty {
+            return "Recent receipt \(shortId(latest.receiptId)) links this wallet to governed runtime activity without enabling automatic spending."
+        }
+        return "Wallet \(shortId(wallet.walletId)) is visible to the operator. Receipts will appear here after SafeClash writes them."
+    }
+
+    private var latestWalletReceiptLine: String {
+        guard let latest = poller.recentReceipts.first else { return "no receipt" }
+        return "receipt \(shortId(latest.receiptId))"
+    }
+
+    private var lastWalletProposalLine: String {
+        guard let latest = poller.recentReceipts.first, !latest.proposalId.isEmpty else { return "no linked proposal" }
+        return "proposal \(shortId(latest.proposalId))"
+    }
+
+    private var residueStatus: String {
+        residueFieldSnapshot == nil && poller.gridResidueSummary == nil ? "UNAVAILABLE" : "VISIBLE"
+    }
+
+    private var recentSignalsStatus: String {
+        poller.recentGridSignals.isEmpty ? "IDLE" : "VISIBLE"
+    }
+
+    private var recentSignalsHeadline: String {
+        let count = poller.recentGridSignals.count
+        if count == 0 {
+            return "No recent signals"
+        }
+        return "\(count) live signal\(count == 1 ? "" : "s") entering the kernel"
+    }
+
+    private var recentSignalsSummaryLine: String {
+        if !poller.recentGridSignals.isEmpty {
+            return "Read-only observability over the latest grid intake. Tap a signal to inspect its linked proposal, cluster status, and residue impact."
+        }
+        return "Signals appear here as soon as they enter the governed kernel."
+    }
+
+    private var residueHeadline: String {
+        if let field = residueFieldSnapshot {
+            switch field.fieldMaturity {
+            case "maturing":
+                return "Residue field is maturing"
+            case "forming":
+                return "Residue field is forming"
+            default:
+                return "Residue field is sparse"
+            }
+        }
+        let count = poller.gridResidueEvents.count
+        if count == 0 {
+            return "No recent residue events"
+        }
+        return "\(count) recent residue event\(count == 1 ? "" : "s")"
+    }
+
+    private var residueSummaryLine: String {
+        if let field = residueFieldSnapshot {
+            return "The residue field is built from governed decisions. \(field.activeNodeCount) nodes, \(field.activeRegionCount) regions, and \(field.activeSignalFamilyCount) signal families are active."
+        }
+        if let topRegion = topResidueRegion, let topNode = topResidueNode {
+            return "Residue is operator-visible. Highest region is \(topRegion.region) (\(formatResidue(topRegion.residue))). Highest node is \(topNode.nodeId) (\(formatResidue(topNode.residue)))."
+        }
+        return "Residue becomes visible here after governed proposal decisions create new residue history."
+    }
+
+    private var residueFieldMaturityLine: String {
+        guard let field = residueFieldSnapshot else {
+            return "Field state is not available yet."
+        }
+        switch field.fieldMaturity {
+        case "maturing":
+            return "Maturing. Multiple repeated confirmed patterns now span nodes, regions, and signal families."
+        case "forming":
+            return "Forming. Repeated confirmed patterns are visible and the field is starting to hold shape."
+        default:
+            return "Sparse. Residue exists, but the field is still early and lightly connected."
+        }
+    }
+
+    private var autonomyStatus: String {
+        guard let autonomyStateSnapshot else {
+            return "idle"
+        }
+        if autonomyStateSnapshot.recentAutonomousDecisions.isEmpty {
+            return "bounded"
+        }
+        return formatPercent(autonomyStateSnapshot.successRate)
+    }
+
+    private var autonomyHeadline: String {
+        guard let autonomyStateSnapshot else {
+            return "Bounded autonomy is available but inactive."
+        }
+        return "\(autonomyStateSnapshot.recentAutonomousDecisions.count) autonomous decisions tracked"
+    }
+
+    private var autonomySummaryLine: String {
+        guard let autonomyStateSnapshot else {
+            return "Automatic decisions are limited to safe internal triage domains and remain fully inspectable."
+        }
+        return "Success rate \(formatPercent(autonomyStateSnapshot.successRate)) · autonomy residue \(formatSignedResidue(autonomyStateSnapshot.autonomousResidue))."
+    }
+
+    private var autonomyAllowedDomainsLine: String {
+        let domains = autonomyStateSnapshot?.domainsCurrentlyAllowed ?? []
+        if domains.isEmpty {
+            return "prioritize, ignore as noise, monitor, escalate for human review"
+        }
+        return domains
+            .map { $0.replacingOccurrences(of: "_", with: " ") }
+            .joined(separator: ", ")
+    }
+
+    private var autonomyHumanOnlyLine: String {
+        let domains = autonomyStateSnapshot?.stillRequiresHumanApproval ?? []
+        if domains.isEmpty {
+            return "proposal approval, payments, governance, and external actions"
+        }
+        return domains.joined(separator: ", ")
+    }
+
+    private var realityAlignmentStatus: String {
+        guard let trend = realityAuditSnapshot?.entropyTrend else {
+            return "idle"
+        }
+        switch trend.direction {
+        case "improving":
+            return "stable"
+        case "degrading":
+            return "warning"
+        default:
+            return "watch"
+        }
+    }
+
+    private var realityAlignmentHeadline: String {
+        guard let snapshot = realityAuditSnapshot else {
+            return "Counter-analysis is available but no autonomous decisions have been audited yet."
+        }
+        return "\(snapshot.recentAudits.count) audited autonomous decisions"
+    }
+
+    private var realityAlignmentSummaryLine: String {
+        guard let trend = realityAuditSnapshot?.entropyTrend else {
+            return "Autonomous decisions face contradiction analysis before gaining long-term learning influence."
+        }
+        return "Entropy trend \(trend.direction) · average delta \(String(format: "%+.2f", trend.averageEntropyDelta)) · adjusted confidence \(String(format: "%.2f", trend.averageAdjustedConfidence))."
+    }
+
+    private var realityEntropyWarningLine: String {
+        guard let trend = realityAuditSnapshot?.entropyTrend else {
+            return "Low diversity, drift, and concentration warnings will be surfaced here."
+        }
+        switch trend.direction {
+        case "degrading":
+            return "Entropy is rising. Review contradiction-heavy automatic decisions before they gain more influence."
+        case "improving":
+            return "Entropy is lowering. Recent bounded decisions are holding up under counter-analysis."
+        default:
+            return "Entropy is stable. Watch contradiction spikes and confidence reductions."
+        }
+    }
+
+    private func shortId(_ value: String) -> String {
+        if value.count <= 12 {
+            return value
+        }
+        return String(value.prefix(12))
+    }
+
+    private func formatResidue(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
+
+    private func formatSignedResidue(_ value: Double) -> String {
+        String(format: value >= 0 ? "+%.2f" : "%.2f", value)
+    }
+
+    private func formatPercent(_ value: Double) -> String {
+        String(format: "%.0f%%", value * 100)
+    }
+
+    private func autonomyOutcomeColor(_ status: String) -> Color {
+        switch status {
+        case "successful":
+            return .green.opacity(0.9)
+        case "unsuccessful":
+            return .red.opacity(0.9)
+        default:
+            return .orange.opacity(0.9)
+        }
+    }
+
+    private func realityAnomalyColor(_ score: Double) -> Color {
+        if score >= 0.65 {
+            return .red.opacity(0.9)
+        }
+        if score >= 0.4 {
+            return .orange.opacity(0.9)
+        }
+        return .green.opacity(0.9)
+    }
+
+    private func shortResidueTimestamp(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: iso) else { return iso }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func linkedProposal(for signal: RecentGridSignal) -> Proposal? {
+        poller.proposals.first { proposal in
+            proposal.gridOriginSignalId == signal.signalId
+                || proposal.correlatedGridMemberSignalIds.contains(signal.signalId)
+        }
+    }
+
+    private func latestResidueImpact(for signal: RecentGridSignal) -> GridResidueHistoryEvent? {
+        poller.gridResidueEvents.first { event in
+            event.nodeId == signal.nodeId && event.region == signal.region
+        }
+    }
+
+    private func regionResidue(for region: String) -> GridResidueRegionSummary? {
+        poller.gridResidueSummary?.regions.first { $0.region == region }
+    }
+}
+
+private struct RecentGridSignalDetailSheet: View {
+    let signal: RecentGridSignal
+    let pendingProposal: Proposal?
+    let latestResidueEvent: GridResidueHistoryEvent?
+    let regionResidue: GridResidueRegionSummary?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    section("Signal") {
+                        detailRow("Signal ID", signal.signalId)
+                        detailRow("Node", signal.nodeId)
+                        detailRow("Region", signal.region)
+                        detailRow("Type", signal.signalType)
+                        detailRow("Severity", signal.severity)
+                        detailRow("Timestamp", signal.timestamp)
+                    }
+
+                    section("Proposal") {
+                        if let pendingProposal {
+                            detailRow("Title", pendingProposal.title)
+                            detailRow("Status", pendingProposal.status)
+                            detailRow("Proposal ID", pendingProposal.proposalId)
+                        } else {
+                            detailRow("Status", "No live proposal linked in the current queue.")
+                        }
+                    }
+
+                    section("Cluster") {
+                        if let pendingProposal, pendingProposal.isCorrelatedGridEvent {
+                            detailRow("Mode", "Correlated grid event")
+                            detailRow("Region", pendingProposal.gridRegion ?? signal.region)
+                            detailRow("Members", pendingProposal.correlatedGridMemberNodeIds.joined(separator: ", "))
+                            detailRow("Signals", pendingProposal.correlatedGridMemberSignalIds.joined(separator: ", "))
+                            detailRow("Confidence", pendingProposal.correlatedGridConfidenceText ?? "--")
+                            detailRow("Summary", pendingProposal.correlatedGridSummary ?? "Grouped signal cluster")
+                        } else {
+                            detailRow("Mode", "Single governed signal")
+                        }
+                    }
+
+                    section("Residue Impact") {
+                        if let latestResidueEvent {
+                            detailRow("Latest event", "\(latestResidueEvent.region) · \(latestResidueEvent.nodeId)")
+                            detailRow("Residue value", String(format: "+%.2f", latestResidueEvent.residueValue))
+                            detailRow("Recorded at", latestResidueEvent.timestamp)
+                        } else {
+                            detailRow("Status", "No residue recorded yet for this node-region path.")
+                        }
+
+                        if let regionResidue {
+                            detailRow("Region total", String(format: "%.2f", regionResidue.residue))
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle("Recent Signal")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.caption.monospaced())
+                .foregroundStyle(Color.blue.opacity(0.86))
+
+            VStack(alignment: .leading, spacing: 10) {
+                content()
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.jeevesPanel)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.jeevesLine.opacity(0.6), lineWidth: 1)
+                    )
+            )
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.caption2.monospaced())
+                .foregroundStyle(Color.jeevesMutedText)
+            Text(value)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -439,29 +1722,26 @@ private struct MissionControlCompactStageCard: View {
 
                 Text(card.status.uppercased())
                     .font(.caption.monospaced())
-                    .foregroundStyle(Color.white.opacity(0.94))
+                    .foregroundStyle(Color.jeevesInk)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(
                         Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [stageTint.opacity(0.34), Color.black.opacity(0.12)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(stageTint.opacity(0.14))
                     )
                     .overlay(alignment: .topTrailing) {
                         Circle()
                             .fill(stageTint)
                             .frame(width: badgeDotSize, height: badgeDotSize)
-                            .shadow(color: stageTint.opacity(0.45), radius: 6)
+                            .shadow(color: stageTint.opacity(0.18), radius: 4)
                             .padding(.top, 4)
                             .padding(.trailing, 4)
                     }
                     .clipShape(Capsule())
-                    .shadow(color: glowTint.opacity(glowOpacity), radius: glowRadius)
+                    .overlay(
+                        Capsule()
+                            .stroke(stageTint.opacity(0.16), lineWidth: 1)
+                    )
             }
 
             HStack(alignment: .lastTextBaseline) {
@@ -473,12 +1753,12 @@ private struct MissionControlCompactStageCard: View {
 
                 Text(card.title)
                     .font(.headline)
-                    .foregroundStyle(Color.white.opacity(0.96))
+                    .foregroundStyle(Color.jeevesInk)
             }
 
             Text(card.summary)
                 .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.62))
+                .foregroundStyle(Color.jeevesSubtleText)
                 .lineLimit(1)
 
             HStack(spacing: 8) {
@@ -490,13 +1770,7 @@ private struct MissionControlCompactStageCard: View {
                         .padding(.vertical, 5)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.white.opacity(0.06), stageTint.opacity(0.10)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                                .fill(Color.jeevesCloud.opacity(0.7))
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(
@@ -510,22 +1784,16 @@ private struct MissionControlCompactStageCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.08), stageTint.opacity(isActive ? 0.16 : 0.10), Color.black.opacity(0.16)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.jeevesPanelStrong)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(stageTint.opacity(isActive ? 0.34 : 0.18), lineWidth: 1)
+                        .stroke(stageTint.opacity(isActive ? 0.26 : 0.14), lineWidth: 1)
                 )
-                .shadow(color: glowTint.opacity(isActive ? 0.16 : 0.08), radius: isActive ? 10 : 6, y: 3)
+                .shadow(color: glowTint.opacity(isActive ? 0.08 : 0.04), radius: isActive ? 12 : 8, y: 6)
         )
         .overlay(alignment: .topLeading) {
             Circle()
-                .fill(stageTint.opacity(isActive ? 0.16 : 0.08))
+                .fill(stageTint.opacity(isActive ? 0.10 : 0.05))
                 .frame(width: 96, height: 96)
                 .blur(radius: 28)
                 .offset(x: -18, y: -20)
@@ -540,11 +1808,11 @@ private struct MissionControlCompactStageCard: View {
 
     private var stageTint: Color {
         switch card.stage {
-        case .discovery: return .blue
+        case .discovery: return .jeevesSky
         case .proposal: return .blue
         case .approval: return .orange
-        case .action: return .blue
-        case .knowledge: return .green
+        case .action: return .teal
+        case .knowledge: return .jeevesMint
         }
     }
 

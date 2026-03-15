@@ -58,6 +58,22 @@ enum RouteContract {
         static let state     = Route.get("/api/fabric/state")
     }
 
+    // MARK: - System
+
+    enum System {
+        static let readiness = Route.get("/api/system/readiness")
+        static let computer = Route.get("/api/system/computer")
+        static let entropy = Route.get("/api/system/entropy")
+        static let intelligence = Route.get("/api/system/intelligence")
+        static let cosmic = Route.get("/api/system/cosmic")
+        static let planetary = Route.get("/api/system/planetary")
+        static let civilization = Route.get("/api/system/civilization")
+        static let collectiveMemory = Route.get("/api/system/collective-memory")
+        static let operatorMemory = Route.get("/api/system/operator-memory")
+        static let residueField = Route.get("/api/system/residue-field")
+        static let gapFinder = Route.get("/api/system/gap-finder")
+    }
+
     // MARK: - Knowledge
 
     enum Knowledge {
@@ -127,6 +143,25 @@ enum RouteContract {
         static let propose         = Route.post("/api/agents/propose")
         static func proposalsDecided(limit: Int) -> Route {
             .get("/api/agents/proposals/decided", query: [URLQueryItem(name: "limit", value: "\(limit)")])
+        }
+    }
+
+    // MARK: - Injection
+
+    enum Injection {
+        static let commands = Route.post("/api/injection/commands")
+        static let sessions = Route.get("/api/injection/sessions")
+        static func session(id: String) -> Route {
+            .get("/api/injection/sessions/\(id)")
+        }
+        static func cycle(id: String) -> Route {
+            .get("/api/injection/sessions/\(id)/cycle")
+        }
+        static func findings(id: String) -> Route {
+            .get("/api/injection/sessions/\(id)/findings")
+        }
+        static func residue(id: String) -> Route {
+            .get("/api/injection/sessions/\(id)/residue")
         }
     }
 

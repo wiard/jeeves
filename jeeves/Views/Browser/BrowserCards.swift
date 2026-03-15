@@ -18,7 +18,7 @@ struct BrowserFeaturedCard: View {
 
             Text(card.title)
                 .font(.jeevesTitle.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
                 .lineLimit(2)
 
             Text(card.intentionPath)
@@ -85,7 +85,7 @@ struct BrowserCertifiedCard: View {
                         .font(.jeevesCaption)
                     Text(card.title)
                         .font(.jeevesHeadline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.jeevesInk)
                         .lineLimit(1)
                 }
                 Spacer()
@@ -161,7 +161,7 @@ struct BrowserEmergingCard: View {
                             .font(.jeevesCaption2)
                         Text(intention.title)
                             .font(.jeevesHeadline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.jeevesInk)
                             .lineLimit(2)
                     }
                     Spacer()
@@ -253,7 +253,7 @@ struct BrowserCategoryTile: View {
 
                 Text(category.title)
                     .font(.jeevesCaption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.jeevesInk)
                     .lineLimit(1)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -267,10 +267,10 @@ struct BrowserCategoryTile: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(isSelected ? Color.cyan.opacity(0.18) : Color.white.opacity(0.04))
+            .background(isSelected ? Color.cyan.opacity(0.18) : Color.jeevesCloud.opacity(0.72))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(isSelected ? Color.cyan.opacity(0.6) : Color.white.opacity(0.08), lineWidth: 1)
+                    .stroke(isSelected ? Color.cyan.opacity(0.42) : Color.jeevesLine.opacity(0.72), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
@@ -297,16 +297,16 @@ struct LifecycleTimelineView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 0) {
                         Circle()
-                            .fill(step.isComplete ? Color.jeevesGold : Color.white.opacity(0.2))
+                            .fill(step.isComplete ? Color.jeevesGold : Color.jeevesCloud.opacity(0.8))
                             .frame(width: 12, height: 12)
                             .overlay(
                                 Circle()
-                                    .stroke(step.isComplete ? Color.jeevesGold.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 2)
+                                    .stroke(step.isComplete ? Color.jeevesGold.opacity(0.5) : Color.jeevesLine.opacity(0.72), lineWidth: 2)
                             )
 
                         if index < steps.count - 1 {
                             Rectangle()
-                                .fill(step.isComplete ? Color.jeevesGold.opacity(0.4) : Color.white.opacity(0.1))
+                                .fill(step.isComplete ? Color.jeevesGold.opacity(0.4) : Color.jeevesLine.opacity(0.4))
                                 .frame(width: 2, height: 32)
                         }
                     }
@@ -346,7 +346,7 @@ struct BrowserGuidanceBriefView: View {
             HStack(spacing: 8) {
                 Text("Jeeves Guidance")
                     .font(.jeevesHeadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.jeevesInk)
                 Spacer()
                 Text(brief.state.rawValue.uppercased())
                     .font(.jeevesCaption2.weight(.semibold))
@@ -381,7 +381,7 @@ struct BrowserGuidanceBriefView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.jeevesCaption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(Color.jeevesInk.opacity(0.78))
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         Text(row)
                             .font(.jeevesCaption)
@@ -412,7 +412,7 @@ struct DeploymentProposalSheet: View {
                             .foregroundStyle(.secondary)
                         Text(request.intentionTitle)
                             .font(.jeevesHeadline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.jeevesInk)
                         if let cert = request.certificateId {
                             Text("Certificate: \(cert)")
                                 .font(.jeevesMono)
@@ -501,7 +501,7 @@ struct DeploymentProposalSheet: View {
                 .frame(width: 100, alignment: .leading)
             Text(value)
                 .font(.jeevesMono)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
         }
     }
 }

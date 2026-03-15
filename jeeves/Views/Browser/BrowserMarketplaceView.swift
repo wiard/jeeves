@@ -50,7 +50,7 @@ struct BrowserMarketplaceView: View {
                 .foregroundStyle(.secondary)
             TextField("Search configurations...", text: $searchText)
                 .font(.jeevesBody)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
                 .textFieldStyle(.plain)
                 .onSubmit {
                     if !searchText.isEmpty {
@@ -64,11 +64,11 @@ struct BrowserMarketplaceView: View {
                 }
         }
         .padding(12)
-        .background(Color.white.opacity(0.06))
+        .background(Color.jeevesPanel)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Color.jeevesLine.opacity(0.8), lineWidth: 1)
         )
     }
 
@@ -187,13 +187,13 @@ struct BrowserMarketplaceView: View {
         Button(action: action) {
             Text(text)
                 .font(.jeevesCaption.weight(.medium))
-                .foregroundStyle(isSelected ? .white : .secondary)
+                .foregroundStyle(isSelected ? Color.jeevesInk : .secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(isSelected ? Color.cyan.opacity(0.28) : Color.white.opacity(0.04))
+                .background(isSelected ? Color.cyan.opacity(0.18) : Color.jeevesCloud.opacity(0.72))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(isSelected ? Color.cyan.opacity(0.6) : Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(isSelected ? Color.cyan.opacity(0.4) : Color.jeevesLine.opacity(0.7), lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -301,7 +301,7 @@ struct BrowserMarketplaceView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Using cached data")
                     .font(.jeevesCaption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.jeevesInk)
                 Text("Latest request failed. Showing saved browser feed.")
                     .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)

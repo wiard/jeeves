@@ -456,6 +456,59 @@ actor GatewayClient {
         }
         return []
     }
+
+    func fetchGridResidueSummary() async throws -> GridResidueSummarySnapshot {
+        try await get("/api/grid/residue-summary")
+    }
+
+    func fetchRecentGridSignals(limit: Int = 8) async throws -> [RecentGridSignal] {
+        let boundedLimit = max(1, min(limit, 50))
+        let (data, _) = try await request(
+            path: "/api/grid/signals/recent",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode([RecentGridSignal].self, from: data) {
+            return direct
+        }
+        if let wrapped = try? decoder.decode(RecentGridSignalsEnvelope.self, from: data) {
+            return wrapped.signals
+        }
+        return []
+    }
+
+    func fetchGridResidueHistory(limit: Int = 8) async throws -> [GridResidueHistoryEvent] {
+        let boundedLimit = max(1, min(limit, 50))
+        let (data, _) = try await request(
+            path: "/api/grid/residue-history",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode([GridResidueHistoryEvent].self, from: data) {
+            return direct
+        }
+        if let wrapped = try? decoder.decode(GridResidueHistoryEnvelope.self, from: data) {
+            return wrapped.events
+        }
+        return []
+    }
+
+    func fetchGridResidueField() async throws -> GridResidueFieldSnapshot {
+        try await get("/api/grid/residue-field")
+    }
+
+    func fetchDecisionAutonomyState() async throws -> DecisionAutonomyStateSnapshot {
+        try await get("/api/decision/autonomy-state")
+    }
+
+    func fetchRealityAuditState() async throws -> RealityAuditStateSnapshot {
+        try await get("/api/reality/audit")
+    }
+
     func fetchSignalsRuntime() async throws -> SignalsRuntimeSnapshot {
         let path = "/api/signals/state"
         let (data, _) = try await request(path: path, method: "GET")

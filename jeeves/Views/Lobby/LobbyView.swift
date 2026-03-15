@@ -363,6 +363,9 @@ struct LobbyView: View {
                     ActionReceiptSheet(
                         action: action,
                         linkedKnowledge: poller.lastDecideLinkedKnowledge,
+                        residueRecordedMessage: poller.lastApprovedCorrelatedGridProposalTitle != nil
+                            ? "Residue recorded for this cluster."
+                            : nil,
                         onKnowledgeTap: { objectId in
                             showActionReceipt = false
                             fetchAndShowKnowledgeGraph(objectId: objectId)
@@ -6723,13 +6726,13 @@ private struct SwipeCard: View {
     }
 
     private var sourceLabel: String {
-        if let sourceType = metadataString(["source_type"])?.lowercased(), sourceType == "grid_signal" {
+        if proposal.isObservatoryProposal {
+            return "OBSERVATORY"
+        }
+        if proposal.isGridProposal {
             return "GRID"
         }
         let lower = proposal.agentId.lowercased()
-        if lower.contains("grid") || lower.contains("node") {
-            return "GRID"
-        }
         if lower.contains("clashd27") || lower.contains("radar") {
             return "CLASHD27"
         }
@@ -6745,15 +6748,19 @@ private struct SwipeCard: View {
     }
 
     private var isGridProposal: Bool {
-        if let sourceType = metadataString(["source_type"])?.lowercased(), sourceType == "grid_signal" {
-            return true
-        }
-        let lower = "\(proposal.agentId) \(proposal.intent.key)".lowercased()
-        return lower.contains("grid") || lower.contains("node")
+        proposal.isGridProposal
+    }
+
+    private var isObservatoryProposal: Bool {
+        proposal.isObservatoryProposal
+    }
+
+    private var isCorrelatedGridEvent: Bool {
+        proposal.isCorrelatedGridEvent
     }
 
     private var severityColor: Color {
-        switch metadataString(["severity"])?.lowercased() {
+        switch proposal.gridSeverity?.lowercased() {
         case "critical":
             return .consentRed
         case "high":
@@ -6768,6 +6775,9 @@ private struct SwipeCard: View {
     }
 
     private var displayNarrative: String? {
+        if let summary = proposal.correlatedGridSummary, !summary.isEmpty {
+            return summary
+        }
         if let evidence = metadataString(["evidence"]), !evidence.isEmpty {
             return evidence
         }
@@ -6832,6 +6842,39 @@ private struct SwipeCard: View {
         proposal.status.uppercased()
     }
 
+    private var clusterNodesLabel: String {
+        proposal.correlatedGridMemberNodeIds.joined(separator: ", ")
+    }
+
+    private var clusterSignalsLabel: String {
+        proposal.correlatedGridMemberSignalIds.joined(separator: ", ")
+    }
+
+    private var clusterSignalCountLabel: String {
+        String(proposal.correlatedGridMemberSignalIds.count)
+    }
+
+    private var observatorySourcesLabel: String {
+        proposal.observatorySourceIds.joined(separator: ", ")
+    }
+
+    private var correlatedGridBaseConfidenceLabel: String {
+        guard let value = proposal.correlatedGridBaseConfidence else { return "n/a" }
+        return String(format: "%.2f", value)
+    }
+
+    private var correlatedGridResidueAdjustmentLabel: String {
+        guard let value = proposal.correlatedGridResidueAdjustment else { return "n/a" }
+        return String(format: "%+.2f", value)
+    }
+
+    private var correlatedGridFinalConfidenceLabel: String {
+        if let value = proposal.correlatedGridFinalConfidence {
+            return String(format: "%.2f", value)
+        }
+        return proposal.correlatedGridConfidenceText ?? "n/a"
+    }
+
     private func metadataString(_ keys: [String]) -> String? {
         guard let metadata = proposal.metadata else { return nil }
         for key in keys {
@@ -6852,6 +6895,12 @@ private struct SwipeCard: View {
                     .foregroundStyle(.white)
                     .lineLimit(2)
                 Spacer()
+                if isObservatoryProposal {
+                    metricChip(text: "Observatory Candidate", tint: .teal)
+                }
+                if isCorrelatedGridEvent {
+                    metricChip(text: "Correlated Grid Event", tint: .cyan)
+                }
                 metricChip(text: priorityLabel, tint: priorityTint)
                 metricChip(text: statusLabel, tint: .blue)
                 metricChip(text: sourceLabel, tint: .jeevesGold)
@@ -6863,13 +6912,17 @@ private struct SwipeCard: View {
             }
 
             HStack(spacing: 6) {
-                Text(isGridProposal ? "Node:" : "Agent:")
+                Text(isCorrelatedGridEvent ? "Nodes:" : (isGridProposal ? "Node:" : (isObservatoryProposal ? "Sources:" : "Agent:")))
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(isGridProposal ? (metadataString(["node_id"]) ?? proposal.agentId) : proposal.agentId)
+                Text(
+                    isCorrelatedGridEvent
+                        ? clusterNodesLabel
+                        : (isGridProposal ? (proposal.gridNodeId ?? proposal.agentId) : (isObservatoryProposal ? observatorySourcesLabel : proposal.agentId))
+                )
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit((isCorrelatedGridEvent || isObservatoryProposal) ? 2 : 1)
             }
 
             if let narrative = displayNarrative {
@@ -6880,10 +6933,10 @@ private struct SwipeCard: View {
             }
 
             HStack {
-                Text(isGridProposal ? "Signal:" : "Intent:")
+                Text(isCorrelatedGridEvent ? "Cluster:" : (isGridProposal ? "Signal:" : (isObservatoryProposal ? "Candidate:" : "Intent:")))
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(metadataString(["signal_type"]) ?? proposal.intent.key)
+                Text(isObservatoryProposal ? (proposal.observatoryCandidateType ?? proposal.intent.key) : (proposal.gridSignalType ?? proposal.intent.key))
                     .font(.jeevesMono)
             }
 
@@ -6901,7 +6954,7 @@ private struct SwipeCard: View {
                     Text("Region:")
                         .font(.jeevesCaption)
                         .foregroundStyle(.secondary)
-                    Text(metadataString(["region"]) ?? "unknown")
+                    Text(proposal.gridRegion ?? "unknown")
                         .font(.jeevesMono)
                 }
 
@@ -6909,9 +6962,80 @@ private struct SwipeCard: View {
                     Text("Severity:")
                         .font(.jeevesCaption)
                         .foregroundStyle(.secondary)
-                    Text((metadataString(["severity"]) ?? "unknown").uppercased())
+                    Text((proposal.gridSeverity ?? "unknown").uppercased())
                         .font(.jeevesMono)
                         .foregroundStyle(severityColor)
+                }
+
+                if isCorrelatedGridEvent {
+                    HStack(alignment: .top) {
+                        Text("Signals:")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                        Text(clusterSignalsLabel)
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    HStack {
+                        Text("Confidence:")
+                            .font(.jeevesCaption)
+                            .foregroundStyle(.secondary)
+                        Text(proposal.correlatedGridConfidenceText ?? "n/a")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.cyan)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Why this proposal appeared")
+                            .font(.jeevesCaption.weight(.semibold))
+                            .foregroundStyle(.white)
+
+                        Text("Signals detected: \(clusterSignalCountLabel)")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                        Text("Region: \(proposal.gridRegion ?? "unknown")")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                        Text("Base correlation confidence: \(correlatedGridBaseConfidenceLabel)")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                        Text("Residue adjustment: \(correlatedGridResidueAdjustmentLabel)")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                        Text("Final confidence: \(correlatedGridFinalConfidenceLabel)")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+
+            if isObservatoryProposal {
+                HStack {
+                    Text("Theme:")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text(proposal.observatoryTheme ?? "observatory review")
+                        .font(.jeevesMono)
+                }
+
+                HStack {
+                    Text("Confidence:")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text(proposal.observatoryConfidenceText ?? "n/a")
+                        .font(.jeevesMono)
+                        .foregroundStyle(.teal)
+                }
+
+                HStack {
+                    Text("Source count:")
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                    Text(proposal.observatorySourceCountText)
+                        .font(.jeevesMono)
                 }
             }
 
@@ -6921,10 +7045,14 @@ private struct SwipeCard: View {
             }
 
             HStack(alignment: .top, spacing: 6) {
-                Text(isGridProposal ? "Location:" : "Cells:")
+                Text(isCorrelatedGridEvent ? "Summary:" : (isGridProposal ? "Location:" : (isObservatoryProposal ? "Summary:" : "Cells:")))
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(isGridProposal ? (metadataString(["location"]) ?? "not specified") : relatedCellsLabel)
+                Text(
+                    isCorrelatedGridEvent
+                        ? (proposal.correlatedGridSummary ?? "No cluster summary provided.")
+                        : (isGridProposal ? (proposal.gridLocation ?? "not specified") : (isObservatoryProposal ? (proposal.observatorySummary ?? "No observatory summary provided.") : relatedCellsLabel))
+                )
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -6997,6 +7125,7 @@ private struct SwipeCard: View {
 private struct ActionReceiptSheet: View {
     let action: ActionSummary
     let linkedKnowledge: [KnowledgeObject]
+    let residueRecordedMessage: String?
     let onKnowledgeTap: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -7071,6 +7200,16 @@ private struct ActionReceiptSheet: View {
             }
             if let requestId = action.receipt?.requestId, !requestId.isEmpty {
                 metadataRow(label: "Request", value: requestId)
+            }
+            if let residueRecordedMessage, !residueRecordedMessage.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .foregroundStyle(.cyan)
+                    Text(residueRecordedMessage)
+                        .font(.jeevesCaption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
             }
         }
     }

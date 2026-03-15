@@ -93,6 +93,1246 @@ struct ObservatoryDashboardSnapshot: Sendable {
     let fetchedAt: Date
 }
 
+struct SystemIntelligenceSnapshot: Decodable, Sendable {
+    let entropy: Double
+    let stage: String
+    let residueStrength: Double
+    let discoveryRate: Double
+    let approvalRate: Double
+    let patternCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case entropy
+        case stage
+        case residueStrength = "residue_strength"
+        case discoveryRate = "discovery_rate"
+        case approvalRate = "approval_rate"
+        case patternCount = "pattern_count"
+    }
+
+    var stagePhase: IntelligencePhaseStage {
+        IntelligencePhaseStage(phase: stage) ?? .safety
+    }
+
+    static let demo = SystemIntelligenceSnapshot(
+        entropy: 0.412,
+        stage: "Define",
+        residueStrength: 0.58,
+        discoveryRate: 2.4,
+        approvalRate: 0.76,
+        patternCount: 6
+    )
+}
+
+struct SystemEntropySnapshot: Decodable, Sendable {
+    let entropyScore: Double
+    let trend: String
+    let signalVolume: Int
+    let proposalCount: Int
+    let residueStrength: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case entropyScore = "entropy_score"
+        case trend
+        case signalVolume = "signal_volume"
+        case proposalCount = "proposal_count"
+        case residueStrength = "residue_strength"
+    }
+
+    static let demo = SystemEntropySnapshot(
+        entropyScore: 0.342,
+        trend: "improving",
+        signalVolume: 18,
+        proposalCount: 5,
+        residueStrength: 0.58
+    )
+}
+
+struct SystemResidueFieldRegionSummary: Decodable, Sendable, Identifiable {
+    let region: String
+    let residueStrength: Double
+    let approvalDensity: Double
+    let signalVolume: Int
+    let patternCount: Int
+
+    var id: String { region }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case residueStrength = "residue_strength"
+        case approvalDensity = "approval_density"
+        case signalVolume = "signal_volume"
+        case patternCount = "pattern_count"
+    }
+}
+
+struct SystemResidueFieldSignalTypeSummary: Decodable, Sendable, Identifiable {
+    let signalType: String
+    let residueStrength: Double
+    let approvalDensity: Double
+    let patternCount: Int
+
+    var id: String { signalType }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalType = "signal_type"
+        case residueStrength = "residue_strength"
+        case approvalDensity = "approval_density"
+        case patternCount = "pattern_count"
+    }
+}
+
+struct SystemResidueFieldSnapshot: Decodable, Sendable {
+    let regions: [SystemResidueFieldRegionSummary]
+    let signalTypes: [SystemResidueFieldSignalTypeSummary]
+    let fieldStrength: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case regions
+        case signalTypes = "signal_types"
+        case fieldStrength = "field_strength"
+    }
+
+    static let demo = SystemResidueFieldSnapshot(
+        regions: [
+            SystemResidueFieldRegionSummary(
+                region: "nl-ijmuiden",
+                residueStrength: 1,
+                approvalDensity: 0.86,
+                signalVolume: 12,
+                patternCount: 4
+            ),
+            SystemResidueFieldRegionSummary(
+                region: "eu-west",
+                residueStrength: 0.63,
+                approvalDensity: 0.71,
+                signalVolume: 8,
+                patternCount: 2
+            )
+        ],
+        signalTypes: [
+            SystemResidueFieldSignalTypeSummary(
+                signalType: "degradation",
+                residueStrength: 1,
+                approvalDensity: 0.82,
+                patternCount: 4
+            ),
+            SystemResidueFieldSignalTypeSummary(
+                signalType: "latency_spike",
+                residueStrength: 0.44,
+                approvalDensity: 0.58,
+                patternCount: 1
+            )
+        ],
+        fieldStrength: 0.61
+    )
+}
+
+struct SystemGapFinderMatch: Decodable, Sendable, Identifiable {
+    let matchId: String
+    let signalIds: [String]
+    let sources: [String]
+    let involvedDomains: [String]
+    let sharedMethods: [String]
+    let sharedCauses: [String]
+    let sharedEffects: [String]
+    let entropyRelation: String
+    let strengthScore: Double
+    let explanation: String
+    let evidenceRefs: [String]
+
+    var id: String { matchId }
+}
+
+struct SystemGapFinderGap: Decodable, Sendable, Identifiable {
+    let gapId: String
+    let title: String
+    let involvedDomains: [String]
+    let basedOnMatchId: String
+    let whyMatched: String
+    let whyGap: String
+    let sharedMethods: [String]
+    let sharedCauses: [String]
+    let sharedEffects: [String]
+    let entropyNote: String
+    let evidenceRefs: [String]
+    let suggestedQuestion: String
+    let score: Double
+
+    var id: String { gapId }
+}
+
+struct SystemGapFinderCounts: Decodable, Sendable {
+    let fingerprints: Int
+    let matches: Int
+    let gaps: Int
+}
+
+struct SystemGapFinderSnapshot: Decodable, Sendable {
+    let ok: Bool
+    let updatedAt: String
+    let counts: SystemGapFinderCounts
+    let topMatches: [SystemGapFinderMatch]
+    let topGaps: [SystemGapFinderGap]
+
+    static let demo = SystemGapFinderSnapshot(
+        ok: true,
+        updatedAt: "now",
+        counts: SystemGapFinderCounts(
+            fingerprints: 18,
+            matches: 6,
+            gaps: 3
+        ),
+        topMatches: [
+            SystemGapFinderMatch(
+                matchId: "demo-gap-match-1",
+                signalIds: ["signal-medical", "signal-cyber"],
+                sources: ["pubmed", "github"],
+                involvedDomains: ["medical-imaging", "cybersecurity", "diagnostics", "operations"],
+                sharedMethods: ["anomaly-detection"],
+                sharedCauses: ["uncertainty", "overload"],
+                sharedEffects: ["false-negative"],
+                entropyRelation: "contradiction",
+                strengthScore: 0.79,
+                explanation: "This overlap is surfaced because research and software signals show the same method pattern, similar underlying causes, and matching downstream effects. Their entropy behavior diverges, which makes the bridge especially worth review.",
+                evidenceRefs: ["https://example.org/paper-1", "https://example.org/repo-incident"]
+            )
+        ],
+        topGaps: [
+            SystemGapFinderGap(
+                gapId: "demo-gap-1",
+                title: "Medical Imaging x Cybersecurity",
+                involvedDomains: ["medical-imaging", "cybersecurity"],
+                basedOnMatchId: "demo-gap-match-1",
+                whyMatched: "This overlap is surfaced because research and software signals show the same method pattern, similar underlying causes, and matching downstream effects.",
+                whyGap: "The structure repeats across different domains, but the linked systems move in opposite entropy directions and no clear bridge is visible yet.",
+                sharedMethods: ["anomaly-detection"],
+                sharedCauses: ["uncertainty", "overload"],
+                sharedEffects: ["false-negative"],
+                entropyNote: "The domains are structurally similar, but their entropy directions diverge.",
+                evidenceRefs: ["https://example.org/paper-1", "https://example.org/repo-incident"],
+                suggestedQuestion: "Why does the same Anomaly Detection method behave differently across Medical Imaging and Cybersecurity?",
+                score: 0.88
+            )
+        ]
+    )
+}
+
+struct SystemOperatorMemorySignalFamilyEntry: Decodable, Sendable, Identifiable {
+    let signalType: String
+    let weight: Double
+    let recentApprovals: Int
+    let recentRejections: Int
+    let linkedKnowledge: Int
+    let explanation: String
+
+    var id: String { signalType }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalType = "signal_type"
+        case weight
+        case recentApprovals = "recent_approvals"
+        case recentRejections = "recent_rejections"
+        case linkedKnowledge = "linked_knowledge"
+        case explanation
+    }
+}
+
+struct SystemOperatorMemoryRegionEntry: Decodable, Sendable, Identifiable {
+    let region: String
+    let weight: Double
+    let recentAttention: Int
+    let recentApprovals: Int
+    let recentRejections: Int
+    let explanation: String
+
+    var id: String { region }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case weight
+        case recentAttention = "recent_attention"
+        case recentApprovals = "recent_approvals"
+        case recentRejections = "recent_rejections"
+        case explanation
+    }
+}
+
+struct SystemOperatorMemoryPatternEntry: Decodable, Sendable, Identifiable {
+    let patternType: String
+    let weight: Double
+    let recurrence: Int
+    let recentApprovals: Int
+    let recentRejections: Int
+    let explanation: String
+
+    var id: String { patternType }
+
+    private enum CodingKeys: String, CodingKey {
+        case patternType = "pattern_type"
+        case weight
+        case recurrence
+        case recentApprovals = "recent_approvals"
+        case recentRejections = "recent_rejections"
+        case explanation
+    }
+}
+
+struct SystemOperatorMemoryKnowledgeEntry: Decodable, Sendable, Identifiable {
+    let knowledgeKind: String
+    let weight: Double
+    let recentObjects: Int
+    let linkedApprovals: Int
+    let explanation: String
+
+    var id: String { knowledgeKind }
+
+    private enum CodingKeys: String, CodingKey {
+        case knowledgeKind = "knowledge_kind"
+        case weight
+        case recentObjects = "recent_objects"
+        case linkedApprovals = "linked_approvals"
+        case explanation
+    }
+}
+
+struct SystemOperatorFocusMemory: Decodable, Sendable {
+    let strongestFocus: String
+    let explanation: String
+
+    private enum CodingKeys: String, CodingKey {
+        case strongestFocus = "strongest_focus"
+        case explanation
+    }
+}
+
+struct SystemOperatorMemorySnapshot: Decodable, Sendable {
+    let signalFamilyMemory: [SystemOperatorMemorySignalFamilyEntry]
+    let regionMemory: [SystemOperatorMemoryRegionEntry]
+    let patternMemory: [SystemOperatorMemoryPatternEntry]
+    let knowledgeMemory: [SystemOperatorMemoryKnowledgeEntry]
+    let operatorFocusMemory: SystemOperatorFocusMemory
+
+    private enum CodingKeys: String, CodingKey {
+        case signalFamilyMemory = "signal_family_memory"
+        case regionMemory = "region_memory"
+        case patternMemory = "pattern_memory"
+        case knowledgeMemory = "knowledge_memory"
+        case operatorFocusMemory = "operator_focus_memory"
+    }
+
+    static let demo = SystemOperatorMemorySnapshot(
+        signalFamilyMemory: [
+            SystemOperatorMemorySignalFamilyEntry(
+                signalType: "degradation",
+                weight: 1,
+                recentApprovals: 3,
+                recentRejections: 1,
+                linkedKnowledge: 4,
+                explanation: "This signal family mattered because it was approved 3 times recently and linked to 4 knowledge objects."
+            )
+        ],
+        regionMemory: [
+            SystemOperatorMemoryRegionEntry(
+                region: "nl-ijmuiden",
+                weight: 1,
+                recentAttention: 5,
+                recentApprovals: 3,
+                recentRejections: 0,
+                explanation: "This region is highlighted because similar signals were approved here 3 times recently."
+            )
+        ],
+        patternMemory: [
+            SystemOperatorMemoryPatternEntry(
+                patternType: "grid correlation",
+                weight: 1,
+                recurrence: 4,
+                recentApprovals: 3,
+                recentRejections: 1,
+                explanation: "This pattern type keeps returning and was approved 3 times recently."
+            )
+        ],
+        knowledgeMemory: [
+            SystemOperatorMemoryKnowledgeEntry(
+                knowledgeKind: "decision",
+                weight: 1,
+                recentObjects: 3,
+                linkedApprovals: 3,
+                explanation: "This knowledge structure matches prior operator-approved work 3 times."
+            )
+        ],
+        operatorFocusMemory: SystemOperatorFocusMemory(
+            strongestFocus: "nl-ijmuiden",
+            explanation: "This region is highlighted because similar signals were approved here 3 times recently."
+        )
+    )
+}
+
+struct SystemCollectiveSignalFamilyMemoryEntry: Decodable, Sendable, Identifiable {
+    let signalType: String
+    let weight: Double
+    let approvals: Int
+    let rejections: Int
+    let usefulnessScore: Double
+    let explanation: String
+
+    var id: String { signalType }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalType = "signal_type"
+        case weight
+        case approvals
+        case rejections
+        case usefulnessScore = "usefulness_score"
+        case explanation
+    }
+}
+
+struct SystemCollectiveRegionMemoryEntry: Decodable, Sendable, Identifiable {
+    let region: String
+    let weight: Double
+    let approvals: Int
+    let residueStrength: Double
+    let knowledgeCount: Int
+    let explanation: String
+
+    var id: String { region }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case weight
+        case approvals
+        case residueStrength = "residue_strength"
+        case knowledgeCount = "knowledge_count"
+        case explanation
+    }
+}
+
+struct SystemCollectivePatternMemoryEntry: Decodable, Sendable, Identifiable {
+    let patternType: String
+    let weight: Double
+    let recurrence: Int
+    let predictiveValue: Double
+    let explanation: String
+
+    var id: String { patternType }
+
+    private enum CodingKeys: String, CodingKey {
+        case patternType = "pattern_type"
+        case weight
+        case recurrence
+        case predictiveValue = "predictive_value"
+        case explanation
+    }
+}
+
+struct SystemCollectiveKnowledgeStructureMemoryEntry: Decodable, Sendable, Identifiable {
+    let structureType: String
+    let weight: Double
+    let persistence: Double
+    let linkedResidueCount: Int
+    let explanation: String
+
+    var id: String { structureType }
+
+    private enum CodingKeys: String, CodingKey {
+        case structureType = "structure_type"
+        case weight
+        case persistence
+        case linkedResidueCount = "linked_residue_count"
+        case explanation
+    }
+}
+
+struct SystemCollectiveCollisionMemoryEntry: Decodable, Sendable, Identifiable {
+    let cubeZone: String
+    let weight: Double
+    let recurrence: Int
+    let crossDomainStrength: Double
+    let explanation: String
+
+    var id: String { cubeZone }
+
+    private enum CodingKeys: String, CodingKey {
+        case cubeZone = "cube_zone"
+        case weight
+        case recurrence
+        case crossDomainStrength = "cross_domain_strength"
+        case explanation
+    }
+}
+
+struct SystemCollectiveExecutionOutcomeMemoryEntry: Decodable, Sendable, Identifiable {
+    let actionType: String
+    let weight: Double
+    let outcomeQuality: Double
+    let receiptCount: Int
+    let explanation: String
+
+    var id: String { actionType }
+
+    private enum CodingKeys: String, CodingKey {
+        case actionType = "action_type"
+        case weight
+        case outcomeQuality = "outcome_quality"
+        case receiptCount = "receipt_count"
+        case explanation
+    }
+}
+
+struct SystemCollectiveEntropyReductionRegionEntry: Decodable, Sendable, Identifiable {
+    let region: String
+    let entropyReduction: Double
+    let explanation: String
+
+    var id: String { region }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case entropyReduction = "entropy_reduction"
+        case explanation
+    }
+}
+
+struct SystemCollectiveEntropyReductionSignalFamilyEntry: Decodable, Sendable, Identifiable {
+    let signalType: String
+    let entropyReduction: Double
+    let explanation: String
+
+    var id: String { signalType }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalType = "signal_type"
+        case entropyReduction = "entropy_reduction"
+        case explanation
+    }
+}
+
+struct SystemCollectiveEntropyReductionMemory: Decodable, Sendable {
+    let averageEntropyReduction: Double
+    let strongestRegions: [SystemCollectiveEntropyReductionRegionEntry]
+    let strongestSignalFamilies: [SystemCollectiveEntropyReductionSignalFamilyEntry]
+
+    private enum CodingKeys: String, CodingKey {
+        case averageEntropyReduction = "average_entropy_reduction"
+        case strongestRegions = "strongest_regions"
+        case strongestSignalFamilies = "strongest_signal_families"
+    }
+}
+
+struct SystemCollectiveMemorySnapshot: Decodable, Sendable {
+    let signalFamilyMemory: [SystemCollectiveSignalFamilyMemoryEntry]
+    let regionMemory: [SystemCollectiveRegionMemoryEntry]
+    let patternMemory: [SystemCollectivePatternMemoryEntry]
+    let knowledgeStructureMemory: [SystemCollectiveKnowledgeStructureMemoryEntry]
+    let collisionMemory: [SystemCollectiveCollisionMemoryEntry]
+    let executionOutcomeMemory: [SystemCollectiveExecutionOutcomeMemoryEntry]
+    let entropyReductionMemory: SystemCollectiveEntropyReductionMemory
+
+    private enum CodingKeys: String, CodingKey {
+        case signalFamilyMemory = "signal_family_memory"
+        case regionMemory = "region_memory"
+        case patternMemory = "pattern_memory"
+        case knowledgeStructureMemory = "knowledge_structure_memory"
+        case collisionMemory = "collision_memory"
+        case executionOutcomeMemory = "execution_outcome_memory"
+        case entropyReductionMemory = "entropy_reduction_memory"
+    }
+
+    static let demo = SystemCollectiveMemorySnapshot(
+        signalFamilyMemory: [
+            SystemCollectiveSignalFamilyMemoryEntry(
+                signalType: "degradation",
+                weight: 1,
+                approvals: 4,
+                rejections: 1,
+                usefulnessScore: 0.88,
+                explanation: "This signal family has repeatedly led to approved outcomes, residue formation, and durable knowledge."
+            )
+        ],
+        regionMemory: [
+            SystemCollectiveRegionMemoryEntry(
+                region: "nl-ijmuiden",
+                weight: 1,
+                approvals: 4,
+                residueStrength: 0.86,
+                knowledgeCount: 5,
+                explanation: "This region is highlighted because governed activity here repeatedly produced useful knowledge."
+            )
+        ],
+        patternMemory: [
+            SystemCollectivePatternMemoryEntry(
+                patternType: "grid correlation",
+                weight: 1,
+                recurrence: 5,
+                predictiveValue: 0.82,
+                explanation: "This pattern recurs and has repeatedly become durable enough to support approved work."
+            )
+        ],
+        knowledgeStructureMemory: [
+            SystemCollectiveKnowledgeStructureMemoryEntry(
+                structureType: "action_receipt",
+                weight: 1,
+                persistence: 0.84,
+                linkedResidueCount: 4,
+                explanation: "This structure is considered stable because it kept linking back to residue across governed outcomes."
+            )
+        ],
+        collisionMemory: [
+            SystemCollectiveCollisionMemoryEntry(
+                cubeZone: "111 · 112",
+                weight: 1,
+                recurrence: 3,
+                crossDomainStrength: 0.79,
+                explanation: "This collision pattern recurs across domains and has become structurally significant."
+            )
+        ],
+        executionOutcomeMemory: [
+            SystemCollectiveExecutionOutcomeMemoryEntry(
+                actionType: "create_investigation_dossier",
+                weight: 1,
+                outcomeQuality: 0.81,
+                receiptCount: 3,
+                explanation: "This action type is anchored by receipt-linked outcomes and keeps producing attributable results."
+            )
+        ],
+        entropyReductionMemory: SystemCollectiveEntropyReductionMemory(
+            averageEntropyReduction: 0.21,
+            strongestRegions: [
+                SystemCollectiveEntropyReductionRegionEntry(
+                    region: "nl-ijmuiden",
+                    entropyReduction: 0.24,
+                    explanation: "This region repeatedly reduced uncertainty through approved residue formation."
+                )
+            ],
+            strongestSignalFamilies: [
+                SystemCollectiveEntropyReductionSignalFamilyEntry(
+                    signalType: "degradation",
+                    entropyReduction: 0.24,
+                    explanation: "This signal family repeatedly helped lower entropy through approved outcomes."
+                )
+            ]
+        )
+    )
+}
+
+struct SystemCivilizationCivicRiskStructure: Decodable, Sendable, Identifiable {
+    let region: String
+    let signalFamily: String
+    let persistence: Double
+    let linkedResidueCount: Int
+    let explanation: String
+
+    var id: String { "\(region)-\(signalFamily)" }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case signalFamily = "signal_family"
+        case persistence
+        case linkedResidueCount = "linked_residue_count"
+        case explanation
+    }
+}
+
+struct SystemCivilizationDurableKnowledgeZone: Decodable, Sendable, Identifiable {
+    let region: String
+    let knowledgeWeight: Double
+    let persistence: Double
+    let entropyReductionScore: Double
+    let explanation: String
+
+    var id: String { region }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case knowledgeWeight = "knowledge_weight"
+        case persistence
+        case entropyReductionScore = "entropy_reduction_score"
+        case explanation
+    }
+}
+
+struct SystemCivilizationInfrastructureMemoryEntry: Decodable, Sendable, Identifiable {
+    let infrastructureType: String
+    let recurrence: Int
+    let usefulnessScore: Double
+    let linkedReceipts: Int
+    let explanation: String
+
+    var id: String { infrastructureType }
+
+    private enum CodingKeys: String, CodingKey {
+        case infrastructureType = "infrastructure_type"
+        case recurrence
+        case usefulnessScore = "usefulness_score"
+        case linkedReceipts = "linked_receipts"
+        case explanation
+    }
+}
+
+struct SystemCivilizationRecurringCoordinationPattern: Decodable, Sendable, Identifiable {
+    let patternType: String
+    let recurrence: Int
+    let explanation: String
+
+    var id: String { patternType }
+
+    private enum CodingKeys: String, CodingKey {
+        case patternType = "pattern_type"
+        case recurrence
+        case explanation
+    }
+}
+
+struct SystemCivilizationTrustedActionTemplate: Decodable, Sendable, Identifiable {
+    let actionType: String
+    let boundedUsefulness: Double
+    let receiptCount: Int
+    let explanation: String
+
+    var id: String { actionType }
+
+    private enum CodingKeys: String, CodingKey {
+        case actionType = "action_type"
+        case boundedUsefulness = "bounded_usefulness"
+        case receiptCount = "receipt_count"
+        case explanation
+    }
+}
+
+struct SystemCivilizationLongHorizonResearchField: Decodable, Sendable, Identifiable {
+    let domain: String
+    let persistence: Double
+    let crossDomainStrength: Double
+    let explanation: String
+
+    var id: String { domain }
+
+    private enum CodingKeys: String, CodingKey {
+        case domain
+        case persistence
+        case crossDomainStrength = "cross_domain_strength"
+        case explanation
+    }
+}
+
+struct SystemCivilizationResilienceStructure: Decodable, Sendable, Identifiable {
+    let region: String
+    let resilienceScore: Double
+    let explanation: String
+
+    var id: String { region }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case resilienceScore = "resilience_score"
+        case explanation
+    }
+}
+
+struct SystemCivilizationSnapshot: Decodable, Sendable {
+    let civicRiskStructures: [SystemCivilizationCivicRiskStructure]
+    let durableKnowledgeZones: [SystemCivilizationDurableKnowledgeZone]
+    let infrastructureMemory: [SystemCivilizationInfrastructureMemoryEntry]
+    let recurringCoordinationPatterns: [SystemCivilizationRecurringCoordinationPattern]
+    let trustedActionTemplates: [SystemCivilizationTrustedActionTemplate]
+    let longHorizonResearchFields: [SystemCivilizationLongHorizonResearchField]
+    let resilienceStructures: [SystemCivilizationResilienceStructure]
+
+    private enum CodingKeys: String, CodingKey {
+        case civicRiskStructures = "civic_risk_structures"
+        case durableKnowledgeZones = "durable_knowledge_zones"
+        case infrastructureMemory = "infrastructure_memory"
+        case recurringCoordinationPatterns = "recurring_coordination_patterns"
+        case trustedActionTemplates = "trusted_action_templates"
+        case longHorizonResearchFields = "long_horizon_research_fields"
+        case resilienceStructures = "resilience_structures"
+    }
+
+    static let demo = SystemCivilizationSnapshot(
+        civicRiskStructures: [
+            SystemCivilizationCivicRiskStructure(
+                region: "nl-ijmuiden",
+                signalFamily: "degradation",
+                persistence: 0.82,
+                linkedResidueCount: 4,
+                explanation: "This region has become civically important because governed degradation activity here repeatedly produced durable residue and knowledge."
+            )
+        ],
+        durableKnowledgeZones: [
+            SystemCivilizationDurableKnowledgeZone(
+                region: "nl-ijmuiden",
+                knowledgeWeight: 0.86,
+                persistence: 0.84,
+                entropyReductionScore: 0.24,
+                explanation: "This region remains visible beyond the moment because governed knowledge here kept lowering uncertainty and held together over time."
+            )
+        ],
+        infrastructureMemory: [
+            SystemCivilizationInfrastructureMemoryEntry(
+                infrastructureType: "Edge Infrastructure",
+                recurrence: 5,
+                usefulnessScore: 0.83,
+                linkedReceipts: 4,
+                explanation: "This infrastructure memory is trusted because receipt-backed outcomes kept proving useful under bounded execution."
+            )
+        ],
+        recurringCoordinationPatterns: [
+            SystemCivilizationRecurringCoordinationPattern(
+                patternType: "grid correlation",
+                recurrence: 5,
+                explanation: "This pattern is no longer isolated; it now functions as a stable coordination structure."
+            )
+        ],
+        trustedActionTemplates: [
+            SystemCivilizationTrustedActionTemplate(
+                actionType: "create_investigation_dossier",
+                boundedUsefulness: 0.81,
+                receiptCount: 3,
+                explanation: "This action template is trusted because bounded executions repeatedly led to receipt-backed useful outcomes."
+            )
+        ],
+        longHorizonResearchFields: [
+            SystemCivilizationLongHorizonResearchField(
+                domain: "Infrastructure",
+                persistence: 0.79,
+                crossDomainStrength: 0.76,
+                explanation: "This research field persists across time and domains, suggesting long-horizon relevance for governed discovery."
+            )
+        ],
+        resilienceStructures: [
+            SystemCivilizationResilienceStructure(
+                region: "nl-ijmuiden",
+                resilienceScore: 0.81,
+                explanation: "This region looks resilient because governed work here repeatedly turned uncertainty into attributable, inspectable outcomes."
+            )
+        ]
+    )
+}
+
+struct SystemPlanetaryRiskStructure: Decodable, Sendable, Identifiable {
+    let regions: [String]
+    let signalFamily: String
+    let persistence: Double
+    let linkedResidueCount: Int
+    let explanation: String
+
+    var id: String { "\(signalFamily)-\(regions.joined(separator: ":"))" }
+
+    private enum CodingKeys: String, CodingKey {
+        case regions
+        case signalFamily = "signal_family"
+        case persistence
+        case linkedResidueCount = "linked_residue_count"
+        case explanation
+    }
+}
+
+struct SystemPlanetaryCrossRegionKnowledgeField: Decodable, Sendable, Identifiable {
+    let regions: [String]
+    let knowledgeWeight: Double
+    let persistence: Double
+    let entropyReductionScore: Double
+    let explanation: String
+
+    var id: String { regions.joined(separator: ":") }
+
+    private enum CodingKeys: String, CodingKey {
+        case regions
+        case knowledgeWeight = "knowledge_weight"
+        case persistence
+        case entropyReductionScore = "entropy_reduction_score"
+        case explanation
+    }
+}
+
+struct SystemPlanetaryGlobalInfrastructurePattern: Decodable, Sendable, Identifiable {
+    let infrastructureType: String
+    let regions: [String]
+    let recurrence: Int
+    let usefulnessScore: Double
+    let linkedReceipts: Int
+    let explanation: String
+
+    var id: String { infrastructureType }
+
+    private enum CodingKeys: String, CodingKey {
+        case infrastructureType = "infrastructure_type"
+        case regions
+        case recurrence
+        case usefulnessScore = "usefulness_score"
+        case linkedReceipts = "linked_receipts"
+        case explanation
+    }
+}
+
+struct SystemPlanetaryCoordinationBottleneck: Decodable, Sendable, Identifiable {
+    let patternType: String
+    let regions: [String]
+    let recurrence: Int
+    let explanation: String
+
+    var id: String { patternType }
+
+    private enum CodingKeys: String, CodingKey {
+        case patternType = "pattern_type"
+        case regions
+        case recurrence
+        case explanation
+    }
+}
+
+struct SystemPlanetaryTrustedActionTemplate: Decodable, Sendable, Identifiable {
+    let actionType: String
+    let crossRegionUsefulness: Double
+    let receiptCount: Int
+    let explanation: String
+
+    var id: String { actionType }
+
+    private enum CodingKeys: String, CodingKey {
+        case actionType = "action_type"
+        case crossRegionUsefulness = "cross_region_usefulness"
+        case receiptCount = "receipt_count"
+        case explanation
+    }
+}
+
+struct SystemPlanetaryLongHorizonResearchField: Decodable, Sendable, Identifiable {
+    let domain: String
+    let regions: [String]
+    let persistence: Double
+    let crossDomainStrength: Double
+    let explanation: String
+
+    var id: String { domain }
+
+    private enum CodingKeys: String, CodingKey {
+        case domain
+        case regions
+        case persistence
+        case crossDomainStrength = "cross_domain_strength"
+        case explanation
+    }
+}
+
+struct SystemPlanetaryResilienceGradient: Decodable, Sendable, Identifiable {
+    let regionGroup: [String]
+    let resilienceScore: Double
+    let explanation: String
+
+    var id: String { regionGroup.joined(separator: ":") }
+
+    private enum CodingKeys: String, CodingKey {
+        case regionGroup = "region_group"
+        case resilienceScore = "resilience_score"
+        case explanation
+    }
+}
+
+struct SystemPlanetarySnapshot: Decodable, Sendable {
+    let planetaryRiskStructures: [SystemPlanetaryRiskStructure]
+    let crossRegionKnowledgeFields: [SystemPlanetaryCrossRegionKnowledgeField]
+    let globalInfrastructurePatterns: [SystemPlanetaryGlobalInfrastructurePattern]
+    let planetaryCoordinationBottlenecks: [SystemPlanetaryCoordinationBottleneck]
+    let trustedActionTemplates: [SystemPlanetaryTrustedActionTemplate]
+    let longHorizonResearchFields: [SystemPlanetaryLongHorizonResearchField]
+    let resilienceGradients: [SystemPlanetaryResilienceGradient]
+
+    private enum CodingKeys: String, CodingKey {
+        case planetaryRiskStructures = "planetary_risk_structures"
+        case crossRegionKnowledgeFields = "cross_region_knowledge_fields"
+        case globalInfrastructurePatterns = "global_infrastructure_patterns"
+        case planetaryCoordinationBottlenecks = "planetary_coordination_bottlenecks"
+        case trustedActionTemplates = "trusted_action_templates"
+        case longHorizonResearchFields = "long_horizon_research_fields"
+        case resilienceGradients = "resilience_gradients"
+    }
+
+    static let demo = SystemPlanetarySnapshot(
+        planetaryRiskStructures: [
+            SystemPlanetaryRiskStructure(
+                regions: ["eu-west", "nl-ijmuiden"],
+                signalFamily: "degradation",
+                persistence: 0.81,
+                linkedResidueCount: 6,
+                explanation: "This pattern now appears across multiple regions and has become globally relevant."
+            )
+        ],
+        crossRegionKnowledgeFields: [
+            SystemPlanetaryCrossRegionKnowledgeField(
+                regions: ["eu-west", "nl-ijmuiden"],
+                knowledgeWeight: 0.78,
+                persistence: 0.8,
+                entropyReductionScore: 0.22,
+                explanation: "This structure is no longer local; it persists across regions and domains."
+            )
+        ],
+        globalInfrastructurePatterns: [
+            SystemPlanetaryGlobalInfrastructurePattern(
+                infrastructureType: "Edge Infrastructure",
+                regions: ["eu-west", "nl-ijmuiden"],
+                recurrence: 6,
+                usefulnessScore: 0.82,
+                linkedReceipts: 4,
+                explanation: "This infrastructure pattern now spans multiple regions, suggesting planetary relevance without centralizing authority."
+            )
+        ],
+        planetaryCoordinationBottlenecks: [
+            SystemPlanetaryCoordinationBottleneck(
+                patternType: "grid correlation",
+                regions: ["eu-west", "nl-ijmuiden"],
+                recurrence: 5,
+                explanation: "This coordination pattern now recurs across regions and may require multi-region human attention."
+            )
+        ],
+        trustedActionTemplates: [
+            SystemPlanetaryTrustedActionTemplate(
+                actionType: "create_investigation_dossier",
+                crossRegionUsefulness: 0.8,
+                receiptCount: 4,
+                explanation: "This action template is trusted in multiple contexts and may have planetary usefulness."
+            )
+        ],
+        longHorizonResearchFields: [
+            SystemPlanetaryLongHorizonResearchField(
+                domain: "Infrastructure",
+                regions: ["eu-west", "kenya-west", "nl-ijmuiden"],
+                persistence: 0.79,
+                crossDomainStrength: 0.75,
+                explanation: "This research field now shows cross-region persistence, suggesting long-horizon significance."
+            )
+        ],
+        resilienceGradients: [
+            SystemPlanetaryResilienceGradient(
+                regionGroup: ["eu-west", "nl-ijmuiden"],
+                resilienceScore: 0.77,
+                explanation: "These regions form a visible resilience gradient because governed work keeps turning uncertainty into stable outcomes across contexts."
+            )
+        ]
+    )
+}
+
+struct SystemCosmicEnduringHumanQuestion: Decodable, Sendable, Identifiable {
+    let theme: String
+    let persistence: Double
+    let linkedKnowledgeCount: Int
+    let explanation: String
+
+    var id: String { theme }
+
+    private enum CodingKeys: String, CodingKey {
+        case theme
+        case persistence
+        case linkedKnowledgeCount = "linked_knowledge_count"
+        case explanation
+    }
+}
+
+struct SystemCosmicLongHorizonKnowledgeField: Decodable, Sendable, Identifiable {
+    let domain: String
+    let persistence: Double
+    let crossDomainStrength: Double
+    let entropyReductionScore: Double
+    let explanation: String
+
+    var id: String { domain }
+
+    private enum CodingKeys: String, CodingKey {
+        case domain
+        case persistence
+        case crossDomainStrength = "cross_domain_strength"
+        case entropyReductionScore = "entropy_reduction_score"
+        case explanation
+    }
+}
+
+struct SystemCosmicDeepResilienceStructure: Decodable, Sendable, Identifiable {
+    let structureType: String
+    let persistence: Double
+    let usefulnessScore: Double
+    let explanation: String
+
+    var id: String { structureType }
+
+    private enum CodingKeys: String, CodingKey {
+        case structureType = "structure_type"
+        case persistence
+        case usefulnessScore = "usefulness_score"
+        case explanation
+    }
+}
+
+struct SystemCosmicRecurringExplorationFrontier: Decodable, Sendable, Identifiable {
+    let frontier: String
+    let recurrence: Int
+    let linkedDiscoveries: Int
+    let explanation: String
+
+    var id: String { frontier }
+
+    private enum CodingKeys: String, CodingKey {
+        case frontier
+        case recurrence
+        case linkedDiscoveries = "linked_discoveries"
+        case explanation
+    }
+}
+
+struct SystemCosmicTruthPreservingStructure: Decodable, Sendable, Identifiable {
+    let structureType: String
+    let trustWeight: Double
+    let provenanceDepth: Double
+    let explanation: String
+
+    var id: String { structureType }
+
+    private enum CodingKeys: String, CodingKey {
+        case structureType = "structure_type"
+        case trustWeight = "trust_weight"
+        case provenanceDepth = "provenance_depth"
+        case explanation
+    }
+}
+
+struct SystemCosmicStewardshipPattern: Decodable, Sendable, Identifiable {
+    let patternType: String
+    let persistence: Double
+    let governanceSafety: Double
+    let explanation: String
+
+    var id: String { patternType }
+
+    private enum CodingKeys: String, CodingKey {
+        case patternType = "pattern_type"
+        case persistence
+        case governanceSafety = "governance_safety"
+        case explanation
+    }
+}
+
+struct SystemCosmicCivilizationPlanetaryBridge: Decodable, Sendable, Identifiable {
+    let bridgeType: String
+    let recurrence: Int
+    let significance: Double
+    let explanation: String
+
+    var id: String { bridgeType }
+
+    private enum CodingKeys: String, CodingKey {
+        case bridgeType = "bridge_type"
+        case recurrence
+        case significance
+        case explanation
+    }
+}
+
+struct SystemCosmicFutureSignificanceSignal: Decodable, Sendable, Identifiable {
+    let signalFamily: String
+    let longHorizonScore: Double
+    let uncertainty: Double
+    let explanation: String
+
+    var id: String { signalFamily }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalFamily = "signal_family"
+        case longHorizonScore = "long_horizon_score"
+        case uncertainty
+        case explanation
+    }
+}
+
+struct SystemCosmicSnapshot: Decodable, Sendable {
+    let enduringHumanQuestions: [SystemCosmicEnduringHumanQuestion]
+    let longHorizonKnowledgeFields: [SystemCosmicLongHorizonKnowledgeField]
+    let deepResilienceStructures: [SystemCosmicDeepResilienceStructure]
+    let recurringExplorationFrontiers: [SystemCosmicRecurringExplorationFrontier]
+    let truthPreservingStructures: [SystemCosmicTruthPreservingStructure]
+    let stewardshipPatterns: [SystemCosmicStewardshipPattern]
+    let civilizationToPlanetaryBridges: [SystemCosmicCivilizationPlanetaryBridge]
+    let futureSignificanceSignals: [SystemCosmicFutureSignificanceSignal]
+
+    private enum CodingKeys: String, CodingKey {
+        case enduringHumanQuestions = "enduring_human_questions"
+        case longHorizonKnowledgeFields = "long_horizon_knowledge_fields"
+        case deepResilienceStructures = "deep_resilience_structures"
+        case recurringExplorationFrontiers = "recurring_exploration_frontiers"
+        case truthPreservingStructures = "truth_preserving_structures"
+        case stewardshipPatterns = "stewardship_patterns"
+        case civilizationToPlanetaryBridges = "civilization_to_planetary_bridges"
+        case futureSignificanceSignals = "future_significance_signals"
+    }
+
+    static let demo = SystemCosmicSnapshot(
+        enduringHumanQuestions: [
+            SystemCosmicEnduringHumanQuestion(
+                theme: "Resilience",
+                persistence: 0.83,
+                linkedKnowledgeCount: 6,
+                explanation: "This theme remains significant because it persists across governed knowledge, residue, and discovery pressure, while still requiring human stewardship and interpretation."
+            )
+        ],
+        longHorizonKnowledgeFields: [
+            SystemCosmicLongHorizonKnowledgeField(
+                domain: "Infrastructure",
+                persistence: 0.81,
+                crossDomainStrength: 0.77,
+                entropyReductionScore: 0.72,
+                explanation: "This field appears to matter beyond immediate operations because it keeps reducing uncertainty across regions, domains, and governed outcomes."
+            )
+        ],
+        deepResilienceStructures: [
+            SystemCosmicDeepResilienceStructure(
+                structureType: "Governed resilience",
+                persistence: 0.8,
+                usefulnessScore: 0.79,
+                explanation: "This resilience structure remains visible because governed work keeps turning uncertainty into stable, inspectable outcomes across changing contexts."
+            )
+        ],
+        recurringExplorationFrontiers: [
+            SystemCosmicRecurringExplorationFrontier(
+                frontier: "Research frontier",
+                recurrence: 5,
+                linkedDiscoveries: 7,
+                explanation: "This is not a resolved structure, but a frontier that keeps returning as governed discovery crosses domains and deepens the question."
+            )
+        ],
+        truthPreservingStructures: [
+            SystemCosmicTruthPreservingStructure(
+                structureType: "Receipt continuity",
+                trustWeight: 0.82,
+                provenanceDepth: 0.76,
+                explanation: "This structure remains trustworthy because receipt-linked outcomes keep preserving attribution and continuity across governed action."
+            )
+        ],
+        stewardshipPatterns: [
+            SystemCosmicStewardshipPattern(
+                patternType: "Grid Correlation",
+                persistence: 0.79,
+                governanceSafety: 0.88,
+                explanation: "This pattern suggests long-horizon relevance, but still requires human judgment, bounded action, and care at every step."
+            )
+        ],
+        civilizationToPlanetaryBridges: [
+            SystemCosmicCivilizationPlanetaryBridge(
+                bridgeType: "Ijmuiden To Planetary Knowledge",
+                recurrence: 4,
+                significance: 0.74,
+                explanation: "This bridge matters because knowledge that first stabilized locally is now persisting across regions and starting to matter at broader human scale."
+            )
+        ],
+        futureSignificanceSignals: [
+            SystemCosmicFutureSignificanceSignal(
+                signalFamily: "degradation",
+                longHorizonScore: 0.78,
+                uncertainty: 0.24,
+                explanation: "This signal family keeps returning with widening relevance, but it remains a prompt for human attention rather than a directive."
+            )
+        ]
+    )
+}
+
 struct ObservatoryAlert: Decodable, Sendable, Identifiable {
     let id: String
     let title: String?
@@ -267,6 +1507,119 @@ struct SignalsState: Decodable, Sendable {
     }
 }
 
+struct ResearchLaneSourceSummary: Decodable, Sendable, Identifiable {
+    let source: String
+    let signalCount: Int
+
+    var id: String { source }
+}
+
+struct ResearchLaneSummary: Decodable, Sendable {
+    let signalCount24h: Int
+    let sourceCount: Int
+    let highConfidenceCount: Int
+    let activitySpikeCount: Int
+    let topDomains: [String]
+    let topCategories: [String]
+    let sourceBreakdown: [ResearchLaneSourceSummary]
+    let latestDetectedAtIso: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case signalCount24h
+        case sourceCount
+        case highConfidenceCount
+        case activitySpikeCount
+        case topDomains
+        case topCategories
+        case sourceBreakdown
+        case latestDetectedAtIso
+    }
+}
+
+struct DiscoveryGravityStrongestEdge: Decodable, Sendable {
+    let edgeId: String
+    let score: Double
+    let explanation: String
+    let crossDomain: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case edgeId = "edge_id"
+        case score
+        case explanation
+        case crossDomain = "cross_domain"
+    }
+}
+
+struct DiscoveryGravitySummary: Decodable, Sendable {
+    let activeEdgeCount: Int
+    let crossDomainPullCount: Int
+    let strongestEdge: DiscoveryGravityStrongestEdge?
+    let persistenceTrend: String
+    let anomalyMagnetScore: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case activeEdgeCount = "active_edge_count"
+        case crossDomainPullCount = "cross_domain_pull_count"
+        case strongestEdge = "strongest_edge"
+        case persistenceTrend = "persistence_trend"
+        case anomalyMagnetScore = "anomaly_magnet_score"
+    }
+}
+
+struct DiscoveryGravityFactors: Decodable, Sendable {
+    let semantic: Double
+    let temporal: Double
+    let regional: Double
+    let evidence: Double
+    let humanAttention: Double
+    let residue: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case semantic
+        case temporal
+        case regional
+        case evidence
+        case humanAttention = "human_attention"
+        case residue
+    }
+}
+
+struct DiscoveryGravityEdge: Decodable, Sendable, Identifiable {
+    let edgeId: String
+    let fromId: String
+    let toId: String
+    let fromType: String
+    let toType: String
+    let score: Double
+    let factors: DiscoveryGravityFactors
+    let timestamp: String?
+    let active: Bool
+    let domainTags: [String]
+    let region: String
+    let crossDomain: Bool
+    let explanation: String
+    let recurrenceCount: Int
+
+    var id: String { edgeId }
+
+    private enum CodingKeys: String, CodingKey {
+        case edgeId = "edge_id"
+        case fromId = "from_id"
+        case toId = "to_id"
+        case fromType = "from_type"
+        case toType = "to_type"
+        case score
+        case factors
+        case timestamp
+        case active
+        case domainTags = "domain_tags"
+        case region
+        case crossDomain = "cross_domain"
+        case explanation
+        case recurrenceCount = "recurrence_count"
+    }
+}
+
 struct SignalsRuntimeSnapshot: Decodable, Sendable {
     let started: Bool?
     let startedAtIso: String?
@@ -280,6 +1633,9 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
     let emergenceClusters: [SignalsRuntimeEmergenceCluster]
     let gravityHotspots: [RadarGravityHotspot]
     let discoveryCandidates: [RadarDiscoveryCandidate]
+    let researchLane: ResearchLaneSummary?
+    let gravityEdges: [DiscoveryGravityEdge]
+    let gravitySummary: DiscoveryGravitySummary?
 
     private enum CodingKeys: String, CodingKey {
         case started
@@ -294,6 +1650,9 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         case emergenceClusters
         case gravityHotspots
         case discoveryCandidates
+        case researchLane
+        case gravityEdges
+        case gravitySummary
     }
 
     init(
@@ -308,7 +1667,10 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         lastChallenges: [SignalsRuntimeChallenge],
         emergenceClusters: [SignalsRuntimeEmergenceCluster],
         gravityHotspots: [RadarGravityHotspot],
-        discoveryCandidates: [RadarDiscoveryCandidate]
+        discoveryCandidates: [RadarDiscoveryCandidate],
+        researchLane: ResearchLaneSummary? = nil,
+        gravityEdges: [DiscoveryGravityEdge] = [],
+        gravitySummary: DiscoveryGravitySummary? = nil
     ) {
         self.started = started
         self.startedAtIso = startedAtIso
@@ -322,6 +1684,9 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         self.emergenceClusters = emergenceClusters
         self.gravityHotspots = gravityHotspots
         self.discoveryCandidates = discoveryCandidates
+        self.researchLane = researchLane
+        self.gravityEdges = gravityEdges
+        self.gravitySummary = gravitySummary
     }
 
     init(from decoder: Decoder) throws {
@@ -338,6 +1703,9 @@ struct SignalsRuntimeSnapshot: Decodable, Sendable {
         emergenceClusters = try c.decodeIfPresent([SignalsRuntimeEmergenceCluster].self, forKey: .emergenceClusters) ?? []
         gravityHotspots = try c.decodeIfPresent([RadarGravityHotspot].self, forKey: .gravityHotspots) ?? []
         discoveryCandidates = try c.decodeIfPresent([RadarDiscoveryCandidate].self, forKey: .discoveryCandidates) ?? []
+        researchLane = try c.decodeIfPresent(ResearchLaneSummary.self, forKey: .researchLane)
+        gravityEdges = try c.decodeIfPresent([DiscoveryGravityEdge].self, forKey: .gravityEdges) ?? []
+        gravitySummary = try c.decodeIfPresent(DiscoveryGravitySummary.self, forKey: .gravitySummary)
     }
 }
 

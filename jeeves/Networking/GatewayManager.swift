@@ -75,8 +75,10 @@ final class GatewayManager {
 
     private let mock = MockGateway()
     private var connectivityTask: Task<Void, Never>?
+    private var activeEndpointResolutionTask: Task<ResolvedGatewayEndpoint, Never>?
     private var messageHandler: ((IncomingMessage) -> Void)?
     private let iso8601 = ISO8601DateFormatter()
+    private var cachedHealthyEndpoint: CachedHealthyEndpoint?
 
     struct LocalGatewayResolution: Sendable {
         let host: String
@@ -94,6 +96,10 @@ final class GatewayManager {
     private struct GatewayEndpoint: Hashable, Sendable {
         let host: String
         let port: Int
+    }
+
+    private struct CachedHealthyEndpoint {
+        let endpoint: ResolvedGatewayEndpoint
     }
 
     private struct LocalGatewayDiscoveryRecord: Decodable {
@@ -135,6 +141,28 @@ final class GatewayManager {
     /// Resolve the current gateway endpoint, including local discovery if applicable.
     /// This is the ONLY place endpoint + token resolution should happen.
     func resolveEndpoint(connection: GatewayConnection? = nil) async -> ResolvedGatewayEndpoint {
+        if let activeEndpointResolutionTask {
+            return await activeEndpointResolutionTask.value
+        }
+
+        await awaitConnectivityProbeIfNeeded()
+
+        if let activeEndpointResolutionTask {
+            return await activeEndpointResolutionTask.value
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else {
+                return ResolvedGatewayEndpoint(host: "localhost", port: Self.localDefaultPort, token: nil)
+            }
+            defer { self.activeEndpointResolutionTask = nil }
+            return await self.performResolveEndpoint(connection: connection)
+        }
+        activeEndpointResolutionTask = task
+        return await task.value
+    }
+
+    private func performResolveEndpoint(connection: GatewayConnection?) async -> ResolvedGatewayEndpoint {
         let baseHost = resolveHostInternal(connection: connection)
         let basePort = resolvePortInternal(connection: connection)
         let baseToken = resolveTokenInternal(host: baseHost, port: basePort)
@@ -143,6 +171,20 @@ final class GatewayManager {
         #endif
 
         if Self.isLocalDevelopmentHost(baseHost) {
+            if let cached = cachedHealthyEndpoint,
+               Self.isLocalDevelopmentHost(cached.endpoint.host) {
+                let cachedToken = cached.endpoint.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let resolved = ResolvedGatewayEndpoint(
+                    host: cached.endpoint.host,
+                    port: cached.endpoint.port,
+                    token: (cachedToken?.isEmpty == false) ? cachedToken : baseToken
+                )
+                #if DEBUG
+                print("[Jeeves][GatewayManager] resolveEndpoint cached host=\(resolved.host) port=\(resolved.port) tokenPresent=\((resolved.token?.isEmpty == false))")
+                #endif
+                return resolved
+            }
+
             let hasRuntimePortOverride = RuntimeConfig.shared.port != nil
             let discovery = await resolveLocalDevelopmentGateway(
                 host: baseHost,
@@ -159,6 +201,9 @@ final class GatewayManager {
             #if DEBUG
             print("[Jeeves][GatewayManager] resolveEndpoint final host=\(resolved.host) port=\(resolved.port) tokenPresent=\((resolved.token?.isEmpty == false)) healthy=\(discovery.isHealthy)")
             #endif
+            if discovery.isHealthy {
+                cacheHealthyEndpoint(resolved)
+            }
             return resolved
         }
 
@@ -243,6 +288,8 @@ final class GatewayManager {
     func connect(host: String, port: Int, token: String?, channelId: String) {
         connectivityTask?.cancel()
         connectivityTask = nil
+        activeEndpointResolutionTask = nil
+        clearHealthyEndpointCache()
 
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedChannel = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -447,6 +494,8 @@ final class GatewayManager {
     func disconnect() {
         connectivityTask?.cancel()
         connectivityTask = nil
+        activeEndpointResolutionTask = nil
+        clearHealthyEndpointCache()
         connectionState = .disconnected
         latencyMs = nil
         currentStatus = nil
@@ -640,13 +689,50 @@ final class GatewayManager {
             connectionState = health.ok ? .connected : .failed
 
             if health.ok {
+                cacheHealthyEndpoint(
+                    ResolvedGatewayEndpoint(host: host, port: port, token: token)
+                )
                 _ = try? await fetchStatus()
                 _ = try? await fetchKnowledgeStatus()
             }
         } catch {
+            clearHealthyEndpointCache()
             latencyMs = nil
             connectionState = .failed
         }
+    }
+
+    private func cacheHealthyEndpoint(_ endpoint: ResolvedGatewayEndpoint) {
+        cachedHealthyEndpoint = CachedHealthyEndpoint(endpoint: endpoint)
+    }
+
+    private func clearHealthyEndpointCache() {
+        cachedHealthyEndpoint = nil
+    }
+
+    func awaitConnectivityProbeIfNeeded() async {
+        guard connectionState == .connecting || connectionState == .reconnecting,
+              let connectivityTask else {
+            return
+        }
+        #if DEBUG
+        print("[Jeeves][GatewayManager] awaiting active connectivity probe before endpoint reuse")
+        #endif
+        await connectivityTask.value
+    }
+
+    func noteRefreshSucceeded(endpoint: ResolvedGatewayEndpoint) {
+        guard Self.isLocalDevelopmentHost(endpoint.host) else { return }
+        cacheHealthyEndpoint(endpoint)
+    }
+
+    func noteRefreshFailed(endpoint: ResolvedGatewayEndpoint) {
+        guard let cachedHealthyEndpoint else { return }
+        guard cachedHealthyEndpoint.endpoint.host == endpoint.host,
+              cachedHealthyEndpoint.endpoint.port == endpoint.port else {
+            return
+        }
+        clearHealthyEndpointCache()
     }
 
     private func requireToken() throws -> String {

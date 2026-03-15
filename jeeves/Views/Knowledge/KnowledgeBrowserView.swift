@@ -77,6 +77,73 @@ struct KnowledgeBrowserView: View {
                                 )
                                 .calmAppear(delay: 0.06)
 
+                                HumanMeaningPanel(
+                                    title: "What the library means now",
+                                    accent: groupedShelves.first?.shelf.accent ?? .jeevesGold,
+                                    explanation: HumanMeaningBuilder.knowledge(
+                                        objects: viewModel.objects,
+                                        intelligence: viewModel.intelligenceSnapshot,
+                                        residueField: viewModel.residueFieldSnapshot
+                                    )
+                                )
+                                .calmAppear(delay: 0.08)
+
+                                if let operatorMemory = viewModel.operatorMemorySnapshot {
+                                    OperatorMemoryPanel(
+                                        title: "What memory is carrying forward",
+                                        accent: .jeevesMint,
+                                        memory: operatorMemory
+                                    )
+                                    .calmAppear(delay: 0.1)
+                                }
+
+                                if let collectiveMemory = viewModel.collectiveMemorySnapshot {
+                                    CollectiveMemoryPanel(
+                                        title: "What the institution is retaining",
+                                        accent: .jeevesGold,
+                                        memory: collectiveMemory
+                                    )
+                                    .calmAppear(delay: 0.11)
+                                }
+
+                                if let gapFinder = viewModel.gapFinderSnapshot {
+                                    GapFinderPanel(
+                                        eyebrow: "Candidate Knowledge Structures",
+                                        title: "Cross-domain evidence nearing structure",
+                                        subtitle: "These matches and gaps are still candidate structures. They show where repeated cross-domain evidence may be strong enough to become future knowledge after human review.",
+                                        accent: .jeevesSky,
+                                        snapshot: gapFinder
+                                    )
+                                    .calmAppear(delay: 0.113)
+                                }
+
+                                if let civilization = viewModel.civilizationSnapshot {
+                                    CivilizationPanel(
+                                        title: "What knowledge has become durable enough to steward",
+                                        accent: .jeevesSky,
+                                        snapshot: civilization
+                                    )
+                                    .calmAppear(delay: 0.115)
+                                }
+
+                                if let planetary = viewModel.planetarySnapshot {
+                                    PlanetaryPanel(
+                                        title: "What now matters beyond one region",
+                                        accent: .jeevesMint,
+                                        snapshot: planetary
+                                    )
+                                    .calmAppear(delay: 0.117)
+                                }
+
+                                if let cosmic = viewModel.cosmicSnapshot {
+                                    CosmicPanel(
+                                        title: "What may matter across generations",
+                                        accent: .jeevesGold,
+                                        snapshot: cosmic
+                                    )
+                                    .calmAppear(delay: 0.118)
+                                }
+
                                 ForEach(Array(groupedShelves.enumerated()), id: \.element.shelf) { index, section in
                                     KnowledgeShelfPanel(section: section) { objectId in
                                         fetchAndShowKnowledgeGraph(objectId: objectId)
@@ -347,9 +414,14 @@ private struct KnowledgeBrowserCard: View {
                         .foregroundStyle(.primary)
                         .lineLimit(2)
 
-                    Text(kindLabel)
-                        .font(.jeevesMonoSmall)
-                        .foregroundStyle(accent)
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(accent)
+                            .frame(width: 6, height: 6)
+                        Text(kindLabel)
+                            .font(.jeevesMonoSmall)
+                            .foregroundStyle(accent)
+                    }
                 }
 
                 Spacer()
@@ -379,7 +451,17 @@ private struct KnowledgeBrowserCard: View {
             }
         }
         .padding(14)
-        .background(accent.opacity(0.08))
+        .background(
+            LinearGradient(
+                colors: [accent.opacity(0.10), accent.opacity(0.04)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(accent.opacity(0.14), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 

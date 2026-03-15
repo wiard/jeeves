@@ -328,11 +328,12 @@ struct DailyBriefingExplanationSheet: View {
     private func contextChip(_ text: String) -> some View {
         Text(text)
             .font(.jeevesMonoSmall)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
+            .foregroundStyle(Color.jeevesSky)
+            .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color(.secondarySystemFill))
+            .background(Color.jeevesSky.opacity(0.10))
             .clipShape(Capsule())
+            .overlay(Capsule().stroke(Color.jeevesSky.opacity(0.14), lineWidth: 0.5))
     }
 }
 
@@ -561,14 +562,23 @@ private struct MorningHeroHeader: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(tint.opacity(0.20), lineWidth: 0.5)
+                )
+        )
     }
 
     private func statusChip(_ title: String, status: String) -> some View {
-        HStack(spacing: 8) {
+        let chipColor = statusColor(status)
+        return HStack(spacing: 8) {
             Circle()
-                .fill(statusColor(status))
+                .fill(chipColor)
                 .frame(width: 8, height: 8)
+                .shadow(color: chipColor.opacity(0.6), radius: 4)
             Text(title)
                 .font(.jeevesMonoSmall)
             Text(status.capitalized)
@@ -578,6 +588,7 @@ private struct MorningHeroHeader: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(Color.white.opacity(0.08), in: Capsule())
+        .overlay(Capsule().stroke(chipColor.opacity(0.18), lineWidth: 0.5))
     }
 
     private func statusColor(_ status: String) -> Color {
@@ -899,18 +910,5 @@ private struct StaggeredAppear: ViewModifier {
 extension View {
     fileprivate func staggeredAppear(delay: Double) -> some View {
         modifier(StaggeredAppear(delay: delay))
-    }
-}
-
-extension View {
-    func briefingPanel() -> some View {
-        self
-            .padding(16)
-            .background(Color(.secondarySystemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }

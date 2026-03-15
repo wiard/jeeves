@@ -1,0 +1,92 @@
+import SwiftUI
+
+struct ClashInjectionCommandCard: View {
+    let readiness: SystemReadinessSnapshot?
+    let targets: [InjectionTargetOption]
+    @Binding var selectedTargetId: String?
+    @Binding var selectedIntent: String
+    @Binding var notes: String
+    let isStarting: Bool
+    let onStart: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("CLASH INJECTION")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesSky)
+
+                Spacer()
+
+                Text("COMMAND")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Color.jeevesInk)
+            }
+
+            Text("You give the command. The investigation begins because you asked for it.")
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Picker("Target", selection: $selectedTargetId) {
+                ForEach(targets.filter { $0.status == "ready" }) { target in
+                    Text(target.label).tag(Optional(target.id))
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Intent", selection: $selectedIntent) {
+                Text("Inspect").tag("inspect")
+                Text("Investigate").tag("investigate")
+                Text("Analyze").tag("analyze")
+            }
+            .pickerStyle(.segmented)
+
+            TextField("Optional notes for this investigation", text: $notes, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...4)
+
+            Button(action: onStart) {
+                if isStarting {
+                    ProgressView()
+                        .tint(.white)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text(buttonLabel)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.jeevesSky)
+            .disabled(!canStart)
+
+            Text(readiness?.commandInitiationReady == true
+                 ? "The system is ready. Starting this command will create a bounded CLASH Injection session."
+                 : "Bootstrap must be ready before an investigation can begin.")
+                .font(.caption)
+                .foregroundStyle(Color.jeevesMutedText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white.opacity(0.9))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(Color.jeevesSky.opacity(0.18), lineWidth: 1)
+                )
+        )
+    }
+
+    private var canStart: Bool {
+        readiness?.commandInitiationReady == true && selectedTargetId != nil && !isStarting
+    }
+
+    private var buttonLabel: String {
+        if let target = targets.first(where: { $0.id == selectedTargetId }) {
+            return "Start investigation: \(target.label)"
+        }
+        return "Start investigation"
+    }
+}

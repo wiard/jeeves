@@ -1,6 +1,107 @@
 import Foundation
 
 enum ObservatoryAPI {
+    static func systemEntropy(builder: AuthorizedRequestBuilder) async throws -> SystemEntropySnapshot {
+        let req = try builder.request(for: RouteContract.System.entropy)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemEntropySnapshot.self, from: data)
+    }
+
+    static func systemIntelligence(builder: AuthorizedRequestBuilder) async throws -> SystemIntelligenceSnapshot {
+        let req = try builder.request(for: RouteContract.System.intelligence)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemIntelligenceSnapshot.self, from: data)
+    }
+
+    static func systemCosmic(builder: AuthorizedRequestBuilder) async throws -> SystemCosmicSnapshot {
+        let req = try builder.request(for: RouteContract.System.cosmic)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemCosmicSnapshot.self, from: data)
+    }
+
+    static func systemPlanetary(builder: AuthorizedRequestBuilder) async throws -> SystemPlanetarySnapshot {
+        let req = try builder.request(for: RouteContract.System.planetary)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemPlanetarySnapshot.self, from: data)
+    }
+
+    static func systemCivilization(builder: AuthorizedRequestBuilder) async throws -> SystemCivilizationSnapshot {
+        let req = try builder.request(for: RouteContract.System.civilization)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemCivilizationSnapshot.self, from: data)
+    }
+
+    static func systemCollectiveMemory(builder: AuthorizedRequestBuilder) async throws -> SystemCollectiveMemorySnapshot {
+        let req = try builder.request(for: RouteContract.System.collectiveMemory)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemCollectiveMemorySnapshot.self, from: data)
+    }
+
+    static func systemOperatorMemory(builder: AuthorizedRequestBuilder) async throws -> SystemOperatorMemorySnapshot {
+        let req = try builder.request(for: RouteContract.System.operatorMemory)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemOperatorMemorySnapshot.self, from: data)
+    }
+
+    static func systemResidueField(builder: AuthorizedRequestBuilder) async throws -> SystemResidueFieldSnapshot {
+        let req = try builder.request(for: RouteContract.System.residueField)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemResidueFieldSnapshot.self, from: data)
+    }
+
+    static func systemGapFinder(builder: AuthorizedRequestBuilder) async throws -> SystemGapFinderSnapshot {
+        let req = try builder.request(for: RouteContract.System.gapFinder)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(SystemGapFinderSnapshot.self, from: data)
+    }
+
+    static func recentKnowledgeObjects(
+        builder: AuthorizedRequestBuilder,
+        limit: Int = 12
+    ) async throws -> [KnowledgeObject] {
+        let req = try builder.request(for: RouteContract.Knowledge.objectsRecent(limit: limit))
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(KnowledgeObjectsEnvelope.self, from: data) {
+            return envelope.resolved
+        }
+        if let direct = try? decoder.decode([KnowledgeObject].self, from: data) {
+            return direct
+        }
+        throw URLError(.cannotParseResponse)
+    }
+
     static func conductorState(builder: AuthorizedRequestBuilder) async throws -> ConductorState {
         try await ConductorAPI.state(builder: builder)
     }

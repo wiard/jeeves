@@ -1,5 +1,623 @@
 import Foundation
 
+enum GovernedBootstrapPhase: Int, Sendable {
+    case coldStart = 0
+    case kernelFirst = 1
+    case firstNode = 2
+    case correlatedNetwork = 3
+    case learningActive = 4
+
+    var title: String {
+        switch self {
+        case .coldStart: return "Cold Start"
+        case .kernelFirst: return "Kernel First"
+        case .firstNode: return "First Node"
+        case .correlatedNetwork: return "Correlated Network"
+        case .learningActive: return "Learning Active"
+        }
+    }
+
+    var displayLabel: String {
+        "Phase \(rawValue) · \(title)"
+    }
+}
+
+struct GovernedBootstrapSnapshot: Sendable {
+    let phase: GovernedBootstrapPhase
+    let proofAchieved: String
+    let nextProof: String
+
+    static func derive(
+        status: GatewayStatus?,
+        proposals: [Proposal],
+        residue: GridResidueSummarySnapshot?
+    ) -> GovernedBootstrapSnapshot {
+        let kernelVisible = status != nil
+        let firstNodeVisible = proposals.contains { proposal in
+            proposal.isGridProposal
+                && !proposal.isCorrelatedGridEvent
+                && (proposal.gridNodeId != nil || proposal.gridOriginSignalId != nil)
+        }
+        let correlatedVisible = proposals.contains(where: { $0.isCorrelatedGridEvent })
+        let learningVisible = (residue?.totalEntries ?? 0) > 0
+
+        let phase: GovernedBootstrapPhase
+        if learningVisible {
+            phase = .learningActive
+        } else if correlatedVisible {
+            phase = .correlatedNetwork
+        } else if firstNodeVisible {
+            phase = .firstNode
+        } else if kernelVisible {
+            phase = .kernelFirst
+        } else {
+            phase = .coldStart
+        }
+
+        switch phase {
+        case .coldStart:
+            return .init(
+                phase: phase,
+                proofAchieved: "No governed bootstrap proof is visible yet.",
+                nextProof: "Make the kernel visible so status is live."
+            )
+        case .kernelFirst:
+            return .init(
+                phase: phase,
+                proofAchieved: "The kernel is visible and already valuable locally.",
+                nextProof: "Accept the first node signal so one [GRID] proposal appears."
+            )
+        case .firstNode:
+            return .init(
+                phase: phase,
+                proofAchieved: "A first node has already produced a governed [GRID] proposal.",
+                nextProof: "Correlate three related node signals into one stronger proposal."
+            )
+        case .correlatedNetwork:
+            return .init(
+                phase: phase,
+                proofAchieved: "The kernel has already grouped a real multi-node grid event.",
+                nextProof: "Approve proposals so residue starts to accumulate."
+            )
+        case .learningActive:
+            return .init(
+                phase: phase,
+                proofAchieved: "Residue is active, so approved decisions now inform later interpretation.",
+                nextProof: "Continue governed approvals and let the loop compound."
+            )
+        }
+    }
+}
+
+struct RecentGridSignal: Decodable, Identifiable, Hashable, Sendable {
+    let signalId: String
+    let nodeId: String
+    let region: String
+    let signalType: String
+    let severity: String
+    let timestamp: String
+
+    var id: String { signalId }
+
+    private enum CodingKeys: String, CodingKey {
+        case signalId
+        case signal_id
+        case nodeId
+        case node_id
+        case region
+        case signalType
+        case signal_type
+        case severity
+        case timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        signalId = (try? container.decodeIfPresent(String.self, forKey: .signalId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signal_id))
+            ?? ""
+        nodeId = (try? container.decodeIfPresent(String.self, forKey: .nodeId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .node_id))
+            ?? ""
+        region = (try? container.decodeIfPresent(String.self, forKey: .region)) ?? ""
+        signalType = (try? container.decodeIfPresent(String.self, forKey: .signalType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signal_type))
+            ?? ""
+        severity = (try? container.decodeIfPresent(String.self, forKey: .severity)) ?? ""
+        timestamp = (try? container.decodeIfPresent(String.self, forKey: .timestamp)) ?? ""
+    }
+}
+
+struct RecentGridSignalsEnvelope: Decodable {
+    let signals: [RecentGridSignal]
+}
+
+struct GridResidueNodeSummary: Decodable, Hashable, Sendable {
+    let nodeId: String
+    let residue: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case nodeId
+        case node_id
+        case residue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        nodeId = (try? container.decodeIfPresent(String.self, forKey: .nodeId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .node_id))
+            ?? ""
+        residue = (try? container.decodeIfPresent(Double.self, forKey: .residue)) ?? 0
+    }
+}
+
+struct GridResidueRegionSummary: Decodable, Hashable, Sendable {
+    let region: String
+    let residue: Double
+}
+
+struct GridResidueSignalTypeSummary: Decodable, Hashable, Sendable {
+    let type: String
+    let residue: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case signalType
+        case signal_type
+        case residue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = (try? container.decodeIfPresent(String.self, forKey: .type))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signalType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signal_type))
+            ?? ""
+        residue = (try? container.decodeIfPresent(Double.self, forKey: .residue)) ?? 0
+    }
+}
+
+struct GridResidueSummarySnapshot: Decodable, Sendable {
+    let nodes: [GridResidueNodeSummary]
+    let regions: [GridResidueRegionSummary]
+    let signalTypes: [GridResidueSignalTypeSummary]
+    let totalEntries: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case nodes
+        case regions
+        case signalTypes
+        case signal_types
+        case totalEntries
+        case total_entries
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        nodes = (try? container.decodeIfPresent([GridResidueNodeSummary].self, forKey: .nodes)) ?? []
+        regions = (try? container.decodeIfPresent([GridResidueRegionSummary].self, forKey: .regions)) ?? []
+        signalTypes = (try? container.decodeIfPresent([GridResidueSignalTypeSummary].self, forKey: .signalTypes))
+            ?? (try? container.decodeIfPresent([GridResidueSignalTypeSummary].self, forKey: .signal_types))
+            ?? []
+        totalEntries = (try? container.decodeIfPresent(Int.self, forKey: .totalEntries))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .total_entries))
+            ?? 0
+    }
+}
+
+struct GridResidueHistoryEvent: Decodable, Identifiable, Hashable, Sendable {
+    let timestamp: String
+    let region: String
+    let nodeId: String
+    let residueValue: Double
+
+    var id: String { "\(timestamp):\(region):\(nodeId)" }
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp
+        case region
+        case nodeId
+        case node_id
+        case residueValue
+        case residue_value
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timestamp = (try? container.decodeIfPresent(String.self, forKey: .timestamp)) ?? ""
+        region = (try? container.decodeIfPresent(String.self, forKey: .region)) ?? ""
+        nodeId = (try? container.decodeIfPresent(String.self, forKey: .nodeId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .node_id))
+            ?? ""
+        residueValue = (try? container.decodeIfPresent(Double.self, forKey: .residueValue))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .residue_value))
+            ?? 0
+    }
+}
+
+struct GridResidueHistoryEnvelope: Decodable {
+    let events: [GridResidueHistoryEvent]
+}
+
+struct GridResidueFieldSignalFamilySummary: Decodable, Hashable, Sendable {
+    let family: String
+    let residue: Double
+}
+
+struct GridResidueRepeatedPatternSummary: Decodable, Identifiable, Hashable, Sendable {
+    let patternId: String
+    let region: String
+    let signalFamily: String
+    let occurrenceCount: Int
+    let confirmedCount: Int
+    let averageConfidence: Double
+
+    var id: String { patternId }
+
+    private enum CodingKeys: String, CodingKey {
+        case patternId
+        case pattern_id
+        case region
+        case signalFamily
+        case signal_family
+        case occurrenceCount
+        case occurrence_count
+        case confirmedCount
+        case confirmed_count
+        case averageConfidence
+        case average_confidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        patternId = (try? container.decodeIfPresent(String.self, forKey: .patternId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .pattern_id))
+            ?? UUID().uuidString
+        region = (try? container.decodeIfPresent(String.self, forKey: .region)) ?? ""
+        signalFamily = (try? container.decodeIfPresent(String.self, forKey: .signalFamily))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signal_family))
+            ?? ""
+        occurrenceCount = (try? container.decodeIfPresent(Int.self, forKey: .occurrenceCount))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .occurrence_count))
+            ?? 0
+        confirmedCount = (try? container.decodeIfPresent(Int.self, forKey: .confirmedCount))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .confirmed_count))
+            ?? 0
+        averageConfidence = (try? container.decodeIfPresent(Double.self, forKey: .averageConfidence))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .average_confidence))
+            ?? 0
+    }
+}
+
+struct GridResidueFieldSnapshot: Decodable, Sendable {
+    let activeNodeCount: Int
+    let activeRegionCount: Int
+    let activeSignalFamilyCount: Int
+    let fieldMaturity: String
+    let topNodes: [GridResidueNodeSummary]
+    let topRegions: [GridResidueRegionSummary]
+    let topSignalFamilies: [GridResidueFieldSignalFamilySummary]
+    let repeatedPatterns: [GridResidueRepeatedPatternSummary]
+
+    private enum CodingKeys: String, CodingKey {
+        case activeNodeCount
+        case active_node_count
+        case activeRegionCount
+        case active_region_count
+        case activeSignalFamilyCount
+        case active_signal_family_count
+        case fieldMaturity
+        case field_maturity
+        case topNodes
+        case top_nodes
+        case topRegions
+        case top_regions
+        case topSignalFamilies
+        case top_signal_families
+        case repeatedPatterns
+        case repeated_patterns
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        activeNodeCount = (try? container.decodeIfPresent(Int.self, forKey: .activeNodeCount))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .active_node_count))
+            ?? 0
+        activeRegionCount = (try? container.decodeIfPresent(Int.self, forKey: .activeRegionCount))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .active_region_count))
+            ?? 0
+        activeSignalFamilyCount = (try? container.decodeIfPresent(Int.self, forKey: .activeSignalFamilyCount))
+            ?? (try? container.decodeIfPresent(Int.self, forKey: .active_signal_family_count))
+            ?? 0
+        fieldMaturity = (try? container.decodeIfPresent(String.self, forKey: .fieldMaturity))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .field_maturity))
+            ?? "sparse"
+        topNodes = (try? container.decodeIfPresent([GridResidueNodeSummary].self, forKey: .topNodes))
+            ?? (try? container.decodeIfPresent([GridResidueNodeSummary].self, forKey: .top_nodes))
+            ?? []
+        topRegions = (try? container.decodeIfPresent([GridResidueRegionSummary].self, forKey: .topRegions))
+            ?? (try? container.decodeIfPresent([GridResidueRegionSummary].self, forKey: .top_regions))
+            ?? []
+        topSignalFamilies = (try? container.decodeIfPresent([GridResidueFieldSignalFamilySummary].self, forKey: .topSignalFamilies))
+            ?? (try? container.decodeIfPresent([GridResidueFieldSignalFamilySummary].self, forKey: .top_signal_families))
+            ?? []
+        repeatedPatterns = (try? container.decodeIfPresent([GridResidueRepeatedPatternSummary].self, forKey: .repeatedPatterns))
+            ?? (try? container.decodeIfPresent([GridResidueRepeatedPatternSummary].self, forKey: .repeated_patterns))
+            ?? []
+    }
+}
+
+struct AutonomousDecisionRecordSnapshot: Decodable, Identifiable, Hashable, Sendable {
+    let decisionId: String
+    let candidateId: String
+    let candidateType: String
+    let decisionType: String
+    let theme: String
+    let region: String?
+    let signalFamily: String?
+    let decidedAt: String
+    let outcomeStatus: String
+    let outcomeSignal: String
+    let residueValue: Double
+    let summary: String
+
+    var id: String { decisionId }
+
+    private enum CodingKeys: String, CodingKey {
+        case decisionId
+        case decision_id
+        case candidateId
+        case candidate_id
+        case candidateType
+        case candidate_type
+        case decisionType
+        case decision_type
+        case theme
+        case region
+        case signalFamily
+        case signal_family
+        case decidedAt
+        case decided_at
+        case outcomeStatus
+        case outcome_status
+        case outcomeSignal
+        case outcome_signal
+        case residueValue
+        case residue_value
+        case summary
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        decisionId = (try? container.decodeIfPresent(String.self, forKey: .decisionId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .decision_id))
+            ?? UUID().uuidString
+        candidateId = (try? container.decodeIfPresent(String.self, forKey: .candidateId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .candidate_id))
+            ?? ""
+        candidateType = (try? container.decodeIfPresent(String.self, forKey: .candidateType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .candidate_type))
+            ?? ""
+        decisionType = (try? container.decodeIfPresent(String.self, forKey: .decisionType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .decision_type))
+            ?? ""
+        theme = (try? container.decodeIfPresent(String.self, forKey: .theme)) ?? ""
+        region = (try? container.decodeIfPresent(String.self, forKey: .region)) ?? nil
+        signalFamily = (try? container.decodeIfPresent(String.self, forKey: .signalFamily))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signal_family))
+            ?? nil
+        decidedAt = (try? container.decodeIfPresent(String.self, forKey: .decidedAt))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .decided_at))
+            ?? ""
+        outcomeStatus = (try? container.decodeIfPresent(String.self, forKey: .outcomeStatus))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .outcome_status))
+            ?? "pending"
+        outcomeSignal = (try? container.decodeIfPresent(String.self, forKey: .outcomeSignal))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .outcome_signal))
+            ?? ""
+        residueValue = (try? container.decodeIfPresent(Double.self, forKey: .residueValue))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .residue_value))
+            ?? 0
+        summary = (try? container.decodeIfPresent(String.self, forKey: .summary)) ?? ""
+    }
+}
+
+struct DecisionAutonomyStateSnapshot: Decodable, Sendable {
+    let generatedAt: String
+    let recentAutonomousDecisions: [AutonomousDecisionRecordSnapshot]
+    let successRate: Double
+    let autonomousResidue: Double
+    let domainsCurrentlyAllowed: [String]
+    let stillRequiresHumanApproval: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt
+        case generated_at
+        case recentAutonomousDecisions
+        case recent_autonomous_decisions
+        case successRate
+        case success_rate
+        case autonomousResidue
+        case autonomous_residue
+        case domainsCurrentlyAllowed
+        case domains_currently_allowed
+        case stillRequiresHumanApproval
+        case still_requires_human_approval
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = (try? container.decodeIfPresent(String.self, forKey: .generatedAt))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .generated_at))
+            ?? ""
+        recentAutonomousDecisions = (try? container.decodeIfPresent([AutonomousDecisionRecordSnapshot].self, forKey: .recentAutonomousDecisions))
+            ?? (try? container.decodeIfPresent([AutonomousDecisionRecordSnapshot].self, forKey: .recent_autonomous_decisions))
+            ?? []
+        successRate = (try? container.decodeIfPresent(Double.self, forKey: .successRate))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .success_rate))
+            ?? 0
+        autonomousResidue = (try? container.decodeIfPresent(Double.self, forKey: .autonomousResidue))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .autonomous_residue))
+            ?? 0
+        domainsCurrentlyAllowed = (try? container.decodeIfPresent([String].self, forKey: .domainsCurrentlyAllowed))
+            ?? (try? container.decodeIfPresent([String].self, forKey: .domains_currently_allowed))
+            ?? []
+        stillRequiresHumanApproval = (try? container.decodeIfPresent([String].self, forKey: .stillRequiresHumanApproval))
+            ?? (try? container.decodeIfPresent([String].self, forKey: .still_requires_human_approval))
+            ?? []
+    }
+}
+
+struct RealityAuditSnapshot: Decodable, Identifiable, Hashable, Sendable {
+    let auditId: String
+    let targetDecisionId: String
+    let anomalyScore: Double
+    let entropyDelta: Double
+    let contradictionSignals: [String]
+    let adjustedConfidence: Double
+    let auditSummary: String
+    let decisionType: String
+    let theme: String
+    let region: String?
+    let signalFamily: String?
+    let originalConfidence: Double
+
+    var id: String { auditId }
+
+    private enum CodingKeys: String, CodingKey {
+        case auditId
+        case audit_id
+        case targetDecisionId
+        case target_decision_id
+        case anomalyScore
+        case anomaly_score
+        case entropyDelta
+        case entropy_delta
+        case contradictionSignals
+        case contradiction_signals
+        case adjustedConfidence
+        case adjusted_confidence
+        case auditSummary
+        case audit_summary
+        case decisionType
+        case decision_type
+        case theme
+        case region
+        case signalFamily
+        case signal_family
+        case originalConfidence
+        case original_confidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        auditId = (try? container.decodeIfPresent(String.self, forKey: .auditId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .audit_id))
+            ?? UUID().uuidString
+        targetDecisionId = (try? container.decodeIfPresent(String.self, forKey: .targetDecisionId))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .target_decision_id))
+            ?? ""
+        anomalyScore = (try? container.decodeIfPresent(Double.self, forKey: .anomalyScore))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .anomaly_score))
+            ?? 0
+        entropyDelta = (try? container.decodeIfPresent(Double.self, forKey: .entropyDelta))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .entropy_delta))
+            ?? 0
+        contradictionSignals = (try? container.decodeIfPresent([String].self, forKey: .contradictionSignals))
+            ?? (try? container.decodeIfPresent([String].self, forKey: .contradiction_signals))
+            ?? []
+        adjustedConfidence = (try? container.decodeIfPresent(Double.self, forKey: .adjustedConfidence))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .adjusted_confidence))
+            ?? 0
+        auditSummary = (try? container.decodeIfPresent(String.self, forKey: .auditSummary))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .audit_summary))
+            ?? ""
+        decisionType = (try? container.decodeIfPresent(String.self, forKey: .decisionType))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .decision_type))
+            ?? ""
+        theme = (try? container.decodeIfPresent(String.self, forKey: .theme)) ?? ""
+        region = (try? container.decodeIfPresent(String.self, forKey: .region)) ?? nil
+        signalFamily = (try? container.decodeIfPresent(String.self, forKey: .signalFamily))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .signal_family))
+            ?? nil
+        originalConfidence = (try? container.decodeIfPresent(Double.self, forKey: .originalConfidence))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .original_confidence))
+            ?? 0
+    }
+}
+
+struct RealityAuditTrendSnapshot: Decodable, Sendable {
+    let direction: String
+    let averageEntropyDelta: Double
+    let averageAdjustedConfidence: Double
+
+    private enum CodingKeys: String, CodingKey {
+        case direction
+        case averageEntropyDelta
+        case average_entropy_delta
+        case averageAdjustedConfidence
+        case average_adjusted_confidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        direction = (try? container.decodeIfPresent(String.self, forKey: .direction)) ?? "stable"
+        averageEntropyDelta = (try? container.decodeIfPresent(Double.self, forKey: .averageEntropyDelta))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .average_entropy_delta))
+            ?? 0
+        averageAdjustedConfidence = (try? container.decodeIfPresent(Double.self, forKey: .averageAdjustedConfidence))
+            ?? (try? container.decodeIfPresent(Double.self, forKey: .average_adjusted_confidence))
+            ?? 0
+    }
+
+    init(direction: String, averageEntropyDelta: Double, averageAdjustedConfidence: Double) {
+        self.direction = direction
+        self.averageEntropyDelta = averageEntropyDelta
+        self.averageAdjustedConfidence = averageAdjustedConfidence
+    }
+}
+
+struct RealityAuditStateSnapshot: Decodable, Sendable {
+    let generatedAt: String
+    let recentAudits: [RealityAuditSnapshot]
+    let highestAnomalyDecisions: [RealityAuditSnapshot]
+    let entropyTrend: RealityAuditTrendSnapshot
+
+    private enum CodingKeys: String, CodingKey {
+        case generatedAt
+        case generated_at
+        case recentAudits
+        case recent_audits
+        case highestAnomalyDecisions
+        case highest_anomaly_decisions
+        case entropyTrend
+        case entropy_trend
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = (try? container.decodeIfPresent(String.self, forKey: .generatedAt))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .generated_at))
+            ?? ""
+        recentAudits = (try? container.decodeIfPresent([RealityAuditSnapshot].self, forKey: .recentAudits))
+            ?? (try? container.decodeIfPresent([RealityAuditSnapshot].self, forKey: .recent_audits))
+            ?? []
+        highestAnomalyDecisions = (try? container.decodeIfPresent([RealityAuditSnapshot].self, forKey: .highestAnomalyDecisions))
+            ?? (try? container.decodeIfPresent([RealityAuditSnapshot].self, forKey: .highest_anomaly_decisions))
+            ?? []
+        entropyTrend = (try? container.decodeIfPresent(RealityAuditTrendSnapshot.self, forKey: .entropyTrend))
+            ?? (try? container.decodeIfPresent(RealityAuditTrendSnapshot.self, forKey: .entropy_trend))
+            ?? RealityAuditTrendSnapshot(direction: "stable", averageEntropyDelta: 0, averageAdjustedConfidence: 0)
+    }
+
+    init(generatedAt: String, recentAudits: [RealityAuditSnapshot], highestAnomalyDecisions: [RealityAuditSnapshot], entropyTrend: RealityAuditTrendSnapshot) {
+        self.generatedAt = generatedAt
+        self.recentAudits = recentAudits
+        self.highestAnomalyDecisions = highestAnomalyDecisions
+        self.entropyTrend = entropyTrend
+    }
+}
+
 struct MissionControlTrustSnapshot: Sendable {
     let attestationCount: Int
     let attestations: [MissionControlAttestation]

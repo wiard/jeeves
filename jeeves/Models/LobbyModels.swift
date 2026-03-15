@@ -134,6 +134,157 @@ struct Proposal: Codable, Identifiable {
     }
 }
 
+extension Proposal {
+    private func metadataString(_ keys: [String]) -> String? {
+        guard let metadata else { return nil }
+        for key in keys {
+            guard let value = metadata[key]?.scalarStringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                continue
+            }
+            return value
+        }
+        return nil
+    }
+
+    private func metadataStringArray(_ keys: [String]) -> [String] {
+        guard let metadata else { return [] }
+        for key in keys {
+            let values = metadata[key]?.stringArrayValue ?? []
+            if !values.isEmpty {
+                return values
+            }
+        }
+        return []
+    }
+
+    private func metadataDouble(_ keys: [String]) -> Double? {
+        guard let metadata else { return nil }
+        for key in keys {
+            guard let value = metadata[key] else {
+                continue
+            }
+            switch value {
+            case .double(let number):
+                return number
+            case .int(let number):
+                return Double(number)
+            case .string(let text):
+                if let number = Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    return number
+                }
+            default:
+                break
+            }
+        }
+        return nil
+    }
+
+    var gridSourceType: String? {
+        metadataString(["source_type"])
+    }
+
+    var isObservatoryProposal: Bool {
+        gridSourceType?.lowercased() == "observatory_candidate"
+    }
+
+    var isGridProposal: Bool {
+        if let sourceType = gridSourceType?.lowercased(),
+           ["grid_signal", "grid_signal_correlation", "edge_node"].contains(sourceType) {
+            return true
+        }
+        let lower = "\(agentId) \(intent.key)".lowercased()
+        return lower.contains("grid") || lower.contains("node")
+    }
+
+    var isCorrelatedGridEvent: Bool {
+        gridSourceType?.lowercased() == "grid_signal_correlation"
+    }
+
+    var gridRegion: String? {
+        metadataString(["region"])
+    }
+
+    var gridSeverity: String? {
+        metadataString(["severity"])
+    }
+
+    var gridNodeId: String? {
+        metadataString(["node_id"])
+    }
+
+    var gridLocation: String? {
+        metadataString(["location"])
+    }
+
+    var gridSignalType: String? {
+        metadataString(["signal_type", "primary_signal_type"])
+    }
+
+    var gridOriginSignalId: String? {
+        metadataString(["origin_signal_id"])
+    }
+
+    var correlatedGridMemberNodeIds: [String] {
+        metadataStringArray(["member_node_ids"])
+    }
+
+    var correlatedGridMemberSignalIds: [String] {
+        metadataStringArray(["member_signal_ids"])
+    }
+
+    var correlatedGridConfidenceText: String? {
+        metadataString(["confidence"])
+    }
+
+    var correlatedGridBaseConfidence: Double? {
+        metadataDouble(["base_confidence"])
+    }
+
+    var correlatedGridResidueAdjustment: Double? {
+        metadataDouble(["residue_adjustment"])
+    }
+
+    var correlatedGridFinalConfidence: Double? {
+        metadataDouble(["final_confidence", "confidence"])
+    }
+
+    var correlatedGridSummary: String? {
+        metadataString(["summary"])
+    }
+
+    var observatoryCandidateType: String? {
+        metadataString(["candidate_type"])
+    }
+
+    var observatoryTheme: String? {
+        metadataString(["theme"])
+    }
+
+    var observatoryConfidenceText: String? {
+        metadataString(["confidence"])
+    }
+
+    var observatorySummary: String? {
+        metadataString(["summary"])
+    }
+
+    var observatorySourceIds: [String] {
+        metadataStringArray(["source_ids"])
+    }
+
+    var observatorySignalIds: [String] {
+        metadataStringArray(["signal_ids"])
+    }
+
+    var observatorySourceCountText: String {
+        if let sourceCount = metadataString(["source_count"]) {
+            return sourceCount
+        }
+        return String(observatorySourceIds.count)
+    }
+}
+
 struct ProposalIntent: Codable {
     let kind: String
     let key: String

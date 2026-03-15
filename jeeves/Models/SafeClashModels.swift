@@ -939,6 +939,121 @@ struct DeployConfigurationResponse: Decodable, Hashable {
     }
 }
 
+struct SafeClashWallet: Decodable, Hashable, Sendable {
+    let walletId: String
+    let owner: String
+    let createdAt: String
+    let balance: Double
+    let currency: String
+
+    private enum CodingKeys: String, CodingKey {
+        case walletId
+        case wallet_id
+        case owner
+        case createdAt
+        case created_at
+        case balance
+        case currency
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        walletId = container.decodeFirstString(for: [.walletId, .wallet_id]) ?? UUID().uuidString
+        owner = container.decodeFirstString(for: [.owner]) ?? "safeclash-operator"
+        createdAt = container.decodeFirstString(for: [.createdAt, .created_at]) ?? ""
+        balance = container.decodeFirstDouble(for: [.balance]) ?? 0
+        currency = container.decodeFirstString(for: [.currency]) ?? "safe"
+    }
+}
+
+struct SafeClashWalletReceipt: Decodable, Identifiable, Hashable, Sendable {
+    let receiptId: String
+    let walletId: String
+    let proposalId: String
+    let operatorId: String
+    let amount: Double
+    let timestamp: String
+    let signature: String
+
+    var id: String { receiptId }
+
+    private enum CodingKeys: String, CodingKey {
+        case receiptId
+        case receipt_id
+        case walletId
+        case wallet_id
+        case proposalId
+        case proposal_id
+        case operatorId
+        case `operator`
+        case amount
+        case timestamp
+        case signature
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        receiptId = container.decodeFirstString(for: [.receiptId, .receipt_id]) ?? UUID().uuidString
+        walletId = container.decodeFirstString(for: [.walletId, .wallet_id]) ?? ""
+        proposalId = container.decodeFirstString(for: [.proposalId, .proposal_id]) ?? ""
+        operatorId = container.decodeFirstString(for: [.operatorId, .operator]) ?? "unknown"
+        amount = container.decodeFirstDouble(for: [.amount]) ?? 0
+        timestamp = container.decodeFirstString(for: [.timestamp]) ?? ""
+        signature = container.decodeFirstString(for: [.signature]) ?? ""
+    }
+}
+
+struct SafeClashWalletLedgerEntry: Decodable, Identifiable, Hashable, Sendable {
+    let timestamp: String
+    let walletId: String
+    let operation: String
+    let amount: Double
+    let reason: String
+    let receiptId: String
+    let proposalId: String?
+    let operatorId: String?
+    let receipt: SafeClashWalletReceipt?
+
+    var id: String { receiptId }
+
+    private enum CodingKeys: String, CodingKey {
+        case timestamp
+        case walletId
+        case wallet_id
+        case operation
+        case amount
+        case reason
+        case receiptId
+        case receipt_id
+        case proposalId
+        case proposal_id
+        case operatorId
+        case `operator`
+        case receipt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timestamp = container.decodeFirstString(for: [.timestamp]) ?? ""
+        walletId = container.decodeFirstString(for: [.walletId, .wallet_id]) ?? ""
+        operation = container.decodeFirstString(for: [.operation]) ?? "unknown"
+        amount = container.decodeFirstDouble(for: [.amount]) ?? 0
+        reason = container.decodeFirstString(for: [.reason]) ?? ""
+        receiptId = container.decodeFirstString(for: [.receiptId, .receipt_id]) ?? UUID().uuidString
+        proposalId = container.decodeFirstString(for: [.proposalId, .proposal_id])
+        operatorId = container.decodeFirstString(for: [.operatorId, .operator])
+        receipt = container.decodeFirstDecodable(SafeClashWalletReceipt.self, for: [.receipt])
+    }
+}
+
+struct SafeClashWalletEnvelope: Decodable {
+    let wallet: SafeClashWallet?
+}
+
+struct SafeClashWalletLedgerEnvelope: Decodable {
+    let entries: [SafeClashWalletLedgerEntry]?
+}
+
 private extension KeyedDecodingContainer {
     func decodeFirstString(for keys: [Key]) -> String? {
         for key in keys {

@@ -26,9 +26,24 @@ final class ProposalPoller {
     var recentKnowledgeObjects: [KnowledgeObject] = []
     var lastActionReceipt: ActionSummary?
     var lastDecideLinkedKnowledge: [KnowledgeObject] = []
+    var lastApprovedCorrelatedGridProposalTitle: String?
     var conductorState: ConductorState?
     var knowledgeStatus: KnowledgeStatus?
     var safeClashFeed: SafeClashBrowserFeed?
+    var walletBalance: SafeClashWallet?
+    var recentReceipts: [SafeClashWalletReceipt] = []
+    var decisionAutonomyState: DecisionAutonomyStateSnapshot?
+    var realityAuditState: RealityAuditStateSnapshot?
+    var gridResidueSummary: GridResidueSummarySnapshot?
+    var gridResidueField: GridResidueFieldSnapshot?
+    var cosmicSnapshot: SystemCosmicSnapshot?
+    var planetarySnapshot: SystemPlanetarySnapshot?
+    var civilizationSnapshot: SystemCivilizationSnapshot?
+    var collectiveMemorySnapshot: SystemCollectiveMemorySnapshot?
+    var operatorMemorySnapshot: SystemOperatorMemorySnapshot?
+    var gapFinderSnapshot: SystemGapFinderSnapshot?
+    var gridResidueEvents: [GridResidueHistoryEvent] = []
+    var recentGridSignals: [RecentGridSignal] = []
     var emergenceClusters: [EmergenceCluster] = []
     var streamEvents: [ObservatoryStreamEvent] = []
     var radarStatus: RadarStatusSnapshot?
@@ -39,6 +54,7 @@ final class ProposalPoller {
     var radarSources: [RadarSourceStats] = []
     var radarGravityHotspots: [RadarGravityHotspot] = []
     var radarDiscoveryCandidates: [RadarDiscoveryCandidate] = []
+    var signalsRuntimeSnapshot: SignalsRuntimeSnapshot?
 
     var observatorySnapshot: ObservatorySnapshot = .empty
     var activeEmergenceAlert: EmergenceAlert?
@@ -54,10 +70,20 @@ final class ProposalPoller {
     var lastSuccessfulRefreshAt: Date?
 
     private var pollingTask: Task<Void, Never>?
+    private var activeRefreshTask: Task<Void, Never>?
+    private var lastSuccessfulEndpointRefresh: SuccessfulEndpointRefresh?
     private var previousPendingIds: Set<String> = []
     private var previousEmergenceIds: Set<String> = []
     private var demoTick = 0
     private var hasSeeded = false
+
+    private struct SuccessfulEndpointRefresh {
+        let host: String
+        let port: Int
+        let completedAt: Date
+    }
+
+    private static let minimumRefreshSpacingSeconds: TimeInterval = 1.25
 
     func start(gateway: GatewayManager) {
         stop()
@@ -76,27 +102,58 @@ final class ProposalPoller {
     }
 
     func refresh(gateway: GatewayManager) async {
+        if let activeRefreshTask {
+            await activeRefreshTask.value
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.activeRefreshTask = nil }
+            await self.performRefresh(gateway: gateway)
+        }
+        activeRefreshTask = task
+        await task.value
+    }
+
+    private func performRefresh(gateway: GatewayManager) async {
         if gateway.useMock || gateway.host.lowercased() == "mock" {
             refreshDemoState()
+            signalsRuntimeSnapshot = nil
             hasLoadedOnce = true
             lastRefreshError = nil
             lastSuccessfulRefreshAt = Date()
             return
         }
 
+        await gateway.awaitConnectivityProbeIfNeeded()
+
         let resolvedEndpoint = await gateway.resolveEndpoint()
         guard let token = resolvedEndpoint.token, !token.isEmpty else {
             #if DEBUG
             print("[Jeeves][ProposalPoller] refresh skipped: missing token host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
             #endif
+            signalsRuntimeSnapshot = nil
+            gapFinderSnapshot = nil
             lastRefreshError = "Geen token beschikbaar voor \(resolvedEndpoint.host):\(resolvedEndpoint.port)."
             hasLoadedOnce = true
+            return
+        }
+
+        if let lastSuccessfulEndpointRefresh,
+           lastSuccessfulEndpointRefresh.host == resolvedEndpoint.host,
+           lastSuccessfulEndpointRefresh.port == resolvedEndpoint.port,
+           Date().timeIntervalSince(lastSuccessfulEndpointRefresh.completedAt) < Self.minimumRefreshSpacingSeconds {
+            #if DEBUG
+            print("[Jeeves][ProposalPoller] refresh skipped: recent successful refresh host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port)")
+            #endif
             return
         }
 
         let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
         let builder = AuthorizedRequestBuilder(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
         let safeClashClient = makeSafeClashClient(resolvedEndpoint: resolvedEndpoint)
+        let walletOwner = safeClashWalletOwner()
         #if DEBUG
         print("[Jeeves][ProposalPoller] refresh start host=\(resolvedEndpoint.host) port=\(resolvedEndpoint.port) auth=true connected=\(gateway.isConnected)")
         #endif
@@ -107,6 +164,20 @@ final class ProposalPoller {
         async let conductorTask = try? ConductorAPI.state(builder: builder)
         async let knowledgeStatusTask = try? ConductorAPI.knowledgeStatus(builder: builder)
         async let safeClashFeedTask = try? safeClashClient.fetchBrowserFeed()
+        async let safeClashWalletTask = try? safeClashClient.fetchWallet(owner: walletOwner)
+        async let safeClashLedgerTask = try? safeClashClient.fetchWalletLedger(owner: walletOwner, limit: 5)
+        async let decisionAutonomyTask = try? client.fetchDecisionAutonomyState()
+        async let realityAuditTask = try? client.fetchRealityAuditState()
+        async let gridResidueSummaryTask = try? client.fetchGridResidueSummary()
+        async let gridResidueFieldTask = try? client.fetchGridResidueField()
+        async let gridResidueHistoryTask = try? client.fetchGridResidueHistory(limit: 6)
+        async let recentGridSignalsTask = try? client.fetchRecentGridSignals(limit: 6)
+        async let cosmicTask = try? ObservatoryAPI.systemCosmic(builder: builder)
+        async let planetaryTask = try? ObservatoryAPI.systemPlanetary(builder: builder)
+        async let civilizationTask = try? ObservatoryAPI.systemCivilization(builder: builder)
+        async let collectiveMemoryTask = try? ObservatoryAPI.systemCollectiveMemory(builder: builder)
+        async let operatorMemoryTask = try? ObservatoryAPI.systemOperatorMemory(builder: builder)
+        async let gapFinderTask = try? ObservatoryAPI.systemGapFinder(builder: builder)
 
         do {
             extensionProposals = try await client.fetchExtensionProposals()
@@ -172,6 +243,104 @@ final class ProposalPoller {
             observedSuccessfulResponse = true
         }
 
+        if let wallet = await safeClashWalletTask {
+            walletBalance = wallet
+            observedSuccessfulResponse = true
+        } else {
+            walletBalance = nil
+        }
+
+        if let ledgerEntries = await safeClashLedgerTask {
+            recentReceipts = ledgerEntries.compactMap(\.receipt)
+            observedSuccessfulResponse = true
+        } else {
+            recentReceipts = []
+        }
+
+        if let autonomyState = await decisionAutonomyTask {
+            decisionAutonomyState = autonomyState
+            observedSuccessfulResponse = true
+        } else {
+            decisionAutonomyState = nil
+        }
+
+        if let auditState = await realityAuditTask {
+            realityAuditState = auditState
+            observedSuccessfulResponse = true
+        } else {
+            realityAuditState = nil
+        }
+
+        if let residueSummary = await gridResidueSummaryTask {
+            gridResidueSummary = residueSummary
+            observedSuccessfulResponse = true
+        } else {
+            gridResidueSummary = nil
+        }
+
+        if let residueField = await gridResidueFieldTask {
+            gridResidueField = residueField
+            observedSuccessfulResponse = true
+        } else {
+            gridResidueField = nil
+        }
+
+        if let cosmic = await cosmicTask {
+            cosmicSnapshot = cosmic
+            observedSuccessfulResponse = true
+        } else {
+            cosmicSnapshot = nil
+        }
+
+        if let planetary = await planetaryTask {
+            planetarySnapshot = planetary
+            observedSuccessfulResponse = true
+        } else {
+            planetarySnapshot = nil
+        }
+
+        if let civilization = await civilizationTask {
+            civilizationSnapshot = civilization
+            observedSuccessfulResponse = true
+        } else {
+            civilizationSnapshot = nil
+        }
+
+        if let collectiveMemory = await collectiveMemoryTask {
+            collectiveMemorySnapshot = collectiveMemory
+            observedSuccessfulResponse = true
+        } else {
+            collectiveMemorySnapshot = nil
+        }
+
+        if let operatorMemory = await operatorMemoryTask {
+            operatorMemorySnapshot = operatorMemory
+            observedSuccessfulResponse = true
+        } else {
+            operatorMemorySnapshot = nil
+        }
+
+        if let gapFinder = await gapFinderTask {
+            gapFinderSnapshot = gapFinder
+            observedSuccessfulResponse = true
+        } else {
+            gapFinderSnapshot = nil
+        }
+
+        if let residueHistory = await gridResidueHistoryTask {
+            gridResidueEvents = residueHistory
+            observedSuccessfulResponse = true
+        } else {
+            gridResidueEvents = []
+        }
+
+        if let recentGridSignals = await recentGridSignalsTask {
+            self.recentGridSignals = recentGridSignals
+            observedSuccessfulResponse = true
+        } else {
+            self.recentGridSignals = []
+        }
+
         var runtimeEmergenceClusters: [EmergenceCluster] = []
         var radarEmergenceClusters: [EmergenceCluster] = []
         var streamEventsFromApi: [ObservatoryStreamEvent] = []
@@ -198,11 +367,13 @@ final class ProposalPoller {
             }
             do {
                 let runtime = try await signalsRuntimeTask
+                signalsRuntimeSnapshot = runtime
                 let runtimeEvents = Self.runtimeStreamEvents(runtime)
                 streamEventsFromApi = Self.mergeStreamEvents(primary: streamEventsFromApi, secondary: runtimeEvents)
                 runtimeEmergenceClusters = Self.runtimeEmergenceToClusters(runtime.emergenceClusters)
                 observedSuccessfulResponse = true
             } catch {
+                signalsRuntimeSnapshot = nil
                 #if DEBUG
                 print("[Jeeves][ProposalPoller] signals runtime fetch failed: \(error)")
                 #endif
@@ -354,7 +525,15 @@ final class ProposalPoller {
         }
 
         if observedSuccessfulResponse {
+            gateway.noteRefreshSucceeded(endpoint: resolvedEndpoint)
             lastSuccessfulRefreshAt = Date()
+            lastSuccessfulEndpointRefresh = SuccessfulEndpointRefresh(
+                host: resolvedEndpoint.host,
+                port: resolvedEndpoint.port,
+                completedAt: Date()
+            )
+        } else {
+            gateway.noteRefreshFailed(endpoint: resolvedEndpoint)
         }
 
         if proposalFetchSucceeded {
@@ -387,6 +566,10 @@ final class ProposalPoller {
         }
 
         let client = GatewayClient(host: resolvedEndpoint.host, port: resolvedEndpoint.port, token: token)
+        let correlatedGridProposal = proposals.first { proposal in
+            proposal.proposalId == proposalId && proposal.isCorrelatedGridEvent
+        }
+        lastApprovedCorrelatedGridProposalTitle = nil
 
         do {
             if gapProposals.contains(where: { $0.gapProposalId == proposalId }) {
@@ -403,6 +586,9 @@ final class ProposalPoller {
 
             let response = try await client.decideProposal(proposalId: proposalId, decision: decision, reason: reason)
             if response.ok {
+                if decision == "approve", let correlatedGridProposal {
+                    lastApprovedCorrelatedGridProposalTitle = correlatedGridProposal.title
+                }
                 if let action = response.action {
                     lastActionReceipt = action
                     // Fetch linked knowledge for output objects
@@ -554,6 +740,19 @@ final class ProposalPoller {
         conductorState = nil
         knowledgeStatus = nil
         safeClashFeed = nil
+        walletBalance = nil
+        recentReceipts = []
+        decisionAutonomyState = nil
+        realityAuditState = nil
+        gridResidueSummary = nil
+        gridResidueField = nil
+        cosmicSnapshot = .demo
+        planetarySnapshot = .demo
+        civilizationSnapshot = .demo
+        collectiveMemorySnapshot = .demo
+        operatorMemorySnapshot = .demo
+        gapFinderSnapshot = .demo
+        gridResidueEvents = []
 
         let snapshot = ObservatorySnapshot.demo(tick: demoTick)
         observatorySnapshot = snapshot
@@ -620,6 +819,15 @@ final class ProposalPoller {
         let baseURL = components.url ?? URL(string: "http://localhost:19001")!
         let token = resolvedEndpoint.token?.trimmingCharacters(in: .whitespacesAndNewlines)
         return SafeClashClient(baseURL: baseURL, token: (token?.isEmpty == false) ? token : nil)
+    }
+
+    private func safeClashWalletOwner() -> String {
+        let env = ProcessInfo.processInfo.environment
+        if let raw = env["SAFECLASH_WALLET_OWNER"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            return raw
+        }
+        return "safeclash-operator"
     }
 
     private func demoProposals(tick: Int) -> [Proposal] {

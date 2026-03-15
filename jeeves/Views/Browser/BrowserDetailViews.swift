@@ -69,7 +69,7 @@ struct ConfigurationDetailView: View {
             detailSectionTitle("Description")
             Text(card.shortDescription)
                 .font(.jeevesBody)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
         }
         .browserPanel(padding: 12)
     }
@@ -100,7 +100,7 @@ struct ConfigurationDetailView: View {
                             .foregroundStyle(.cyan)
                         Text(capability)
                             .font(.jeevesCaption)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.jeevesInk)
                     }
                 }
             }
@@ -115,7 +115,7 @@ struct ConfigurationDetailView: View {
                     detailSectionTitle("Constraints")
                     Text(constraints)
                         .font(.jeevesCaption)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.jeevesInk)
                 }
                 .browserPanel(padding: 12)
             }
@@ -190,7 +190,7 @@ struct ConfigurationDetailView: View {
                 .frame(width: 120, alignment: .leading)
             Text(value)
                 .font(.jeevesMono)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
         }
     }
 
@@ -260,7 +260,7 @@ struct EmergingDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(intention.description)
                 .font(.jeevesBody)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
 
             Text("\(intention.domain) / \(intention.subdomain)")
                 .font(.jeevesMono)
@@ -274,7 +274,7 @@ struct EmergingDetailView: View {
             emergingSectionTitle("Discovery Signal")
             Text(intention.clashdSignalSummary)
                 .font(.jeevesCaption)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.jeevesInk)
 
             if !intention.sourceClusters.isEmpty {
                 emergingSectionTitle("Sources")
@@ -305,7 +305,7 @@ struct EmergingDetailView: View {
             HStack(spacing: 8) {
                 Text("Jeeves Guidance")
                     .font(.jeevesHeadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.jeevesInk)
                 Spacer()
                 Text(intention.uncertaintyState.rawValue.uppercased())
                     .font(.jeevesCaption2.weight(.semibold))
@@ -349,7 +349,7 @@ struct EmergingDetailView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(card.title)
                                         .font(.jeevesCaption.weight(.semibold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(Color.jeevesInk)
                                     Text(card.intentionPath)
                                         .font(.jeevesCaption2)
                                         .foregroundStyle(.secondary)
@@ -405,7 +405,7 @@ struct EmergingDetailView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.jeevesCaption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Color.jeevesInk.opacity(0.78))
             Text(content)
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)

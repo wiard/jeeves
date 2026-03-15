@@ -69,7 +69,7 @@ struct BrowserDeploymentsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.white.opacity(0.03))
+        .background(Color.jeevesCloud.opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -88,7 +88,7 @@ struct BrowserDeploymentsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(proposal.title)
                                 .font(.jeevesCaption.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Color.jeevesInk)
                             Text(proposal.proposalId)
                                 .font(.jeevesCaption2)
                                 .foregroundStyle(.secondary)
@@ -118,7 +118,7 @@ struct BrowserDeploymentsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(decision.title)
                                 .font(.jeevesCaption.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Color.jeevesInk)
                             Text(decision.proposalId)
                                 .font(.jeevesCaption2)
                                 .foregroundStyle(.secondary)
@@ -150,7 +150,7 @@ struct BrowserDeploymentsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(decision.title)
                             .font(.jeevesCaption.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.jeevesInk)
                             .lineLimit(1)
                         Text(decision.proposalId)
                             .font(.jeevesCaption2)
@@ -186,7 +186,7 @@ struct BrowserDeploymentsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Proposal Created")
                     .font(.jeevesCaption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.jeevesInk)
                 Text("Proposal \(proposalId) is pending approval.")
                     .font(.jeevesCaption2)
                     .foregroundStyle(.secondary)

@@ -2,70 +2,63 @@ import SwiftUI
 
 struct SystemLoopStrip: View {
     let snapshot: MissionControlSystemLoopSnapshot
-    @State private var pulseActive = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             headerRow
             stageRow
             subtitleText
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(backgroundCard)
-        .onAppear {
-            guard !pulseActive else { return }
-            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-                pulseActive = true
-            }
-        }
+        .briefingPanel()
     }
 
     private var headerRow: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("SYSTEM LOOP")
                 .font(.caption.monospaced())
-                .foregroundStyle(Color.white.opacity(0.62))
+                .foregroundStyle(Color.jeevesMutedText)
 
             Spacer()
 
             Text(snapshot.currentStage.rawValue.uppercased())
                 .font(.caption.monospaced())
                 .foregroundStyle(stageTint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(stageTint.opacity(0.12), in: Capsule())
         }
     }
 
     private var stageRow: some View {
-        HStack(spacing: 8) {
-            stagePill(.discovery)
-            stagePill(.proposal)
-            stagePill(.approval)
-            stagePill(.action)
-            stagePill(.knowledge)
+        ViewThatFits {
+            HStack(spacing: 8) {
+                stagePill(.discovery)
+                stagePill(.proposal)
+                stagePill(.approval)
+                stagePill(.action)
+                stagePill(.knowledge)
+            }
+
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    stagePill(.discovery)
+                    stagePill(.proposal)
+                    stagePill(.approval)
+                }
+                HStack(spacing: 8) {
+                    stagePill(.action)
+                    stagePill(.knowledge)
+                }
+            }
         }
     }
 
     private var subtitleText: some View {
         Text(snapshot.stageSummary)
             .font(.footnote)
-            .foregroundStyle(Color.white.opacity(0.62))
+            .foregroundStyle(Color.jeevesSubtleText)
             .lineLimit(2)
-    }
-
-    private var backgroundCard: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [Color.white.opacity(0.08), stageTint.opacity(0.14), Color.black.opacity(0.14)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(stageTint.opacity(0.24), lineWidth: 1)
-            )
-            .shadow(color: stageTint.opacity(0.14), radius: 10, y: 3)
     }
 
     @ViewBuilder
@@ -73,39 +66,31 @@ struct SystemLoopStrip: View {
         let active = stage == snapshot.currentStage
         let tint = tint(for: stage)
 
-        Text(stage.rawValue)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: active
-                                ? [tint.opacity(0.30), Color.black.opacity(0.12)]
-                                : [tint.opacity(0.10), Color.black.opacity(0.08)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            )
-            .foregroundStyle(active ? Color.white.opacity(0.98) : Color.white.opacity(0.74))
-            .clipShape(Capsule())
-            .overlay(alignment: .topTrailing) {
+        HStack(spacing: 5) {
+            if active {
                 Circle()
                     .fill(tint)
-                    .frame(width: active ? (pulseActive ? 10 : 8) : 6, height: active ? (pulseActive ? 10 : 8) : 6)
-                    .shadow(color: tint.opacity(active ? 0.4 : 0.14), radius: active ? 6 : 2)
-                    .padding(.top, 5)
-                    .padding(.trailing, 5)
+                    .frame(width: 6, height: 6)
             }
-            .overlay(
-                Capsule()
-                    .stroke(tint.opacity(active ? 0.34 : 0.12), lineWidth: 1)
-            )
+            Text(stage.rawValue)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(
+            Capsule()
+                .fill(active ? tint.opacity(0.22) : Color.jeevesCloud.opacity(0.60))
+        )
+        .foregroundStyle(active ? Color.jeevesInk : Color.jeevesSubtleText)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(tint.opacity(active ? 0.40 : 0.12), lineWidth: 1)
+        )
+        .shadow(color: active ? tint.opacity(0.10) : Color.clear, radius: 6, y: 3)
     }
 
     private var stageTint: Color {
@@ -115,15 +100,15 @@ struct SystemLoopStrip: View {
     private func tint(for stage: MissionControlSystemLoopSnapshot.Stage) -> Color {
         switch stage {
         case .discovery:
-            return .blue
+            return .jeevesSky
         case .proposal:
             return .blue
         case .approval:
             return .orange
         case .action:
-            return .blue
+            return .teal
         case .knowledge:
-            return .green
+            return .jeevesMint
         }
     }
 }

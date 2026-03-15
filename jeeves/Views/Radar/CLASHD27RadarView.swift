@@ -53,7 +53,7 @@ struct CLASHD27RadarView: View {
                     }
                 }
             }
-            .navigationTitle("Jeeves")
+            .navigationTitle("Radar")
             .task { await viewModel.load() }
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

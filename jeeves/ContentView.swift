@@ -134,7 +134,7 @@ struct ContentView: View {
                 Section("Jeeves") {
                     Label("Jeeves", systemImage: "sun.max").tag(AppScreen.chat)
                     Label("Mission Control", systemImage: "scope").tag(AppScreen.stream)
-                    Label("Radar", systemImage: "binoculars").tag(AppScreen.observatory)
+                    Label("Observatory", systemImage: "binoculars").tag(AppScreen.observatory)
                     Label("Knowledge", systemImage: "book.closed.fill").tag(AppScreen.house)
                 }
                 Section("More") {
@@ -151,7 +151,7 @@ struct ContentView: View {
         } detail: {
             screenView(for: selectedTab)
         }
-        .tint(Color.jeevesGold)
+        .tint(Color.jeevesSky)
         #else
         TabView(selection: $selectedTab) {
             Tab("Mission Control", systemImage: "scope", value: .stream) {
@@ -160,8 +160,8 @@ struct ContentView: View {
             Tab("Jeeves", systemImage: "sun.max", value: .chat) {
                 JeevesView()
             }
-            Tab("Radar", systemImage: "binoculars", value: .observatory) {
-                CLASHD27RadarView()
+            Tab("Observatory", systemImage: "binoculars", value: .observatory) {
+                ObservatoryView()
             }
             Tab("Knowledge", systemImage: "book.closed.fill", value: .house) {
                 KnowledgeBrowserView()
@@ -173,7 +173,7 @@ struct ContentView: View {
         .sheet(item: $auxiliaryScreen) { screen in
             screenView(for: screen)
         }
-        .tint(.jeevesGold)
+        .tint(.jeevesSky)
         .overlay(alignment: .top) {
             if let toast = poller.seedToastMessage {
                 Text(toast)
@@ -197,7 +197,7 @@ struct ContentView: View {
         case .stream:      MissionControlDashboardView()
         case .lobby:       LobbyView()
         case .chat:        JeevesView()
-        case .observatory: CLASHD27RadarView()
+        case .observatory: ObservatoryView()
         case .house:       KnowledgeBrowserView()
         case .logbook:     LogbookView()
         case .aiBrowser:   AIBrowserView()

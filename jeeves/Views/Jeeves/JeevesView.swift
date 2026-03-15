@@ -41,6 +41,19 @@ struct JeevesView: View {
                                 )
                                 .calmAppear()
 
+                                IntelligencePhaseStrip(
+                                    currentStage: intelligencePhase(for: briefing),
+                                    summary: intelligencePhaseSummary(for: briefing)
+                                )
+                                .calmAppear(delay: 0.06)
+
+                                HumanMeaningPanel(
+                                    title: "What the morning brief means now",
+                                    accent: .jeevesGold,
+                                    explanation: HumanMeaningBuilder.morning(briefing: briefing)
+                                )
+                                .calmAppear(delay: 0.09)
+
                                 InstrumentSectionPanel(
                                     eyebrow: "Section One",
                                     title: "World signals",
@@ -226,6 +239,29 @@ struct JeevesView: View {
                 meta: operatorFacingMeta(object.kind),
                 objectId: object.objectId
             )
+        }
+    }
+
+    private func intelligencePhase(for briefing: DailyBriefing) -> IntelligencePhaseStage {
+        if !briefing.pendingProposals.isEmpty {
+            return .safety
+        }
+
+        if !discoveryHintItems(from: briefing).isEmpty || !(briefing.discoveryPulse?.cells.isEmpty ?? true) {
+            return .investigate
+        }
+
+        return .define
+    }
+
+    private func intelligencePhaseSummary(for briefing: DailyBriefing) -> String {
+        switch intelligencePhase(for: briefing) {
+        case .safety:
+            return "Safety is foregrounded because governed proposals are already waiting for explicit human review."
+        case .define:
+            return "Define is foregrounded because the morning brief is turning broad external movement into a usable frame for the day."
+        case .investigate:
+            return "Investigate is foregrounded because emerging patterns and discovery hints are active enough to justify deeper study."
         }
     }
 
@@ -429,14 +465,29 @@ private struct JeevesBriefingCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
 
-            Text(meta)
-                .font(.jeevesMonoSmall)
-                .foregroundStyle(accent)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(accent)
+                    .frame(width: 6, height: 6)
+                Text(meta)
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(accent.opacity(0.08))
+        .background(
+            LinearGradient(
+                colors: [accent.opacity(0.10), accent.opacity(0.04)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(accent.opacity(0.14), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
@@ -450,9 +501,14 @@ struct JeevesEmptyState: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 48, weight: .light, design: .rounded))
-                .foregroundStyle(tint)
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 88, height: 88)
+                Image(systemName: icon)
+                    .font(.system(size: 38, weight: .light, design: .rounded))
+                    .foregroundStyle(tint)
+            }
 
             Text(title)
                 .font(.jeevesHeadline)

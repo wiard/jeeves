@@ -15,17 +15,30 @@ struct InstrumentBackdrop: View {
         )
         .overlay(alignment: .topLeading) {
             Circle()
-                .fill(Color.white.opacity(0.32))
-                .blur(radius: 80)
-                .frame(width: 220, height: 220)
-                .offset(x: -70, y: -90)
+                .fill(Color.jeevesSky.opacity(0.14))
+                .blur(radius: 100)
+                .frame(width: 280, height: 280)
+                .offset(x: -72, y: -94)
         }
         .overlay(alignment: .bottomTrailing) {
             Circle()
-                .fill(Color.jeevesGold.opacity(0.16))
+                .fill(Color.jeevesMint.opacity(0.16))
+                .blur(radius: 100)
+                .frame(width: 260, height: 260)
+                .offset(x: 76, y: 118)
+        }
+        .overlay(alignment: .topTrailing) {
+            Circle()
+                .fill(Color.jeevesGold.opacity(0.08))
                 .blur(radius: 90)
-                .frame(width: 240, height: 240)
-                .offset(x: 70, y: 120)
+                .frame(width: 200, height: 200)
+                .offset(x: 50, y: -40)
+        }
+        .overlay(alignment: .center) {
+            RoundedRectangle(cornerRadius: 42, style: .continuous)
+                .fill(Color.jeevesPanel.opacity(0.56))
+                .blur(radius: 120)
+                .padding(.horizontal, 18)
         }
     }
 }
@@ -72,14 +85,31 @@ struct InstrumentRoleHeader: View {
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .stroke(accent.opacity(0.12), lineWidth: 1)
-                )
+            ZStack {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.jeevesPanelStrong.opacity(0.94)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                // Subtle accent glow at top-left
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [accent.opacity(0.06), Color.clear],
+                            startPoint: .topLeading,
+                            endPoint: .center
+                        )
+                    )
+            }
         )
-        .shadow(color: Color.black.opacity(0.04), radius: 18, y: 10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(accent.opacity(0.20), lineWidth: 1)
+        )
+        .shadow(color: accent.opacity(0.10), radius: 20, y: 10)
     }
 }
 
@@ -172,7 +202,17 @@ private struct InstrumentMetricPill: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.55))
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white, accent.opacity(0.06)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(accent.opacity(0.16), lineWidth: 1)
+                )
         )
     }
 }

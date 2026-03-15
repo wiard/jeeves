@@ -14,7 +14,7 @@ struct AIBrowserView: View {
                     sectionPicker
 
                     Divider()
-                        .overlay(Color.white.opacity(0.08))
+                        .overlay(Color.jeevesLine.opacity(0.8))
 
                     if let error = viewModel.errorMessage {
                         errorBanner(error)
@@ -107,7 +107,7 @@ struct AIBrowserView: View {
                             Text(section.rawValue)
                                 .font(.jeevesCaption.weight(.semibold))
                         }
-                        .foregroundStyle(viewModel.selectedSection == section ? .white : .secondary)
+                        .foregroundStyle(viewModel.selectedSection == section ? Color.jeevesInk : .secondary)
 
                         Rectangle()
                             .fill(viewModel.selectedSection == section ? Color.jeevesGold : .clear)
@@ -165,20 +165,20 @@ struct AIBrowserView: View {
             Color.houseDark
 
             LinearGradient(
-                colors: [Color.black.opacity(0.3), .clear],
+                colors: [Color.jeevesCloud.opacity(0.5), .clear],
                 startPoint: .top,
                 endPoint: .center
             )
 
             RadialGradient(
-                colors: [Color.cyan.opacity(0.06), .clear],
+                colors: [Color.cyan.opacity(0.08), .clear],
                 center: .topLeading,
                 startRadius: 10,
                 endRadius: 400
             )
 
             RadialGradient(
-                colors: [Color.jeevesGold.opacity(0.04), .clear],
+                colors: [Color.jeevesGold.opacity(0.05), .clear],
                 center: .bottomTrailing,
                 startRadius: 10,
                 endRadius: 400
