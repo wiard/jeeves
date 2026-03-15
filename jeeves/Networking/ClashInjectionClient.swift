@@ -58,6 +58,14 @@ actor ClashInjectionClient {
         return try JSONDecoder().decode(InjectionResidueEnvelope.self, from: data).residue
     }
 
+    func sendConversation(sessionId: String, message: String) async throws -> InjectionConversationEnvelope {
+        let payload = try JSONEncoder().encode(InjectionConversationRequest(message: message))
+        let request = try builder.request(for: RouteContract.Injection.conversation(sessionId: sessionId), body: payload)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try ensureSuccess(response: response)
+        return try JSONDecoder().decode(InjectionConversationEnvelope.self, from: data)
+    }
+
     private func ensureSuccess(response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)

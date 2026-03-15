@@ -163,6 +163,9 @@ enum RouteContract {
         static func residue(id: String) -> Route {
             .get("/api/injection/sessions/\(id)/residue")
         }
+        static func conversation(sessionId: String) -> Route {
+            .post("/api/injection/sessions/\(sessionId)/conversation")
+        }
     }
 
     // MARK: - Extensions
