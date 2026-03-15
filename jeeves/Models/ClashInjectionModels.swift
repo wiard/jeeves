@@ -8,6 +8,25 @@ struct SystemReadinessEnvelope: Decodable, Sendable {
 struct Clashd27ComputerEnvelope: Decodable, Sendable {
     let ok: Bool?
     let computer: Clashd27ComputerSnapshot
+    let controllerState: String?
+    let controller_state: String?
+    let aluActivity: String?
+    let alu_activity: String?
+    let cube: ComputerCubeTelemetrySnapshot?
+    let residueMemory: ComputerResidueTelemetrySnapshot?
+    let residue_memory: ComputerResidueTelemetrySnapshot?
+
+    private enum CodingKeys: String, CodingKey {
+        case ok
+        case computer
+        case controllerState
+        case controller_state
+        case aluActivity
+        case alu_activity
+        case cube
+        case residueMemory
+        case residue_memory
+    }
 }
 
 struct SystemReadinessSnapshot: Decodable, Sendable {
@@ -60,6 +79,7 @@ struct InjectionTargetOption: Decodable, Identifiable, Hashable, Sendable {
     let location: String
     let status: String
     let detail: String
+    let mode: String?
 }
 
 struct InjectionTargetSnapshot: Decodable, Hashable, Sendable {
@@ -144,7 +164,9 @@ struct InjectionCommandSnapshot: Decodable, Hashable, Sendable {
 struct Clashd27ComputerSnapshot: Decodable, Hashable, Sendable {
     let state: String
     let controllerState: String
+    let aluActivity: String
     let activeSessionId: String?
+    let mergedFindingCount: Int
     let lastSummary: String
     let lastUpdatedAt: String
     let cubeState: CubeStateSnapshot
@@ -156,14 +178,53 @@ struct CubeStateSnapshot: Decodable, Hashable, Sendable {
     let state: String
     let activeCellCount: Int
     let completedCellCount: Int
+    let peakActiveCellCount: Int
+    let pendingTaskCount: Int
     let summary: String
+    let taskQueue: [ComputeTaskSnapshot]
+    let results: [CubeResultSnapshot]
 }
 
 struct ResidueMemorySnapshot: Decodable, Hashable, Sendable {
     let state: String
     let entryCount: Int
     let lastWrittenAt: String?
+    let lastConsequence: String?
     let summary: String
+}
+
+struct ComputerCubeTelemetrySnapshot: Decodable, Hashable, Sendable {
+    let activeCells: Int?
+    let active_cells: Int?
+    let peakActiveCells: Int?
+    let peak_active_cells: Int?
+    let pendingTasks: Int?
+    let pending_tasks: Int?
+    let cubeTaskQueue: Int?
+    let cube_task_queue: Int?
+    let cubeResults: Int?
+    let cube_results: Int?
+}
+
+struct ComputerResidueTelemetrySnapshot: Decodable, Hashable, Sendable {
+    let entries: Int
+    let state: String
+}
+
+struct ComputeTaskSnapshot: Decodable, Hashable, Sendable, Identifiable {
+    let id: String
+    let kind: String
+    let perspective: String
+    let description: String
+}
+
+struct CubeResultSnapshot: Decodable, Hashable, Sendable, Identifiable {
+    let cellId: String
+    let taskId: String
+    let summary: String
+    let findingIds: [String]
+
+    var id: String { "\(cellId)|\(taskId)" }
 }
 
 struct TuringResidueMemoryEntrySnapshot: Decodable, Hashable, Sendable, Identifiable {

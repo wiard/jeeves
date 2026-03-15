@@ -41,6 +41,19 @@ struct Clashd27ComputerCard: View {
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
 
+                Text("ALU: \(computer.aluActivity.replacingOccurrences(of: "_", with: " "))")
+                    .font(.caption)
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                Text("Exploring models: peak \(computer.cubeState.peakActiveCellCount) active cells, \(computer.cubeState.taskQueue.count) queued tasks, \(computer.cubeState.results.count) completed tasks.")
+                    .font(.caption)
+                    .foregroundStyle(Color.jeevesMutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Merged findings: \(computer.mergedFindingCount)")
+                    .font(.caption)
+                    .foregroundStyle(Color.jeevesMutedText)
+
                 Text("Cube: \(computer.cubeState.summary)")
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)

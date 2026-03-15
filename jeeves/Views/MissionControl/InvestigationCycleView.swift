@@ -31,6 +31,18 @@ struct InvestigationCycleView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.jeevesSubtleText)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Text("The cube queued \(computer.cubeState.taskQueue.count) tasks and produced \(computer.cubeState.results.count) intermediate result\(computer.cubeState.results.count == 1 ? "" : "s").")
+                    .font(.caption)
+                    .foregroundStyle(Color.jeevesMutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if computer.cubeState.peakActiveCellCount > 1 {
+                    Text("Exploring models in parallel across \(computer.cubeState.peakActiveCellCount) cube cells.")
+                        .font(.caption)
+                        .foregroundStyle(Color.jeevesGold)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             if let cycle {

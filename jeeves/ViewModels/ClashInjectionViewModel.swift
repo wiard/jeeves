@@ -98,6 +98,32 @@ final class ClashInjectionViewModel {
         readiness?.targetOptions ?? []
     }
 
+    var demoTarget: InjectionTargetOption? {
+        availableTargets.first(where: { $0.mode == "demo" && $0.status == "ready" })
+    }
+
+    func startDemoInvestigation(gateway: GatewayManager) async {
+        guard let demoTarget else {
+            errorText = "De demo-investigatie is nog niet beschikbaar."
+            return
+        }
+
+        let previousTarget = selectedTargetId
+        let previousIntent = selectedIntent
+        let previousNotes = notes
+
+        selectedTargetId = demoTarget.id
+        selectedIntent = "investigate"
+        notes = "Deterministic demo investigation"
+        await startInvestigation(gateway: gateway)
+
+        if session == nil {
+            selectedTargetId = previousTarget
+            selectedIntent = previousIntent
+            notes = previousNotes
+        }
+    }
+
     private func pollUntilSettled(client: ClashInjectionClient, sessionId: String) async {
         for _ in 0..<30 {
             do {

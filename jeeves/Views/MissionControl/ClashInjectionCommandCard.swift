@@ -8,6 +8,7 @@ struct ClashInjectionCommandCard: View {
     @Binding var notes: String
     let isStarting: Bool
     let onStart: () -> Void
+    let onStartDemo: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -59,6 +60,16 @@ struct ClashInjectionCommandCard: View {
             .buttonStyle(.borderedProminent)
             .tint(.jeevesSky)
             .disabled(!canStart)
+
+            if let onStartDemo, targets.contains(where: { $0.mode == "demo" && $0.status == "ready" }) {
+                Button(action: onStartDemo) {
+                    Text("Run demo investigation")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isStarting || readiness?.commandInitiationReady != true)
+            }
 
             Text(readiness?.commandInitiationReady == true
                  ? "The system is ready. Starting this command will create a bounded CLASH Injection session."

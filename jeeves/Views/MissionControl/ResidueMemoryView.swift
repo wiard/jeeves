@@ -24,7 +24,7 @@ struct ResidueMemoryView: View {
                 .foregroundStyle(Color.jeevesInk)
 
             if entries.isEmpty {
-                Text("Residue is only written when the investigation produces a meaningful consequence.")
+                Text("Residue is only written when the investigation produces a meaningful consequence such as a confirmed pattern, validated hypothesis, structural conflict, actionable opportunity, or operator decision.")
                     .font(.footnote)
                     .foregroundStyle(Color.jeevesSubtleText)
                     .fixedSize(horizontal: false, vertical: true)

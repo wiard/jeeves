@@ -62,6 +62,10 @@ struct MissionControlDashboardView: View {
                                 Task {
                                     await injectionModel.startInvestigation(gateway: gateway)
                                 }
+                            } onStartDemo: {
+                                Task {
+                                    await injectionModel.startDemoInvestigation(gateway: gateway)
+                                }
                             }
                             InvestigationCycleView(
                                 session: injectionModel.session,
