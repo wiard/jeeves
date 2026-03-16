@@ -78,6 +78,14 @@ struct ObservatoryView: View {
                         interpretationPanel(snapshot)
                             .calmAppear(delay: 0.15)
 
+                        if let attention = operatorDecisionAttentionItem {
+                            observatoryAttentionPanel(attention)
+                                .calmAppear(delay: 0.155)
+                        }
+
+                        operatorSignalsPanel
+                            .calmAppear(delay: 0.158)
+
                         if let runtime = model.signalsRuntime,
                            let gravity = runtime.gravitySummary,
                            gravity.activeEdgeCount > 0 {
@@ -196,7 +204,7 @@ struct ObservatoryView: View {
         InstrumentRoleHeader(
             eyebrow: "Observatory",
             title: "Governed intelligence, made calm",
-            summary: "A quiet read-model of how the runtime is sensing, shaping, and stabilizing knowledge. Nothing here changes authority: signals may rise, but approval still belongs to the operator.",
+            summary: "A calm explanation layer for what the system observed, why it matters, and whether the operator should care. Nothing here changes authority.",
             accent: .jeevesSky,
             metrics: [
                 InstrumentRoleMetric(label: "Loop", value: "Signal to knowledge"),
@@ -244,6 +252,168 @@ struct ObservatoryView: View {
                     )
                 }
             }
+        }
+    }
+
+    private var operatorSignalCards: [ObservatorySignalCardModel] {
+        OperatorSignalPresentation.observatorySignals(
+            runtime: model.signalsRuntime,
+            stream: model.streamFeed,
+            radarStatus: model.radarStatus,
+            recentKnowledgeCount: model.recentKnowledgeCount
+        )
+    }
+
+    private var operatorDecisionAttentionItem: OperatorDecisionAttentionItem? {
+        OperatorSignalPresentation.observatoryAttention(
+            runtime: model.signalsRuntime,
+            stream: model.streamFeed
+        )
+    }
+
+    private var operatorSignalsPanel: some View {
+        InstrumentSectionPanel(
+            eyebrow: "Signals",
+            title: "What changed",
+            subtitle: "Outside-world signals are translated into operator language first. Open the deeper layers only when you want the raw discovery context.",
+            accent: .jeevesSky,
+            metric: operatorSignalCards.isEmpty ? "Quiet" : "\(operatorSignalCards.count) visible"
+        ) {
+            if operatorSignalCards.isEmpty {
+                Text("No clear operator-readable signal is visible yet. The observatory will summarize change here as soon as the gateway reports it.")
+                    .font(.jeevesBody)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(operatorSignalCards.prefix(4)) { card in
+                        observatorySignalCard(card)
+                    }
+                }
+            }
+        }
+    }
+
+    private func observatoryAttentionPanel(_ item: OperatorDecisionAttentionItem) -> some View {
+        InstrumentSectionPanel(
+            eyebrow: "Needs Attention",
+            title: item.title,
+            subtitle: item.message,
+            accent: attentionTint(item.attention),
+            metric: item.recencyLabel
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(item.whyItMatters)
+                    .font(.jeevesBody)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                observatoryActionButton(for: item.route)
+            }
+        }
+    }
+
+    private func observatorySignalCard(_ card: ObservatorySignalCardModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(card.headline)
+                    .font(.jeevesBody.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 12)
+
+                Text(card.recencyLabel)
+                    .font(.jeevesMonoSmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 8) {
+                observatoryMetaPill(card.sourceLabel, tint: .jeevesSky)
+                observatoryMetaPill(card.attention.label, tint: attentionTint(card.attention))
+                observatoryMetaPill(card.confidenceLabel, tint: .jeevesGold)
+            }
+
+            observatoryDetailRow("Detected pattern", card.detectedPattern)
+            observatoryDetailRow("What changed", card.summary)
+            observatoryDetailRow("Why it matters", card.whyItMatters)
+            observatoryDetailRow("Evidence", card.evidenceSummary)
+
+            observatoryActionButton(for: card.route)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.jeevesPanelStrong)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(attentionTint(card.attention).opacity(0.14), lineWidth: 1)
+                )
+        )
+    }
+
+    private func observatoryDetailRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(Color.jeevesMutedText)
+
+            Text(value)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func observatoryMetaPill(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.jeevesMonoSmall)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(tint.opacity(0.12))
+            )
+    }
+
+    @ViewBuilder
+    private func observatoryActionButton(for route: OperatorSignalRoute) -> some View {
+        switch route {
+        case .missionControl:
+            Button(route.label) {
+                NotificationCenter.default.post(name: .jeevesOpenMissionControlTab, object: nil)
+            }
+            .buttonStyle(.bordered)
+        case .radar:
+            NavigationLink {
+                CLASHD27RadarView()
+            } label: {
+                Text(route.label)
+                    .font(.jeevesCaption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+        case .knowledge:
+            NavigationLink {
+                KnowledgeBrowserView()
+            } label: {
+                Text(route.label)
+                    .font(.jeevesCaption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+        case .observatory:
+            EmptyView()
+        }
+    }
+
+    private func attentionTint(_ attention: OperatorAttentionLevel) -> Color {
+        switch attention {
+        case .informational:
+            return .jeevesMint
+        case .noteworthy:
+            return .jeevesGold
+        case .needsAttention:
+            return .consentOrange
         }
     }
 

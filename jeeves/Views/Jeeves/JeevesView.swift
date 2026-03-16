@@ -120,23 +120,40 @@ struct JeevesView: View {
         let briefing = briefingModel.briefing
 
         return briefingLandingCard(
-            eyebrow: "Daily Briefing",
+            eyebrow: "Signal Briefing",
             title: briefing?.headline ?? "Your briefing is preparing.",
-            subtitle: briefing?.statusLine ?? "Jeeves is gathering signals, patterns, and operator context."
+            subtitle: briefing?.statusLine ?? "Jeeves is translating outside-world signals into operator language."
         ) {
             if briefingModel.isLoading && briefing == nil {
                 ProgressView("Loading briefing...")
                     .font(.footnote)
             } else if let briefing {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(briefing.overview.prefix(2).enumerated()), id: \.offset) { _, item in
-                        briefingBullet(item)
+                    let items = OperatorSignalPresentation.briefingItems(from: cappedBriefing(from: briefing))
+
+                    if items.isEmpty {
+                        Text("No readable signal summary is available yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(items.prefix(3)) { item in
+                            operatorBriefingCard(item)
+                        }
                     }
 
-                    Button("Open full Mission Control") {
-                        NotificationCenter.default.post(name: .jeevesOpenMissionControlTab, object: nil)
+                    HStack(spacing: 12) {
+                        Button("Open Observatory") {
+                            handleRoute(.observatory)
+                        }
+                        .font(.caption.weight(.semibold))
+
+                        if !briefing.pendingProposals.isEmpty {
+                            Button("Open Mission Control") {
+                                handleRoute(.missionControl)
+                            }
+                            .font(.caption.weight(.semibold))
+                        }
                     }
-                    .font(.caption.weight(.semibold))
                 }
             } else if let errorMessage = briefingModel.errorMessage {
                 Text(errorMessage)
@@ -161,31 +178,36 @@ struct JeevesView: View {
     }
 
     private var nextDecisionCard: some View {
-        briefingLandingCard(
-            eyebrow: "Your Next Decision",
-            title: nextDecisionTitle,
-            subtitle: nextDecisionSubtitle
+        let attention = briefingModel.briefing.flatMap { briefing in
+            OperatorSignalPresentation.decisionAttention(from: cappedBriefing(from: briefing))
+        }
+
+        return briefingLandingCard(
+            eyebrow: attention == nil ? "Decision Attention" : "Needs Attention",
+            title: attention?.title ?? nextDecisionTitle,
+            subtitle: attention?.message ?? nextDecisionSubtitle
         ) {
             VStack(alignment: .leading, spacing: 10) {
-                if let proposal = poller.pendingProposals.first {
-                    Text(proposal.title)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.jeevesInk)
-
-                    Text("This decision is waiting for your approval before anything can happen.")
+                if let attention {
+                    Text(attention.whyItMatters)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        briefingMetaPill(attention.attention.label, tint: tint(for: attention.attention))
+                        briefingMetaPill(attention.recencyLabel, tint: .jeevesSky)
+                    }
+
+                    Button(attention.route.label) {
+                        handleRoute(attention.route)
+                    }
+                    .font(.caption.weight(.semibold))
                 } else {
                     Text("No operator decision is waiting right now.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-
-                Button("Open Mission Control") {
-                    NotificationCenter.default.post(name: .jeevesOpenMissionControlTab, object: nil)
-                }
-                .font(.caption.weight(.semibold))
             }
         }
     }
@@ -217,17 +239,94 @@ struct JeevesView: View {
         .background(landingCardBackground(accent: .jeevesGold))
     }
 
-    private func briefingBullet(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Circle()
-                .fill(Color.jeevesGold)
-                .frame(width: 6, height: 6)
-                .padding(.top, 6)
+    private func operatorBriefingCard(_ item: OperatorBriefingItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(item.title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.jeevesInk)
 
-            Text(text)
+                Spacer(minLength: 12)
+
+                Text(item.recencyLabel)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+            }
+
+            HStack(spacing: 8) {
+                briefingMetaPill(item.sourceLabel, tint: .jeevesSky)
+                briefingMetaPill(item.attention.label, tint: tint(for: item.attention))
+            }
+
+            Text(item.summary)
                 .font(.footnote)
                 .foregroundStyle(Color.jeevesInk)
                 .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Why it matters".uppercased())
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(Color.jeevesMutedText)
+
+                Text(item.whyItMatters)
+                    .font(.caption)
+                    .foregroundStyle(Color.jeevesSubtleText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 12) {
+                Button("Read more") {
+                    selectedBriefingItem = item.detailItem
+                }
+                .font(.caption.weight(.semibold))
+
+                Button(item.route.label) {
+                    handleRoute(item.route)
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.74))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(tint(for: item.attention).opacity(0.14), lineWidth: 1)
+                )
+        )
+    }
+
+    private func briefingMetaPill(_ label: String, tint: Color) -> some View {
+        Text(label)
+            .font(.caption2.monospaced())
+            .foregroundStyle(Color.jeevesInk)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(tint.opacity(0.12))
+            )
+    }
+
+    private func tint(for attention: OperatorAttentionLevel) -> Color {
+        switch attention {
+        case .informational:
+            return .jeevesMint
+        case .noteworthy:
+            return .jeevesGold
+        case .needsAttention:
+            return .orange
+        }
+    }
+
+    private func handleRoute(_ route: OperatorSignalRoute) {
+        switch route {
+        case .observatory, .radar, .knowledge:
+            NotificationCenter.default.post(name: .jeevesOpenObservatoryTab, object: nil)
+        case .missionControl:
+            NotificationCenter.default.post(name: .jeevesOpenMissionControlTab, object: nil)
         }
     }
 
