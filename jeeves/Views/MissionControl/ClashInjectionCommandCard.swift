@@ -13,7 +13,7 @@ struct ClashInjectionCommandCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("RESEARCH TASK")
+                Text("RESEARCH TASKS")
                     .font(.caption.monospaced())
                     .foregroundStyle(Color.jeevesSky)
 
@@ -24,7 +24,7 @@ struct ClashInjectionCommandCard: View {
                     .foregroundStyle(Color.jeevesInk)
             }
 
-            Text("You give the command. The investigation begins because you asked for it.")
+            Text("Start a read-only research task in a repository, API, or service environment.")
                 .font(.headline)
                 .foregroundStyle(Color.jeevesInk)
 
@@ -68,7 +68,7 @@ struct ClashInjectionCommandCard: View {
 
             if let onStartDemo, targets.contains(where: { $0.mode == "demo" && $0.status == "ready" }) {
                 Button(action: onStartDemo) {
-                    Text("Run demo investigation")
+                    Text("Run demo research task")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                 }
@@ -77,7 +77,7 @@ struct ClashInjectionCommandCard: View {
             }
 
             Text(readiness?.commandInitiationReady == true
-                 ? "The system is ready. Starting this command will create a bounded research session."
+                 ? "The system is ready. Starting this command will create a bounded research task."
                  : "Bootstrap must be ready before an investigation can begin.")
                 .font(.caption)
                 .foregroundStyle(Color.jeevesMutedText)
@@ -101,8 +101,8 @@ struct ClashInjectionCommandCard: View {
 
     private var buttonLabel: String {
         if let target = targets.first(where: { $0.id == selectedTargetId }) {
-            return "Start investigation: \(target.label)"
+            return "Start research task: \(target.label)"
         }
-        return "Start investigation"
+        return "Start research task"
     }
 }

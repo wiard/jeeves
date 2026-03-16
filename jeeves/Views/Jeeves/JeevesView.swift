@@ -3,6 +3,7 @@ import SwiftUI
 
 struct JeevesView: View {
     @Environment(GatewayManager.self) private var gateway
+    @Environment(ProposalPoller.self) private var poller
     @State private var briefingModel = DailyBriefingViewModel()
     @State private var selectedBriefingItem: DailyBriefingItem?
     @State private var knowledgeGraphData: KnowledgeGraphResponse?
@@ -11,145 +12,29 @@ struct JeevesView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if briefingModel.isLoading && !briefingModel.hasLoaded {
-                    ProgressView("Preparing Jeeves...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let briefing = briefingModel.briefing {
-                    ZStack {
-                        InstrumentBackdrop(
-                            colors: [
-                                Color(red: 0.96, green: 0.97, blue: 0.99),
-                                Color(red: 0.94, green: 0.96, blue: 0.99),
-                                Color(red: 0.98, green: 0.96, blue: 0.93)
-                            ]
-                        )
-                            .ignoresSafeArea()
+            ZStack {
+                InstrumentBackdrop(
+                    colors: [
+                        Color(red: 0.96, green: 0.97, blue: 0.99),
+                        Color(red: 0.94, green: 0.96, blue: 0.99),
+                        Color(red: 0.98, green: 0.96, blue: 0.93)
+                    ]
+                )
+                .ignoresSafeArea()
 
-                        ScrollView {
-                            VStack(spacing: 22) {
-                                InstrumentRoleHeader(
-                                    eyebrow: "Jeeves",
-                                    title: "Morning Intelligence",
-                                    summary: "An instrument for reasoning about what matters today.",
-                                    accent: .jeevesGold,
-                                    metrics: [
-                                        InstrumentRoleMetric(label: "World", value: "\(worldSituationItems(from: briefing).count)"),
-                                        InstrumentRoleMetric(label: "AI", value: "\(aiDevelopmentItems(from: briefing).count)"),
-                                        InstrumentRoleMetric(label: "Hints", value: "\(discoveryHintItems(from: briefing).count)")
-                                    ]
-                                )
-                                .calmAppear()
-
-                                IntelligencePhaseStrip(
-                                    currentStage: intelligencePhase(for: briefing),
-                                    summary: intelligencePhaseSummary(for: briefing)
-                                )
-                                .calmAppear(delay: 0.06)
-
-                                HumanMeaningPanel(
-                                    title: "What the morning brief means now",
-                                    accent: .jeevesGold,
-                                    explanation: HumanMeaningBuilder.morning(briefing: briefing)
-                                )
-                                .calmAppear(delay: 0.09)
-
-                                InstrumentSectionPanel(
-                                    eyebrow: "Section One",
-                                    title: "World signals",
-                                    subtitle: "Geopolitical movements that may reshape the operating environment.",
-                                    accent: .jeevesGold,
-                                    metric: "\(worldSituationItems(from: briefing).count)"
-                                ) {
-                                    ForEach(Array(worldSituationItems(from: briefing).enumerated()), id: \.element.id) { index, item in
-                                        Button {
-                                            selectedBriefingItem = item
-                                        } label: {
-                                            JeevesBriefingCard(
-                                                title: item.title,
-                                                summary: item.summary,
-                                                meta: item.why,
-                                                accent: .jeevesGold
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
-                                    }
-                                }
-                                .calmAppear(delay: 0.12)
-
-                                InstrumentSectionPanel(
-                                    eyebrow: "Section Two",
-                                    title: "AI frontier",
-                                    subtitle: "Research, models, and infrastructure shaping the AI race.",
-                                    accent: .blue,
-                                    metric: "\(aiDevelopmentItems(from: briefing).count)"
-                                ) {
-                                    ForEach(Array(aiDevelopmentItems(from: briefing).enumerated()), id: \.element.id) { index, signal in
-                                        Button {
-                                            selectedBriefingItem = dailyBriefingItem(from: signal)
-                                        } label: {
-                                            JeevesBriefingCard(
-                                                title: signal.title,
-                                                summary: signal.summary,
-                                                meta: signal.why,
-                                                accent: .blue
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
-                                    }
-                                }
-                                .calmAppear(delay: 0.12)
-
-                                InstrumentSectionPanel(
-                                    eyebrow: "Section Three",
-                                    title: "Emerging patterns",
-                                    subtitle: "Signals where multiple domains begin to intersect.",
-                                    accent: .purple,
-                                    metric: "\(discoveryHintItems(from: briefing).count)"
-                                ) {
-                                    ForEach(Array(discoveryHintItems(from: briefing).enumerated()), id: \.element.id) { index, hint in
-                                        Button {
-                                            if let objectId = hint.objectId {
-                                                fetchAndShowKnowledgeGraph(objectId: objectId)
-                                            } else {
-                                                NotificationCenter.default.post(name: .jeevesOpenObservatoryTab, object: nil)
-                                            }
-                                        } label: {
-                                            JeevesBriefingCard(
-                                                title: hint.title,
-                                                summary: hint.summary,
-                                                meta: hint.meta,
-                                                accent: .purple
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .calmAppear(delay: 0.12 + (0.07 * Double(index)))
-                                    }
-                                }
-                                .calmAppear(delay: 0.12)
-                            }
-                            .padding()
-                        }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        landingHeader
+                        primaryActions
+                        dailyBriefingCard
+                        systemStatusCard
+                        nextDecisionCard
                     }
-                } else if let errorMessage = briefingModel.errorMessage {
-                    JeevesEmptyState(
-                        icon: "sun.max",
-                        tint: .secondary.opacity(0.5),
-                        title: "Morning Intelligence is quiet.",
-                        subtitle: errorMessage
-                    )
-                } else {
-                    JeevesEmptyState(
-                        icon: "sun.max",
-                        tint: Color.jeevesGold.opacity(0.4),
-                        title: "Jeeves is warming up.",
-                        subtitle: "Your daily briefing will appear here shortly."
-                    )
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
                 }
             }
-            .navigationTitle("Briefing")
+            .navigationTitle("Jeeves")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -185,6 +70,246 @@ struct JeevesView: View {
                 )
             }
         }
+    }
+
+    private var landingHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Jeeves")
+                .font(.caption.monospaced())
+                .foregroundStyle(Color.jeevesSky)
+
+            Text("AI Observatory")
+                .font(.jeevesLargeTitle)
+
+            Text("Jeeves monitors global signals, detects emerging patterns and brings important decisions to your attention.")
+                .font(.jeevesBody)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(landingCardBackground(accent: .jeevesSky))
+    }
+
+    private var primaryActions: some View {
+        HStack(spacing: 12) {
+            Button {
+                Task {
+                    await briefingModel.load(gateway: gateway, force: true)
+                }
+            } label: {
+                Label("Start briefing", systemImage: "play.fill")
+                    .font(.jeevesBody.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.jeevesGold)
+
+            Button {
+                NotificationCenter.default.post(name: .jeevesOpenSystemTab, object: nil)
+            } label: {
+                Label("Connect system", systemImage: "gearshape")
+                    .font(.jeevesBody.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private var dailyBriefingCard: some View {
+        let briefing = briefingModel.briefing
+
+        return briefingLandingCard(
+            eyebrow: "Daily Briefing",
+            title: briefing?.headline ?? "Your briefing is preparing.",
+            subtitle: briefing?.statusLine ?? "Jeeves is gathering signals, patterns, and operator context."
+        ) {
+            if briefingModel.isLoading && briefing == nil {
+                ProgressView("Loading briefing...")
+                    .font(.footnote)
+            } else if let briefing {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(briefing.overview.prefix(2).enumerated()), id: \.offset) { _, item in
+                        briefingBullet(item)
+                    }
+
+                    Button("Open full Mission Control") {
+                        NotificationCenter.default.post(name: .jeevesOpenMissionControlTab, object: nil)
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+            } else if let errorMessage = briefingModel.errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var systemStatusCard: some View {
+        briefingLandingCard(
+            eyebrow: "System Status",
+            title: systemStatusTitle,
+            subtitle: systemStatusSubtitle
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                statusRow(label: "Connection", value: connectionSummary)
+                statusRow(label: "Signals", value: signalsSummary)
+                statusRow(label: "System", value: memorySummary)
+            }
+        }
+    }
+
+    private var nextDecisionCard: some View {
+        briefingLandingCard(
+            eyebrow: "Your Next Decision",
+            title: nextDecisionTitle,
+            subtitle: nextDecisionSubtitle
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                if let proposal = poller.pendingProposals.first {
+                    Text(proposal.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.jeevesInk)
+
+                    Text("This decision is waiting for your approval before anything can happen.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("No operator decision is waiting right now.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button("Open Mission Control") {
+                    NotificationCenter.default.post(name: .jeevesOpenMissionControlTab, object: nil)
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+    }
+
+    private func briefingLandingCard<Content: View>(
+        eyebrow: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(eyebrow.uppercased())
+                .font(.caption.monospaced())
+                .foregroundStyle(Color.jeevesGold)
+
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            content()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(landingCardBackground(accent: .jeevesGold))
+    }
+
+    private func briefingBullet(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(Color.jeevesGold)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func statusRow(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(.caption2.monospaced())
+                .foregroundStyle(Color.jeevesMutedText)
+            Text(value)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func landingCardBackground(accent: Color) -> some View {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Color.white.opacity(0.90))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(accent.opacity(0.16), lineWidth: 1)
+            )
+    }
+
+    private var systemStatusTitle: String {
+        if gateway.useMock || gateway.host.lowercased() == "mock" {
+            return "Demo mode is active."
+        }
+        if gateway.isConnected {
+            return "The governed system is connected."
+        }
+        return "The system is not connected yet."
+    }
+
+    private var systemStatusSubtitle: String {
+        if gateway.useMock || gateway.host.lowercased() == "mock" {
+            return "You are exploring Jeeves with safe preview data."
+        }
+        if gateway.isConnected {
+            return "Live signals, decisions, and knowledge can now reach the operator."
+        }
+        return "Connect your gateway in the System tab to see live signals and pending decisions."
+    }
+
+    private var connectionSummary: String {
+        if gateway.useMock || gateway.host.lowercased() == "mock" {
+            return "Mock preview"
+        }
+        if gateway.isConnected {
+            return "Connected to \(gateway.host):\(gateway.port)"
+        }
+        return "Not connected"
+    }
+
+    private var signalsSummary: String {
+        if let briefing = briefingModel.briefing {
+            return "\(briefing.counts.groupedSignals) important signals, \(briefing.counts.knowledgeSignals24h) recent knowledge updates"
+        }
+        return "Briefing data will summarize signals here."
+    }
+
+    private var memorySummary: String {
+        let knowledgeCount = poller.recentKnowledgeObjects.count
+        if knowledgeCount > 0 {
+            return "\(knowledgeCount) knowledge item\(knowledgeCount == 1 ? "" : "s") retained"
+        }
+        return "No retained knowledge is visible yet."
+    }
+
+    private var nextDecisionTitle: String {
+        let count = poller.pendingProposals.count
+        if count > 0 {
+            return "\(count) pending decision\(count == 1 ? "" : "s") need attention."
+        }
+        return "No pending decision is blocking the system."
+    }
+
+    private var nextDecisionSubtitle: String {
+        if poller.pendingProposals.count > 0 {
+            return "Jeeves has already filtered the queue down to governed work that needs your attention."
+        }
+        return "When something matters, Jeeves will bring the next governed decision here."
     }
 
     private func cappedBriefing(from briefing: DailyBriefing) -> DailyBriefing {

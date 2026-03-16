@@ -28,6 +28,7 @@ struct ContentView: View {
                     hasCompletedOnboarding = true
                     needsOnboarding = false
                     isBootstrappingConnection = false
+                    selectedTab = .chat
                 }
             } else if isBootstrappingConnection {
                 ProgressView("Initializing gateway connection...")
@@ -59,6 +60,12 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenObservatoryTab)) { _ in
             selectedTab = .observatory
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenSystemTab)) { _ in
+            selectedTab = .settings
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenMissionControlTab)) { _ in
+            selectedTab = .stream
         }
         .onChange(of: orchestrator.activeDirective) {
             guard let directive = orchestrator.activeDirective else { return }
@@ -135,7 +142,7 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $selectedTab) {
                 Section("Jeeves") {
-                    Label("Briefing", systemImage: "sun.max").tag(AppScreen.chat)
+                    Label("Jeeves", systemImage: "sun.max").tag(AppScreen.chat)
                     Label("Mission Control", systemImage: "scope").tag(AppScreen.stream)
                     Label("Observatory", systemImage: "binoculars").tag(AppScreen.observatory)
                     Label("Knowledge", systemImage: "book.closed.fill").tag(AppScreen.house)
@@ -146,7 +153,7 @@ struct ContentView: View {
                     Label("AI Browser", systemImage: AppScreen.aiBrowser.icon).tag(AppScreen.aiBrowser)
                 }
                 Section {
-                    Label(TextKeys.Settings.header, systemImage: AppScreen.settings.icon).tag(AppScreen.settings)
+                    Label("System", systemImage: AppScreen.settings.icon).tag(AppScreen.settings)
                 }
             }
             .listStyle(.sidebar)
@@ -157,7 +164,7 @@ struct ContentView: View {
         .tint(Color.jeevesSky)
         #else
         TabView(selection: $selectedTab) {
-            Tab("Briefing", systemImage: "sun.max", value: .chat) {
+            Tab("Jeeves", systemImage: "sun.max", value: .chat) {
                 JeevesView()
             }
             Tab("Mission Control", systemImage: "scope", value: .stream) {
@@ -169,7 +176,7 @@ struct ContentView: View {
             Tab("Knowledge", systemImage: "book.closed.fill", value: .house) {
                 KnowledgeBrowserView()
             }
-            Tab(TextKeys.Settings.header, systemImage: "gearshape.fill", value: .settings) {
+            Tab("System", systemImage: "gearshape.fill", value: .settings) {
                 SettingsView()
             }
         }
@@ -207,4 +214,9 @@ struct ContentView: View {
         case .settings:    SettingsView()
         }
     }
+}
+
+extension Notification.Name {
+    static let jeevesOpenSystemTab = Notification.Name("jeeves.openSystemTab")
+    static let jeevesOpenMissionControlTab = Notification.Name("jeeves.openMissionControlTab")
 }

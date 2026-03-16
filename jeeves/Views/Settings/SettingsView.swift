@@ -73,7 +73,7 @@ struct SettingsView: View {
                 }
                 .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Jeeves")
+            .navigationTitle("System")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

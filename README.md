@@ -16,7 +16,7 @@ It is not the governance kernel, the research site, or the trust marketplace.
 If you open Jeeves for the first time, the surfaces should be read like this:
 
 - `Mission Control`: the main operator surface for system state, pending work, and bounded investigations
-- `Briefing`: the conversational and morning-intelligence surface inside Jeeves
+- `Jeeves`: the daily briefing surface for signals, patterns, and decisions that need attention
 - `Observatory`: a read-only summary of patterns, signals, and discovery pressure
 - `Knowledge`: the retained library of discoveries, evidence, and code signals
 - `Settings`: connection, security, and gateway state

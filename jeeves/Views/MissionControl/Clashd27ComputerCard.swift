@@ -22,7 +22,7 @@ struct Clashd27ComputerCard: View {
                     .background(Capsule().fill(Color.jeevesMint.opacity(0.14)))
             }
 
-            Text("The analysis engine processes signals, explores patterns, and retains what mattered.")
+            Text("The analysis engine processes signals, explores patterns, and helps surface what needs attention.")
                 .font(.headline)
                 .foregroundStyle(Color.jeevesInk)
 
@@ -45,7 +45,7 @@ struct Clashd27ComputerCard: View {
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
 
-                Text("Exploring models: peak \(computer.cubeState.peakActiveCellCount) active cells, \(computer.cubeState.taskQueue.count) queued tasks, \(computer.cubeState.results.count) completed tasks.")
+                Text("Pattern detection: peak \(computer.cubeState.peakActiveCellCount) active cells, \(computer.cubeState.taskQueue.count) queued tasks, \(computer.cubeState.results.count) completed tasks.")
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -54,12 +54,12 @@ struct Clashd27ComputerCard: View {
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
 
-                Text("Cube: \(computer.cubeState.summary)")
+                Text("Exploration field: \(computer.cubeState.summary)")
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Residue memory: \(computer.residueMemory.summary)")
+                Text("System memory: \(computer.residueMemory.summary)")
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
                     .fixedSize(horizontal: false, vertical: true)

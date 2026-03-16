@@ -6,6 +6,7 @@ struct OnboardingView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
     @State private var currentPage = 0
+    @State private var showConnectionFields = false
     @State private var host = "localhost"
     @State private var port = "19001"
     @State private var isConnecting = false
@@ -31,8 +32,10 @@ struct OnboardingView: View {
                 case 0:
                     welcomePage
                 case 1:
-                    tabsPage
+                    signalPage
                 case 2:
+                    decisionPage
+                case 3:
                     connectionPage
                 default:
                     welcomePage
@@ -50,8 +53,6 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Page 1: Meet Jeeves
-
     private var welcomePage: some View {
         VStack(spacing: 24) {
             Image(systemName: "sun.max")
@@ -59,10 +60,13 @@ struct OnboardingView: View {
                 .foregroundStyle(Color.jeevesGold)
 
             VStack(spacing: 12) {
-                Text("Meet Jeeves")
+                Text("Welcome.")
                     .font(.jeevesLargeTitle)
 
-                Text("Jeeves monitors intelligence signals, surfaces what needs your decision, and tracks what your system learns.")
+                Text("I am Jeeves.")
+                    .font(.jeevesHeadline)
+
+                Text("Your AI observatory.")
                     .font(.jeevesBody)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -72,38 +76,47 @@ struct OnboardingView: View {
         .transition(.opacity.combined(with: .move(edge: .trailing)))
     }
 
-    // MARK: - Page 2: Tabs Explained
-
-    private var tabsPage: some View {
+    private var signalPage: some View {
         VStack(spacing: 28) {
-            Text("Three views, one picture")
+            Text("Jeeves watches the world for you.")
                 .font(.jeevesLargeTitle)
+                .multilineTextAlignment(.center)
 
-            VStack(alignment: .leading, spacing: 20) {
-                tabExplanation(
-                    icon: "sun.max",
-                    title: "Jeeves",
-                    description: "Your daily briefing. World signals, AI developments, and emerging patterns — summarized each morning."
-                )
-
-                tabExplanation(
-                    icon: "scope",
-                    title: "Mission Control",
-                    description: "The full dashboard. System status, pending decisions, research tasks, and live signal activity."
-                )
-
-                tabExplanation(
-                    icon: "binoculars",
-                    title: "Observatory",
-                    description: "Incoming signals and discovery patterns as they arrive from your connected sources."
-                )
+            VStack(spacing: 14) {
+                onboardingSignalRow(icon: "dot.radiowaves.left.and.right", title: "Signals")
+                onboardingSignalRow(icon: "point.3.connected.trianglepath.dotted", title: "Patterns")
+                onboardingSignalRow(icon: "sparkles", title: "Opportunities")
+                onboardingSignalRow(icon: "exclamationmark.triangle", title: "Risks")
             }
             .padding(.horizontal, 32)
         }
         .transition(.opacity.combined(with: .move(edge: .trailing)))
     }
 
-    // MARK: - Page 3: Connection
+    private var decisionPage: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 56, weight: .light, design: .rounded))
+                .foregroundStyle(Color.jeevesSky)
+
+            VStack(spacing: 12) {
+                Text("When something matters, Jeeves brings it to you.")
+                    .font(.jeevesLargeTitle)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Text("You decide what happens next.")
+                    .font(.jeevesHeadline)
+
+                Text("Jeeves can surface signals and research tasks, but governed actions still depend on your approval.")
+                    .font(.jeevesBody)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .trailing)))
+    }
 
     private var connectionPage: some View {
         VStack(spacing: 24) {
@@ -112,34 +125,37 @@ struct OnboardingView: View {
                 .foregroundStyle(Color.jeevesSky)
 
             VStack(spacing: 8) {
-                Text("Connect your gateway")
+                Text("Connect to your system")
                     .font(.jeevesLargeTitle)
+                    .multilineTextAlignment(.center)
 
-                Text("Enter the address of your gateway to see live data. Or try the demo to explore the interface first.")
+                Text("or explore with demo data.")
                     .font(.jeevesBody)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
             }
 
-            VStack(spacing: 12) {
-                TextField("Gateway address", text: $host)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.URL)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .accessibilityLabel("Gateway address")
+            if showConnectionFields {
+                VStack(spacing: 12) {
+                    TextField("Gateway address", text: $host)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .accessibilityLabel("Gateway address")
 
-                TextField("Port", text: $port)
-                    .textFieldStyle(.roundedBorder)
-                    #if os(iOS)
-                    .keyboardType(.numberPad)
-                    #endif
-                    .accessibilityLabel("Gateway port")
+                    TextField("Port", text: $port)
+                        .textFieldStyle(.roundedBorder)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                        .accessibilityLabel("Gateway port")
+                }
+                .padding(.horizontal, 40)
             }
-            .padding(.horizontal, 40)
 
             if let error = errorMessage {
                 Text(error)
@@ -148,24 +164,38 @@ struct OnboardingView: View {
             }
 
             VStack(spacing: 12) {
-                Button(action: connect) {
-                    if isConnecting {
-                        ProgressView()
-                            .tint(.white)
+                Button(showConnectionFields ? "Connect gateway" : "Connect gateway") {
+                    if showConnectionFields {
+                        connect()
                     } else {
-                        Text("Connect")
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showConnectionFields = true
+                        }
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.jeevesGold)
-                .disabled(host.isEmpty || isConnecting)
-                .accessibilityLabel("Connect to gateway")
+                .disabled(isConnecting || (showConnectionFields && host.isEmpty))
+                .accessibilityLabel("Connect gateway")
+                .overlay {
+                    if isConnecting {
+                        ProgressView()
+                            .tint(.white)
+                    }
+                }
 
-                Button("Try with demo data") {
+                Button("Try demo mode") {
                     connectDemo()
                 }
-                .font(.jeevesCaption)
-                .foregroundStyle(.secondary)
+                .buttonStyle(.bordered)
+
+                if showConnectionFields {
+                    Text("Enter your gateway only after the system explanation. Demo mode keeps the experience safe and local.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                }
             }
         }
         .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -175,7 +205,7 @@ struct OnboardingView: View {
 
     private var pageIndicator: some View {
         HStack(spacing: 8) {
-            ForEach(0..<3) { index in
+            ForEach(0..<4) { index in
                 Circle()
                     .fill(index == currentPage ? Color.jeevesGold : Color.jeevesGold.opacity(0.25))
                     .frame(width: 8, height: 8)
@@ -197,7 +227,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            if currentPage < 2 {
+            if currentPage < 3 {
                 Button("Next") {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         currentPage += 1
@@ -208,7 +238,7 @@ struct OnboardingView: View {
 
                 Button("Skip") {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        currentPage = 2
+                        currentPage = 3
                     }
                 }
                 .font(.jeevesCaption)
@@ -217,27 +247,25 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Helpers
-
-    private func tabExplanation(icon: String, title: String, description: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+    private func onboardingSignalRow(icon: String, title: String) -> some View {
+        HStack(spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 22, weight: .light))
-                .foregroundStyle(Color.jeevesGold)
+                .foregroundStyle(Color.jeevesSky)
                 .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.jeevesHeadline)
-                Text(description)
-                    .font(.jeevesCaption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
+            Text(title)
+                .font(.jeevesHeadline)
 
-    // MARK: - Connection Logic
+            Spacer()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.72))
+        )
+    }
 
     private func connect() {
         guard let portNum = Int(port), portNum > 0 else {

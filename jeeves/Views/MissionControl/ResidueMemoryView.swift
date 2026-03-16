@@ -18,13 +18,13 @@ struct ResidueMemoryView: View {
             }
 
             Text(entries.isEmpty
-                 ? "No meaningful consequence has been retained in memory yet."
-                 : "Meaningful consequences now remain in memory because this investigation produced residue.")
+                 ? "No important outcome has been retained in system memory yet."
+                 : "Important outcomes remain in system memory because this research task produced a meaningful consequence.")
                 .font(.headline)
                 .foregroundStyle(Color.jeevesInk)
 
             if entries.isEmpty {
-                Text("Residue is only written when the investigation produces a meaningful consequence such as a confirmed pattern, validated hypothesis, structural conflict, actionable opportunity, or operator decision.")
+                Text("System memory is updated only when a research task produces a meaningful consequence such as a confirmed pattern, validated hypothesis, structural conflict, actionable opportunity, or operator decision.")
                     .font(.footnote)
                     .foregroundStyle(Color.jeevesSubtleText)
                     .fixedSize(horizontal: false, vertical: true)

@@ -11,7 +11,7 @@ struct InvestigationCycleView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("INVESTIGATION CYCLE")
+                Text("RESEARCH TASK PROGRESS")
                     .font(.caption.monospaced())
                     .foregroundStyle(Color.jeevesGold)
 
@@ -60,7 +60,7 @@ struct InvestigationCycleView: View {
                     }
                 }
             } else {
-                Text("No active investigation yet. When you issue a command, the cycle will appear here.")
+                Text("No active research task yet. When you issue a command, progress will appear here.")
                     .font(.footnote)
                     .foregroundStyle(Color.jeevesSubtleText)
             }
@@ -89,8 +89,8 @@ struct InvestigationCycleView: View {
             }
 
             Text(residue.isEmpty
-                 ? "No meaningful consequence yet, so no residue has been emitted."
-                 : "Meaningful consequence was recorded, so residue now remains from this investigation.")
+                 ? "No meaningful consequence yet, so system memory has not changed."
+                 : "A meaningful consequence was recorded, so system memory now reflects this research task.")
                 .font(.caption)
                 .foregroundStyle(residue.isEmpty ? Color.jeevesMutedText : Color.jeevesGold)
                 .fixedSize(horizontal: false, vertical: true)
@@ -109,8 +109,8 @@ struct InvestigationCycleView: View {
 
     private var sessionHeadline: String {
         guard let session else {
-            return "The system is standing by for a command-driven investigation."
+            return "The system is standing by for a command-driven research task."
         }
-        return "\(session.command.target.label) is being examined because you started a research session."
+        return "\(session.command.target.label) is being examined because you started a research task."
     }
 }
