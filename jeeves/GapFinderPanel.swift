@@ -198,3 +198,74 @@ private struct GapFinderRow {
     let explanation: String
     let weight: Double
 }
+
+// MARK: - Candidate Structure List
+
+/// Shows gap-finder candidate structures that may become knowledge after human review.
+/// SAFETY: This view is strictly observational — it displays candidates
+/// but does NOT create proposals, trigger actions, or modify governance state.
+struct CandidateStructureList: View {
+    let candidates: [GapFinderCandidateStructure]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Candidate Knowledge Structures".uppercased())
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(Color.jeevesSky)
+
+            Text("Cross-domain evidence nearing structure. These candidates show where repeated signals may be strong enough to become future knowledge after human review.")
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(Array(candidates.prefix(4).enumerated()), id: \.element.id) { index, candidate in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(.jeevesMonoSmall.weight(.semibold))
+                            .foregroundStyle(Color.jeevesSky)
+                            .frame(width: 24, height: 24)
+                            .background(Color.jeevesSky.opacity(0.10))
+                            .clipShape(Circle())
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(candidate.title)
+                                .font(.jeevesBody.weight(.semibold))
+
+                            Text(candidate.domains.map { $0.replacingOccurrences(of: "-", with: " ").capitalized }.joined(separator: " · "))
+                                .font(.jeevesMonoSmall)
+                                .foregroundStyle(Color.jeevesSky)
+
+                            Text(candidate.question)
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            HStack(spacing: 8) {
+                                if !candidate.sharedMethods.isEmpty {
+                                    Text("method: \(candidate.sharedMethods.first!)")
+                                        .font(.jeevesMonoSmall)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text("evidence: \(candidate.evidenceCount)")
+                                    .font(.jeevesMonoSmall)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                .fill(Color.jeevesSky.opacity(0.15))
+                                .overlay(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                        .fill(Color.jeevesSky)
+                                        .frame(width: max(20, candidate.structureStrength * 120), height: 6)
+                                }
+                                .frame(width: 120, height: 6)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .briefingPanel()
+    }
+}

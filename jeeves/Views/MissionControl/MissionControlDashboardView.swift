@@ -5,6 +5,7 @@ struct MissionControlDashboardView: View {
     @Environment(ProposalPoller.self) private var poller
     @State private var model = MissionControlViewModel()
     @State private var injectionModel = ClashInjectionViewModel()
+    @State private var gapFinderModel = GapFinderViewModel()
     @State private var pulseActive = false
     @State private var selectedRecentSignal: RecentGridSignal?
 
@@ -79,7 +80,10 @@ struct MissionControlDashboardView: View {
                                 entries: injectionModel.residueMemory
                             )
                             liveSignalsCard
-                            if let gapFinder = poller.gapFinderSnapshot {
+                            if gapFinderModel.hasData {
+                                DiscoveryRadarStatsStrip(stats: gapFinderModel.stats)
+                            }
+                            if let gapFinder = poller.gapFinderSnapshot ?? gapFinderModel.snapshot {
                                 GapFinderPanel(
                                     eyebrow: "Discovery Radar",
                                     title: "Cross-domain matches and gap pressure",
@@ -682,7 +686,9 @@ struct MissionControlDashboardView: View {
 
     private func refresh() async {
         await poller.refresh(gateway: gateway)
-        await injectionModel.refresh(gateway: gateway)
+        async let injectionRefresh: () = injectionModel.refresh(gateway: gateway)
+        async let gapFinderRefresh: () = gapFinderModel.load(gateway: gateway, force: true)
+        _ = await (injectionRefresh, gapFinderRefresh)
         if let feed = poller.safeClashFeed {
             model.trustSnapshot = MissionControlViewModel.snapshot(from: feed)
             model.hasLoaded = true
@@ -1853,5 +1859,35 @@ private struct MissionControlCompactStageCard: View {
             return pulseActive ? 10 : 8
         }
         return 8
+    }
+}
+
+// MARK: - Discovery Radar Stats Strip
+
+struct DiscoveryRadarStatsStrip: View {
+    let stats: GapFinderStats
+
+    var body: some View {
+        HStack(spacing: 14) {
+            statPill(label: "Overlaps", value: "\(stats.matchCount)", tint: .jeevesSky)
+            statPill(label: "Gap candidates", value: "\(stats.gapCount)", tint: .jeevesGold)
+            statPill(label: "Emerging", value: "\(stats.emergingCount)", tint: .jeevesMint)
+            if stats.entropyConflicts > 0 {
+                statPill(label: "Entropy conflicts", value: "\(stats.entropyConflicts)", tint: .orange)
+            }
+            Spacer()
+        }
+        .briefingPanel()
+    }
+
+    private func statPill(label: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label.uppercased())
+                .font(.jeevesMonoSmall)
+                .foregroundStyle(tint)
+            Text(value)
+                .font(.jeevesHeadline)
+                .foregroundStyle(.primary)
+        }
     }
 }

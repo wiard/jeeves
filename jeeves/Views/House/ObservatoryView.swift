@@ -118,6 +118,10 @@ struct ObservatoryView: View {
                         }
 
                         if let gapFinder = model.gapFinder {
+                            let discoveryStats = GapFinderStats.from(snapshot: gapFinder)
+                            DiscoveryRadarStatsStrip(stats: discoveryStats)
+                                .calmAppear(delay: 0.203)
+
                             GapFinderPanel(
                                 eyebrow: "Discovery Section",
                                 title: "Top matches and top gaps",
@@ -126,6 +130,12 @@ struct ObservatoryView: View {
                                 snapshot: gapFinder
                             )
                             .calmAppear(delay: 0.205)
+
+                            let candidates = GapFinderCandidateStructure.from(snapshot: gapFinder)
+                            if !candidates.isEmpty {
+                                CandidateStructureList(candidates: candidates)
+                                    .calmAppear(delay: 0.207)
+                            }
                         }
 
                         if let civilization = model.civilization {

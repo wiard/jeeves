@@ -115,6 +115,12 @@ struct KnowledgeBrowserView: View {
                                         snapshot: gapFinder
                                     )
                                     .calmAppear(delay: 0.113)
+
+                                    let candidates = GapFinderCandidateStructure.from(snapshot: gapFinder)
+                                    if !candidates.isEmpty {
+                                        CandidateStructureList(candidates: candidates)
+                                            .calmAppear(delay: 0.114)
+                                    }
                                 }
 
                                 if let civilization = viewModel.civilizationSnapshot {
