@@ -27,11 +27,11 @@ struct JeevesView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         landingHeader
+                        pendingGapDecisionsSection
                         primaryActions
                         dailyBriefingCard
                         systemStatusCard
                         nextDecisionCard
-                        pendingGapDecisionsSection
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
