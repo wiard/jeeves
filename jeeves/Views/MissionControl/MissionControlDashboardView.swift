@@ -3,12 +3,14 @@ import SwiftUI
 struct MissionControlDashboardView: View {
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
+    @StateObject private var gapViewModel = GapProposalViewModel()
     @State private var model = MissionControlViewModel()
     @State private var injectionModel = ClashInjectionViewModel()
     @State private var gapFinderModel = GapFinderViewModel()
     @State private var pulseActive = false
     @State private var showAdvancedAnalysis = false
     @State private var selectedRecentSignal: RecentGridSignal?
+    @State private var showingGapReview = false
 
     var body: some View {
         NavigationStack {
@@ -223,6 +225,9 @@ struct MissionControlDashboardView: View {
                     regionResidue: regionResidue(for: signal.region)
                 )
             }
+            .sheet(isPresented: $showingGapReview) {
+                gapReviewSheet
+            }
         }
     }
 
@@ -400,13 +405,39 @@ struct MissionControlDashboardView: View {
     }
 
     private var pendingDecisionsSummaryCard: some View {
-        missionSummaryCard(
-            eyebrow: "Pending Decisions",
-            title: pendingDecisionsTitle,
-            subtitle: pendingDecisionsSubtitle,
-            accent: pendingApprovalCount > 0 ? .orange : .jeevesMint,
-            lines: pendingDecisionLines
-        )
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PENDING DECISIONS")
+                .font(.caption.monospaced())
+                .foregroundStyle(proposedGapCards.isEmpty ? Color.jeevesMint : .orange)
+
+            Text(pendingDecisionsTitle)
+                .font(.headline)
+                .foregroundStyle(Color.jeevesInk)
+
+            Text(pendingDecisionsSubtitle)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(pendingDecisionLines, id: \.self) { line in
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(Color.jeevesMutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if !proposedGapCards.isEmpty {
+                Button("Review all") {
+                    showingGapReview = true
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground(border: proposedGapCards.isEmpty ? .jeevesMint : .orange))
     }
 
     private var discoverySummaryCard: some View {
@@ -793,30 +824,35 @@ struct MissionControlDashboardView: View {
     }
 
     private var pendingDecisionsTitle: String {
-        if pendingApprovalCount == 0 {
+        let gapCount = proposedGapCards.count
+        if gapCount == 0 {
             return "No pending decisions"
         }
-        return "\(pendingApprovalCount) decision\(pendingApprovalCount == 1 ? "" : "s") need review"
+        return "\(gapCount) research gap\(gapCount == 1 ? "" : "s") need your review"
     }
 
     private var pendingDecisionsSubtitle: String {
-        if let proposal = poller.pendingProposals.first {
-            return proposal.title
+        if let topGap = proposedGapCards.first {
+            return topGap.title
         }
-        return "Nothing is waiting on operator approval right now."
+        return "No research gaps are waiting for operator review right now."
     }
 
     private var pendingDecisionLines: [String] {
-        if let proposal = poller.pendingProposals.first {
+        if let topGap = proposedGapCards.first {
             return [
-                "Risk: \(proposal.intent.risk)",
-                "Type: \(proposal.intent.kind)",
-                "The system cannot continue until you approve or deny."
+                topGap.hypothesisPreview,
+                topGap.confidenceLabel,
+                "Reviewing a gap keeps the next bounded research move inside governance."
             ]
         }
         return [
-            "The governed queue is clear."
+            "The governed gap queue is clear."
         ]
+    }
+
+    private var proposedGapCards: [OperatorGapCardModel] {
+        OperatorSignalPresentation.pendingGapCards(from: gapViewModel.proposedGaps)
     }
 
     private var discoveryTitle: String {
@@ -1150,11 +1186,74 @@ struct MissionControlDashboardView: View {
         async let injectionRefresh: () = injectionModel.refresh(gateway: gateway)
         async let gapFinderRefresh: () = gapFinderModel.load(gateway: gateway, force: true)
         _ = await (injectionRefresh, gapFinderRefresh)
+        gapViewModel.configure(gateway: gateway)
+        await gapViewModel.fetchGaps()
         if let feed = poller.safeClashFeed {
             model.trustSnapshot = MissionControlViewModel.snapshot(from: feed)
             model.hasLoaded = true
         } else {
             await model.load(gateway: gateway, force: true)
+        }
+    }
+
+    @ViewBuilder
+    private var gapReviewSheet: some View {
+        NavigationStack {
+            gapReviewSheetContent
+                .navigationTitle("Research Gaps")
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") {
+                            showingGapReview = false
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Refresh") {
+                            Task {
+                                gapViewModel.configure(gateway: gateway)
+                                await gapViewModel.fetchGaps()
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var gapReviewSheetContent: some View {
+        if gapViewModel.proposedGaps.isEmpty {
+            JeevesEmptyState(
+                icon: "checkmark.circle",
+                tint: .jeevesMint,
+                title: "No pending decisions",
+                subtitle: "The governed gap queue is clear."
+            )
+        } else {
+            List(gapViewModel.proposedGaps) { gap in
+                NavigationLink {
+                    GapDetailView(viewModel: gapViewModel, gap: gap)
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(OperatorSignalPresentation.plainGapTitle(gap.title))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.jeevesInk)
+
+                        Text(OperatorSignalPresentation.gapConfidenceLabel(score: gap.score))
+                            .font(.caption.monospaced())
+                            .foregroundStyle(Color.jeevesSky)
+
+                        Text(gap.hypothesis)
+                            .font(.footnote)
+                            .foregroundStyle(Color.jeevesSubtleText)
+                            .lineLimit(2)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .listStyle(.plain)
         }
     }
 

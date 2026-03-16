@@ -88,6 +88,15 @@ struct OperatorDecisionAttentionItem: Identifiable, Sendable {
     let route: OperatorSignalRoute
 }
 
+struct OperatorGapCardModel: Identifiable, Sendable {
+    let id: String
+    let title: String
+    let hypothesisPreview: String
+    let confidenceLabel: String
+    let statusLabel: String
+    let score: Double?
+}
+
 enum OperatorSignalPresentation {
     static func briefingItems(from briefing: DailyBriefing) -> [OperatorBriefingItem] {
         var items = briefing.attention.map {
@@ -334,6 +343,41 @@ enum OperatorSignalPresentation {
             recencyLabel: latestSignalRecency(from: runtime),
             route: .radar
         )
+    }
+
+    static func pendingGapCards(from gaps: [GapProposal]) -> [OperatorGapCardModel] {
+        gaps
+            .sorted { ($0.score ?? 0) > ($1.score ?? 0) }
+            .map { gap in
+                OperatorGapCardModel(
+                    id: gap.gapId,
+                    title: gap.displayTitle,
+                    hypothesisPreview: compactSentence(gap.displayHypothesis, maxLength: 120),
+                    confidenceLabel: gap.confidenceLabel,
+                    statusLabel: humanizePhrase(gap.status),
+                    score: gap.score
+                )
+            }
+    }
+
+    static func plainGapTitle(_ title: String) -> String {
+        let stripped = title.replacingOccurrences(
+            of: "Gap proposal: ",
+            with: "",
+            options: [.caseInsensitive]
+        )
+        return compactTitle(stripped)
+    }
+
+    static func gapConfidenceLabel(score: Double?) -> String {
+        switch score ?? 0 {
+        case 0.7...:
+            return "High confidence"
+        case 0.5..<0.7:
+            return "Medium confidence"
+        default:
+            return "Low confidence"
+        }
     }
 
     private static func mapBriefingItem(_ item: DailyBriefingItem, generatedAtIso: String) -> OperatorBriefingItem {

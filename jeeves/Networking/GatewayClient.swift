@@ -35,6 +35,22 @@ actor GatewayClient {
         return try await post("/api/gaps/decide", body: body)
     }
 
+    func decideGapProposal(id: String, decision: String) async throws -> GapProposalDecisionResponse {
+        let body = GapProposalDecisionRequest(id: id, decision: decision)
+        let payload = try JSONEncoder().encode(body)
+        let (data, _) = try await request(path: "/api/gaps/decide", method: "POST", body: payload)
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(GapProposalDecisionResponse.self, from: data) {
+            return direct
+        }
+        if let legacy = try? decoder.decode(GapDecisionResponse.self, from: data) {
+            return GapProposalDecisionResponse(ok: legacy.ok, status: legacy.status, reason: legacy.reason)
+        }
+
+        return GapProposalDecisionResponse(ok: true, status: nil, reason: nil)
+    }
+
     func fetchProposals() async throws -> [Proposal] {
         if let direct: [Proposal] = try? await get("/api/agents/proposals") {
             return direct
@@ -58,6 +74,25 @@ actor GatewayClient {
             return envelope.resolved
         }
         return []
+    }
+
+    func fetchGapProposals(limit: Int = 50) async throws -> GapProposalResponse {
+        let boundedLimit = max(1, min(limit, 100))
+        let (data, _) = try await request(
+            path: "/api/gaps",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode(GapProposalResponse.self, from: data) {
+            return direct
+        }
+        if let gaps = try? decoder.decode([GapProposal].self, from: data) {
+            return GapProposalResponse(ok: true, gaps: gaps, statusSummary: GapStatusSummary.from(gaps: gaps))
+        }
+
+        throw URLError(.cannotParseResponse)
     }
 
     func fetchExtensions() async throws -> [ExtensionProposal] {

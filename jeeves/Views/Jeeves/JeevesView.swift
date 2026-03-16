@@ -4,8 +4,10 @@ import SwiftUI
 struct JeevesView: View {
     @Environment(GatewayManager.self) private var gateway
     @Environment(ProposalPoller.self) private var poller
+    @StateObject private var gapViewModel = GapProposalViewModel()
     @State private var briefingModel = DailyBriefingViewModel()
     @State private var selectedBriefingItem: DailyBriefingItem?
+    @State private var selectedGap: GapProposal?
     @State private var knowledgeGraphData: KnowledgeGraphResponse?
     @State private var showKnowledgeGraph = false
     @State private var loadingKnowledgeGraph = false
@@ -29,6 +31,7 @@ struct JeevesView: View {
                         dailyBriefingCard
                         systemStatusCard
                         nextDecisionCard
+                        pendingGapDecisionsSection
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
@@ -40,16 +43,28 @@ struct JeevesView: View {
             #endif
             .refreshable {
                 await briefingModel.load(gateway: gateway, force: true)
+                gapViewModel.configure(gateway: gateway)
+                await gapViewModel.fetchGaps()
             }
             .task {
+                gapViewModel.configure(gateway: gateway)
                 if !briefingModel.hasLoaded {
                     await briefingModel.load(gateway: gateway)
                 }
+                await gapViewModel.fetchGaps()
+
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(300))
+                    gapViewModel.configure(gateway: gateway)
+                    await gapViewModel.fetchGaps()
+                }
             }
             .onChange(of: gateway.isConnected) {
+                gapViewModel.configure(gateway: gateway)
                 if gateway.isConnected {
                     Task {
                         await briefingModel.load(gateway: gateway, force: true)
+                        await gapViewModel.fetchGaps()
                     }
                 }
             }
@@ -68,6 +83,9 @@ struct JeevesView: View {
                     graphData: knowledgeGraphData,
                     isLoading: loadingKnowledgeGraph
                 )
+            }
+            .sheet(item: $selectedGap) { gap in
+                GapDetailView(viewModel: gapViewModel, gap: gap)
             }
         }
     }
@@ -212,6 +230,34 @@ struct JeevesView: View {
         }
     }
 
+    @ViewBuilder
+    private var pendingGapDecisionsSection: some View {
+        let cards = OperatorSignalPresentation.pendingGapCards(from: gapViewModel.proposedGaps)
+
+        if !cards.isEmpty {
+            briefingLandingCard(
+                eyebrow: "Pending Decisions",
+                title: "\(cards.count) research gap\(cards.count == 1 ? "" : "s") need review",
+                subtitle: "These governed gaps were surfaced by the kernel and are waiting for an operator decision."
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let summary = gapViewModel.statusSummary {
+                        HStack(spacing: 8) {
+                            briefingMetaPill("\(summary.detected) detected", tint: .jeevesSky)
+                            briefingMetaPill("\(summary.proposed) proposed", tint: .jeevesGold)
+                            briefingMetaPill("\(summary.approved) approved", tint: .jeevesMint)
+                            briefingMetaPill("\(summary.denied) denied", tint: .orange)
+                        }
+                    }
+
+                    ForEach(cards) { card in
+                        pendingGapCard(card)
+                    }
+                }
+            }
+        }
+    }
+
     private func briefingLandingCard<Content: View>(
         eyebrow: String,
         title: String,
@@ -298,6 +344,43 @@ struct JeevesView: View {
         )
     }
 
+    private func pendingGapCard(_ card: OperatorGapCardModel) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(card.title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.jeevesInk)
+
+            HStack(spacing: 8) {
+                briefingMetaPill(card.confidenceLabel, tint: gapTint(for: card.score))
+                briefingMetaPill(card.statusLabel, tint: .jeevesSky)
+            }
+
+            Text(card.hypothesisPreview)
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+
+                Button("Review") {
+                    selectedGap = gapViewModel.proposedGaps.first { $0.id == card.id }
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.74))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(gapTint(for: card.score).opacity(0.14), lineWidth: 1)
+                )
+        )
+    }
+
     private func briefingMetaPill(_ label: String, tint: Color) -> some View {
         Text(label)
             .font(.caption2.monospaced())
@@ -318,6 +401,17 @@ struct JeevesView: View {
             return .jeevesGold
         case .needsAttention:
             return .orange
+        }
+    }
+
+    private func gapTint(for score: Double?) -> Color {
+        switch score ?? 0 {
+        case 0.7...:
+            return .jeevesMint
+        case 0.5..<0.7:
+            return .jeevesGold
+        default:
+            return .jeevesSky
         }
     }
 
