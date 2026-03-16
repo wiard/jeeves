@@ -13,7 +13,7 @@ struct JeevesView: View {
         NavigationStack {
             Group {
                 if briefingModel.isLoading && !briefingModel.hasLoaded {
-                    ProgressView("Jeeves voorbereiden...")
+                    ProgressView("Preparing Jeeves...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let briefing = briefingModel.briefing {
                     ZStack {
@@ -144,12 +144,12 @@ struct JeevesView: View {
                     JeevesEmptyState(
                         icon: "sun.max",
                         tint: Color.jeevesGold.opacity(0.4),
-                        title: "Morning Intelligence is preparing.",
-                        subtitle: "Fresh signals and evidence will settle here when the system has something worth your attention."
+                        title: "Jeeves is warming up.",
+                        subtitle: "Your daily briefing will appear here shortly."
                     )
                 }
             }
-            .navigationTitle("Jeeves")
+            .navigationTitle("Briefing")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

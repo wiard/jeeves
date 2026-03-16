@@ -10,9 +10,11 @@ struct ContentView: View {
     @Environment(ProposalPoller.self) private var poller
     @Environment(JeevesOrchestrator.self) private var orchestrator
     @Query private var connections: [GatewayConnection]
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var hasBootstrappedStartupConnection = false
     @State private var isBootstrappingConnection = true
-    @State private var selectedTab: AppScreen = .stream
+    @State private var needsOnboarding = false
+    @State private var selectedTab: AppScreen = .chat
     @State private var auxiliaryScreen: AppScreen?
 
     private var primaryTabs: Set<AppScreen> {
@@ -21,8 +23,14 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if isBootstrappingConnection {
-                ProgressView("Gateway verbinding initialiseren...")
+            if !hasCompletedOnboarding || needsOnboarding {
+                OnboardingView {
+                    hasCompletedOnboarding = true
+                    needsOnboarding = false
+                    isBootstrappingConnection = false
+                }
+            } else if isBootstrappingConnection {
+                ProgressView("Initializing gateway connection...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 mainTabView
@@ -31,6 +39,11 @@ struct ContentView: View {
         .onAppear {
             guard !hasBootstrappedStartupConnection else { return }
             hasBootstrappedStartupConnection = true
+
+            if !hasCompletedOnboarding {
+                isBootstrappingConnection = false
+                return
+            }
 
             Task { @MainActor in
                 await bootstrapStartupConnection()
@@ -100,18 +113,8 @@ struct ContentView: View {
             return
         }
 
-        let connection = upsertConnection(
-            host: "mock",
-            port: Self.localDefaultPort,
-            channelId: "ios-app"
-        )
-        gateway.useMock = true
-        gateway.connect(
-            host: "mock",
-            port: Self.localDefaultPort,
-            token: "mock",
-            channelId: connection.channelId
-        )
+        // No gateway config found — route to onboarding
+        needsOnboarding = true
     }
 
     @MainActor
@@ -132,14 +135,14 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $selectedTab) {
                 Section("Jeeves") {
-                    Label("Jeeves", systemImage: "sun.max").tag(AppScreen.chat)
+                    Label("Briefing", systemImage: "sun.max").tag(AppScreen.chat)
                     Label("Mission Control", systemImage: "scope").tag(AppScreen.stream)
                     Label("Observatory", systemImage: "binoculars").tag(AppScreen.observatory)
                     Label("Knowledge", systemImage: "book.closed.fill").tag(AppScreen.house)
                 }
                 Section("More") {
                     Label(TextKeys.Lobby.header, systemImage: AppScreen.lobby.icon).tag(AppScreen.lobby)
-                    Label("Logboek", systemImage: AppScreen.logbook.icon).tag(AppScreen.logbook)
+                    Label("Logbook", systemImage: AppScreen.logbook.icon).tag(AppScreen.logbook)
                     Label("AI Browser", systemImage: AppScreen.aiBrowser.icon).tag(AppScreen.aiBrowser)
                 }
                 Section {
@@ -154,11 +157,11 @@ struct ContentView: View {
         .tint(Color.jeevesSky)
         #else
         TabView(selection: $selectedTab) {
+            Tab("Briefing", systemImage: "sun.max", value: .chat) {
+                JeevesView()
+            }
             Tab("Mission Control", systemImage: "scope", value: .stream) {
                 MissionControlDashboardView()
-            }
-            Tab("Jeeves", systemImage: "sun.max", value: .chat) {
-                JeevesView()
             }
             Tab("Observatory", systemImage: "binoculars", value: .observatory) {
                 ObservatoryView()

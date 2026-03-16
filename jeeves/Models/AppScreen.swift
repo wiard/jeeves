@@ -18,12 +18,12 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         switch self {
         case .stream:      return "Mission Control"
         case .lobby:       return "Lobby"
-        case .chat:        return "Jeeves"
+        case .chat:        return "Briefing"
         case .observatory: return "Observatory"
-        case .house:       return "Huis"
-        case .logbook:     return "Logboek"
+        case .house:       return "Knowledge"
+        case .logbook:     return "Logbook"
         case .aiBrowser:   return "AI Browser"
-        case .settings:    return "Instellingen"
+        case .settings:    return "Settings"
         }
     }
 
@@ -46,7 +46,7 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .stream:      return ["discovery", "governance", "knowledge", "trust", "proposals", "radar", "emergence", "signals", "discoveries"]
         case .lobby:       return ["gaps", "extensions", "challenges", "environments"]
         case .observatory: return ["oracle", "loop", "fabric", "lobby", "signals", "knowledge", "radar", "discovery", "alerts"]
-        case .house:       return ["kernel", "budget", "channels", "killSwitch"]
+        case .house:       return ["library", "discoveries", "evidence", "codeSignals", "memory"]
         case .aiBrowser:   return ["marketplace", "deployments", "myAgents"]
         case .logbook:     return []
         case .chat:        return []

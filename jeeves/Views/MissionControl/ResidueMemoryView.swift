@@ -6,7 +6,7 @@ struct ResidueMemoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("TURING RESIDUE MEMORY")
+                Text("SYSTEM MEMORY")
                     .font(.caption.monospaced())
                     .foregroundStyle(Color.jeevesSky)
 

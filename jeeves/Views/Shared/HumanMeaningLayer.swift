@@ -66,7 +66,7 @@ enum HumanMeaningBuilder {
                     primary: latestKnowledgeTitle.map { "\"\($0)\" is one of the newest knowledge objects now anchoring the picture." },
                     fallback: "Recent approvals and residue have produced fresh knowledge objects that are ready for inspection."
                 ),
-                whyItMattersNow: "Visible knowledge reduces uncertainty for the next proposal and helps the operator review with more context.",
+                whyItMattersNow: "Visible knowledge reduces uncertainty for the next proposal and helps you review with more context.",
                 uncertainty: "The knowledge layer is growing, but its broader predictive value still depends on future repetition.",
                 operatorFocus: "Open the newest knowledge object and inspect its linked evidence before treating it as settled guidance."
             )
@@ -75,7 +75,7 @@ enum HumanMeaningBuilder {
         return HumanMeaningExplanation(
             summary: "The governed loop is calm right now, with no urgent pressure demanding immediate operator action.",
             whySurfaced: "Mission Control is quiet because no part of the loop currently exceeds its normal attention threshold.",
-            whyItMattersNow: "A calm state gives the operator room to review the field before new pressure arrives.",
+            whyItMattersNow: "A calm state gives you room to review the field before new pressure arrives.",
             uncertainty: "Low activity may mean the system is quiet, or simply that the next meaningful signal has not arrived yet.",
             operatorFocus: "Keep an eye on discovery pressure and the approval queue for the next change in tempo."
         )
@@ -97,7 +97,7 @@ enum HumanMeaningBuilder {
         let summary: String
         switch intelligence.stagePhase {
         case .safety:
-            summary = "The system is still separating real signal from risk before it asks more of the operator."
+            summary = "The system is still separating real signal from risk before it asks more of you."
         case .define:
             summary = "The field is becoming more structured, and noisy signals are starting to support clearer proposals."
         case .investigate:
@@ -118,7 +118,7 @@ enum HumanMeaningBuilder {
             whyItMattersNow: focusLine(
                 primary: topSignalFamily.map { "This matters now because \($0.lowercased()) signals are accumulating enough residue to improve future prioritization." },
                 secondary: entropy.map { entropy in
-                    "This matters now because entropy is \(entropy.trend.lowercased()), which changes how much trust the operator can place in the current structure."
+                    "This matters now because entropy is \(entropy.trend.lowercased()), which changes how much trust you can place in the current structure."
                 },
                 fallback: "This matters now because repeated structure is beginning to compete with raw noise."
             ),
@@ -170,10 +170,10 @@ enum HumanMeaningBuilder {
             summary: "\"\(cleanTitle(lead.title))\" is leading the current knowledge view, with \(objects.count) recent object\(objects.count == 1 ? "" : "s") available for inspection.",
             whySurfaced: sourceCount > 0 || linkedCount > 0
                 ? "It was surfaced because it is recent and already linked to \(max(sourceCount, linkedCount)) supporting \(max(sourceCount, linkedCount) == 1 ? "reference" : "references")."
-                : "It was surfaced because it is one of the newest governed knowledge objects now available to the operator.",
+                : "It was surfaced because it is one of the newest governed knowledge objects now available to you.",
             whyItMattersNow: stage == .investigate
                 ? "This matters now because the system is already converting approved interaction into visible structure."
-                : "This matters now because recent knowledge gives the operator more context before the next approval decision.",
+                : "This matters now because recent knowledge gives you more context before the next approval decision.",
             uncertainty: sourceCount == 0 && linkedCount == 0
                 ? "The object is visible, but its supporting context is still thin."
                 : "The object is linked, but the broader pattern may still widen as more residue arrives.",
@@ -265,16 +265,16 @@ struct HumanMeaningPanel: View {
 
     var body: some View {
         InstrumentSectionPanel(
-            eyebrow: "Human Meaning",
+            eyebrow: "Context",
             title: title,
-            subtitle: "Short operator context grounded in the current governed state.",
+            subtitle: "What this means for you right now.",
             accent: accent
         ) {
-            meaningRow("Meaning", explanation.summary)
+            meaningRow("Summary", explanation.summary)
             meaningRow("Why surfaced", explanation.whySurfaced)
             meaningRow("Why it matters now", explanation.whyItMattersNow)
             meaningRow("Uncertainty", explanation.uncertainty)
-            meaningRow("Operator focus", explanation.operatorFocus)
+            meaningRow("Your focus", explanation.operatorFocus)
         }
     }
 

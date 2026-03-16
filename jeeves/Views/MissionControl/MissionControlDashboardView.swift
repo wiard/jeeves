@@ -7,6 +7,7 @@ struct MissionControlDashboardView: View {
     @State private var injectionModel = ClashInjectionViewModel()
     @State private var gapFinderModel = GapFinderViewModel()
     @State private var pulseActive = false
+    @State private var showFullDashboard = false
     @State private var selectedRecentSignal: RecentGridSignal?
 
     var body: some View {
@@ -41,110 +42,147 @@ struct MissionControlDashboardView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {
+                            // Always visible: orientation + status + action card
+                            MissionControlOrientationCard(
+                                connectionLine: connectionLine,
+                                systemLine: missionControlSystemLine,
+                                nextStepLine: missionControlNextStepLine,
+                                primaryActions: missionControlPrimaryActions
+                            )
                             systemStatusCard
-                            SystemReadinessCard(
-                                readiness: injectionModel.readiness,
-                                isLoading: injectionModel.isLoading,
-                                errorText: injectionModel.errorText
-                            )
-                            Clashd27ComputerCard(
-                                computer: injectionModel.computer,
-                                isLoading: injectionModel.isLoading,
-                                errorText: injectionModel.errorText
-                            )
-                            ClashInjectionCommandCard(
-                                readiness: injectionModel.readiness,
-                                targets: injectionModel.availableTargets,
-                                selectedTargetId: $injectionModel.selectedTargetId,
-                                selectedIntent: $injectionModel.selectedIntent,
-                                notes: $injectionModel.notes,
-                                isStarting: injectionModel.isStarting
-                            ) {
-                                Task {
-                                    await injectionModel.startInvestigation(gateway: gateway)
-                                }
-                            } onStartDemo: {
-                                Task {
-                                    await injectionModel.startDemoInvestigation(gateway: gateway)
-                                }
-                            }
-                            InvestigationCycleView(
-                                session: injectionModel.session,
-                                computer: injectionModel.computer,
-                                cycle: injectionModel.cycle,
-                                findings: injectionModel.findings,
-                                consequences: injectionModel.consequences,
-                                residue: injectionModel.residue
-                            )
-                            ResidueMemoryView(
-                                entries: injectionModel.residueMemory
-                            )
-                            liveSignalsCard
-                            if gapFinderModel.hasData {
-                                DiscoveryRadarStatsStrip(stats: gapFinderModel.stats)
-                            }
-                            if let gapFinder = poller.gapFinderSnapshot ?? gapFinderModel.snapshot {
-                                GapFinderPanel(
-                                    eyebrow: "Discovery Radar",
-                                    title: "Cross-domain matches and gap pressure",
-                                    subtitle: "Top overlaps, bridge questions, and entropy conflicts derived from live signals. The panel stays observational and never changes authority.",
-                                    accent: .jeevesSky,
-                                    snapshot: gapFinder
-                                )
-                            }
-                            IntelligencePhaseStrip(
-                                currentStage: intelligencePhase,
-                                summary: intelligencePhaseSummary
-                            )
-                            humanMeaningCard
-                            if let operatorMemory = poller.operatorMemorySnapshot {
-                                OperatorMemoryPanel(
-                                    title: "What the operator repeatedly values",
-                                    accent: .jeevesMint,
-                                    memory: operatorMemory
-                                )
-                            }
-                            if let collectiveMemory = poller.collectiveMemorySnapshot {
-                                CollectiveMemoryPanel(
-                                    title: "What the system keeps learning together",
-                                    accent: .jeevesGold,
-                                    memory: collectiveMemory
-                                )
-                            }
-                            if let civilization = poller.civilizationSnapshot {
-                                CivilizationPanel(
-                                    title: "What now matters beyond the moment",
-                                    accent: .jeevesSky,
-                                    snapshot: civilization
-                                )
-                            }
-                            if let planetary = poller.planetarySnapshot {
-                                PlanetaryPanel(
-                                    title: "What is becoming globally important",
-                                    accent: .jeevesMint,
-                                    snapshot: planetary
-                                )
-                            }
-                            if let cosmic = poller.cosmicSnapshot {
-                                CosmicPanel(
-                                    title: "What may matter across generations",
-                                    accent: .jeevesGold,
-                                    snapshot: cosmic
-                                )
-                            }
-                            bootstrapCard
-                            autonomyCard
-                            realityAlignmentCard
-                            walletCard
-                            residueCard
-                            recentSignalsCard
-                            SystemLoopStrip(snapshot: systemLoopSnapshot)
+                            activeActionCard
 
-                            MissionControlCompactStageCard(card: discoveryCard, isActive: systemLoopSnapshot.currentStage == .discovery)
-                            MissionControlCompactStageCard(card: proposalCard, isActive: systemLoopSnapshot.currentStage == .proposal)
-                            MissionControlCompactStageCard(card: approvalCard, isActive: systemLoopSnapshot.currentStage == .approval)
-                            MissionControlCompactStageCard(card: actionCard, isActive: systemLoopSnapshot.currentStage == .action)
-                            MissionControlCompactStageCard(card: knowledgeCard, isActive: systemLoopSnapshot.currentStage == .knowledge)
+                            // Toggle for full dashboard
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showFullDashboard.toggle()
+                                }
+                            } label: {
+                                HStack {
+                                    Text(showFullDashboard ? "Hide full dashboard" : "Show full dashboard")
+                                        .font(.jeevesBody.weight(.medium))
+                                    Image(systemName: showFullDashboard ? "chevron.up" : "chevron.down")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundStyle(Color.jeevesSky)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(Color.jeevesSky.opacity(0.08))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .stroke(Color.jeevesSky.opacity(0.18), lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            if showFullDashboard {
+                                SystemReadinessCard(
+                                    readiness: injectionModel.readiness,
+                                    isLoading: injectionModel.isLoading,
+                                    errorText: injectionModel.errorText
+                                )
+                                Clashd27ComputerCard(
+                                    computer: injectionModel.computer,
+                                    isLoading: injectionModel.isLoading,
+                                    errorText: injectionModel.errorText
+                                )
+                                ClashInjectionCommandCard(
+                                    readiness: injectionModel.readiness,
+                                    targets: injectionModel.availableTargets,
+                                    selectedTargetId: $injectionModel.selectedTargetId,
+                                    selectedIntent: $injectionModel.selectedIntent,
+                                    notes: $injectionModel.notes,
+                                    isStarting: injectionModel.isStarting
+                                ) {
+                                    Task {
+                                        await injectionModel.startInvestigation(gateway: gateway)
+                                    }
+                                } onStartDemo: {
+                                    Task {
+                                        await injectionModel.startDemoInvestigation(gateway: gateway)
+                                    }
+                                }
+                                InvestigationCycleView(
+                                    session: injectionModel.session,
+                                    computer: injectionModel.computer,
+                                    cycle: injectionModel.cycle,
+                                    findings: injectionModel.findings,
+                                    consequences: injectionModel.consequences,
+                                    residue: injectionModel.residue
+                                )
+                                ResidueMemoryView(
+                                    entries: injectionModel.residueMemory
+                                )
+                                liveSignalsCard
+                                if gapFinderModel.hasData {
+                                    DiscoveryRadarStatsStrip(stats: gapFinderModel.stats)
+                                }
+                                if let gapFinder = poller.gapFinderSnapshot ?? gapFinderModel.snapshot {
+                                    GapFinderPanel(
+                                        eyebrow: "Signal Scanner",
+                                        title: "Patterns forming across topics",
+                                        subtitle: "Top overlaps, bridge questions, and conflicts derived from live signals. The panel stays observational and never changes authority.",
+                                        accent: .jeevesSky,
+                                        snapshot: gapFinder
+                                    )
+                                }
+                                IntelligencePhaseStrip(
+                                    currentStage: intelligencePhase,
+                                    summary: intelligencePhaseSummary
+                                )
+                                humanMeaningCard
+                                if let operatorMemory = poller.operatorMemorySnapshot {
+                                    OperatorMemoryPanel(
+                                        title: "What you repeatedly focus on",
+                                        accent: .jeevesMint,
+                                        memory: operatorMemory
+                                    )
+                                }
+                                if let collectiveMemory = poller.collectiveMemorySnapshot {
+                                    CollectiveMemoryPanel(
+                                        title: "What the system keeps learning together",
+                                        accent: .jeevesGold,
+                                        memory: collectiveMemory
+                                    )
+                                }
+                                if let civilization = poller.civilizationSnapshot {
+                                    CivilizationPanel(
+                                        title: "Societal signals",
+                                        accent: .jeevesSky,
+                                        snapshot: civilization
+                                    )
+                                }
+                                if let planetary = poller.planetarySnapshot {
+                                    PlanetaryPanel(
+                                        title: "Global patterns",
+                                        accent: .jeevesMint,
+                                        snapshot: planetary
+                                    )
+                                }
+                                if let cosmic = poller.cosmicSnapshot {
+                                    CosmicPanel(
+                                        title: "Long-term trends",
+                                        accent: .jeevesGold,
+                                        snapshot: cosmic
+                                    )
+                                }
+                                bootstrapCard
+                                autonomyCard
+                                realityAlignmentCard
+                                walletCard
+                                residueCard
+                                recentSignalsCard
+                                SystemLoopStrip(snapshot: systemLoopSnapshot)
+
+                                MissionControlCompactStageCard(card: discoveryCard, isActive: systemLoopSnapshot.currentStage == .discovery)
+                                MissionControlCompactStageCard(card: proposalCard, isActive: systemLoopSnapshot.currentStage == .proposal)
+                                MissionControlCompactStageCard(card: approvalCard, isActive: systemLoopSnapshot.currentStage == .approval)
+                                MissionControlCompactStageCard(card: actionCard, isActive: systemLoopSnapshot.currentStage == .action)
+                                MissionControlCompactStageCard(card: knowledgeCard, isActive: systemLoopSnapshot.currentStage == .knowledge)
+                            }
                         }
                         .frame(maxWidth: 560, alignment: .leading)
                         .padding(.horizontal, 16)
@@ -183,6 +221,102 @@ struct MissionControlDashboardView: View {
                     regionResidue: regionResidue(for: signal.region)
                 )
             }
+        }
+    }
+
+    /// The one card that currently requires user action.
+    @ViewBuilder
+    private var activeActionCard: some View {
+        if pendingApprovalCount > 0 {
+            // Pending approvals need attention
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("ACTION NEEDED")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.orange)
+
+                    Spacer()
+
+                    Text("\(pendingApprovalCount) PENDING")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color.jeevesInk)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.orange.opacity(0.14)))
+                }
+
+                Text("\(pendingApprovalCount) decision\(pendingApprovalCount == 1 ? "" : "s") waiting for your review")
+                    .font(.headline)
+                    .foregroundStyle(Color.jeevesInk)
+
+                Text("Pending decisions need your approval before the system can proceed. Open the full dashboard to review them.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesSubtleText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground(border: .orange))
+        } else if injectionModel.session != nil, injectionModel.session?.status != "completed", injectionModel.session?.status != "failed" {
+            // Active investigation
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("ACTIVE RESEARCH")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color.jeevesGold)
+
+                    Spacer()
+
+                    Text("IN PROGRESS")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color.jeevesInk)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.jeevesGold.opacity(0.14)))
+                }
+
+                Text("A research task is currently running")
+                    .font(.headline)
+                    .foregroundStyle(Color.jeevesInk)
+
+                Text("Expand the full dashboard to follow the investigation cycle and review findings.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesSubtleText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground(border: .jeevesGold))
+        } else {
+            // Calm state
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("ALL CLEAR")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color.jeevesMint)
+
+                    Spacer()
+
+                    Text("NO ACTION NEEDED")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color.jeevesInk)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.jeevesMint.opacity(0.14)))
+                }
+
+                Text("The system is running smoothly")
+                    .font(.headline)
+                    .foregroundStyle(Color.jeevesInk)
+
+                Text("No decisions are waiting and no research tasks are active. Expand the full dashboard to explore system details or start a new research task.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesSubtleText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground(border: .jeevesMint))
         }
     }
 
@@ -314,7 +448,7 @@ struct MissionControlDashboardView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(Color.jeevesInk)
 
-            Text("System health, live pipeline pressure, and operator review at a glance.")
+            Text("Review decisions, start investigations, and monitor governed system state at a glance.")
                 .font(.subheadline)
                 .foregroundStyle(Color.jeevesSubtleText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -437,12 +571,69 @@ struct MissionControlDashboardView: View {
 
     private var operatorLine: String {
         if pendingApprovalCount > 0 {
-            return "Operator review is required now."
+            return "Your review is required now."
         }
         if discoveryCount > 0 {
             return "Pipeline active in Discovery."
         }
-        return "No operator decision is required right now."
+        return "No decision is required right now."
+    }
+
+    private var connectionLine: String {
+        let endpoint = "\(gateway.host):\(gateway.port)"
+        if gateway.useMock || gateway.host.lowercased() == "mock" {
+            return "Mock preview active. You can explore the interface safely before connecting a real gateway."
+        }
+
+        switch gateway.connectionState {
+        case .connected:
+            return "Connected to governed gateway \(endpoint)."
+        case .connecting:
+            return "Connecting to governed gateway \(endpoint)."
+        case .reconnecting:
+            return "Reconnecting to governed gateway \(endpoint)."
+        case .failed:
+            return "Connection to governed gateway \(endpoint) failed."
+        case .disconnected:
+            return "Jeeves is not connected to a governed gateway yet."
+        }
+    }
+
+    private var missionControlSystemLine: String {
+        if let readiness = injectionModel.readiness {
+            return readiness.summary
+        }
+        if gateway.isConnected {
+            return "The kernel is connected and Jeeves is checking whether the system is ready for your commands."
+        }
+        return "Connect a governed gateway to expose live system state and your work."
+    }
+
+    private var missionControlNextStepLine: String {
+        if pendingApprovalCount > 0 {
+            return "Review pending approvals first."
+        }
+        if let session = injectionModel.session, session.status != "completed", session.status != "failed" {
+            return "Follow the active investigation cycle and review its findings."
+        }
+        if gateway.useMock || gateway.host.lowercased() == "mock" {
+            return "Explore the interface in mock mode, or connect a real gateway when you want live governed data."
+        }
+        if injectionModel.readiness?.commandInitiationReady == true {
+            return "Start an investigation or review retained knowledge."
+        }
+        if gateway.isConnected {
+            return "Wait for readiness checks to finish, then start an investigation."
+        }
+        return "Open Settings and connect Jeeves to your governed gateway."
+    }
+
+    private var missionControlPrimaryActions: [String] {
+        [
+            "Review approvals",
+            "Start investigation",
+            "Check knowledge"
+        ]
     }
 
     private var intelligencePhase: IntelligencePhaseStage {
@@ -460,7 +651,7 @@ struct MissionControlDashboardView: View {
     private var intelligencePhaseSummary: String {
         switch intelligencePhase {
         case .safety:
-            return "Safety is foregrounded because approval pressure or bounded stops must stay visible to the operator."
+            return "Safety is foregrounded because approval pressure or active stops must stay visible to you."
         case .define:
             return "Define is foregrounded because signals are already being shaped into proposals, execution scope, or governed follow-through."
         case .investigate:
@@ -643,7 +834,7 @@ struct MissionControlDashboardView: View {
             title: "Approval",
             primaryMetric: "\(pendingApprovalCount)",
             status: pendingApprovalCount > 0 ? "attention" : "idle",
-            summary: pendingApprovalCount > 0 ? "Operator approval is required before bounded execution." : "No approval queue at this moment.",
+            summary: pendingApprovalCount > 0 ? "Your approval is required before execution." : "No approval queue at this moment.",
             pills: [
                 "\(pendingApprovalCount) pending",
                 "\(approvedCount) approved",
@@ -716,7 +907,7 @@ struct MissionControlDashboardView: View {
     private var liveSignalsHeadline: String {
         guard let runtime = poller.signalsRuntimeSnapshot else {
             if poller.operatorMemorySnapshot != nil {
-                return "Operator memory is visible through the governed gateway"
+                return "Your focus history is visible through the governed gateway"
             }
             return gateway.isConnected
                 ? "Governed gateway is connected and waiting for live signal pressure"
@@ -762,7 +953,7 @@ struct MissionControlDashboardView: View {
         }
 
         guard let runtime = poller.signalsRuntimeSnapshot else {
-            return "This panel now reads governed gateway state only: discovery telemetry, proposal pressure, and operator memory that already passed through the canonical trust boundary."
+            return "This panel reads governed gateway state only: discovery telemetry, proposal pressure, and focus history that already passed through the trust boundary."
         }
 
         let sourceWord = runtime.activeSourceCount == 1 ? "source" : "sources"
@@ -774,9 +965,9 @@ struct MissionControlDashboardView: View {
         }
         let memoryLine: String
         if let operatorMemory = poller.operatorMemorySnapshot {
-            memoryLine = "Operator focus is currently strongest on \(humanizeDomain(operatorMemory.operatorFocusMemory.strongestFocus))."
+            memoryLine = "Your focus is currently strongest on \(humanizeDomain(operatorMemory.operatorFocusMemory.strongestFocus))."
         } else {
-            memoryLine = "Operator memory will appear here as governed decisions accumulate."
+            memoryLine = "Focus history will appear here as governed decisions accumulate."
         }
         return "\(runtime.activeSourceCount) governed \(sourceWord) are currently visible. \(failureLine) \(memoryLine)"
     }
@@ -793,7 +984,7 @@ struct MissionControlDashboardView: View {
             return "Governed signal update \(runtime.lastRunAtIso ?? runtime.startedAtIso ?? "unknown") · discovery stays read-only until human approval."
         }
         if let operatorMemory = poller.operatorMemorySnapshot {
-            return "Remembered operator focus: \(humanizeDomain(operatorMemory.operatorFocusMemory.strongestFocus)) · openclashd-v2 remains the trust root."
+            return "Remembered focus: \(humanizeDomain(operatorMemory.operatorFocusMemory.strongestFocus)) · openclashd-v2 remains the trust root."
         }
         return "openclashd-v2 is the trust root; Jeeves only renders governed gateway state."
     }
@@ -929,7 +1120,7 @@ struct MissionControlDashboardView: View {
                     .foregroundStyle(Color.jeevesMutedText)
 
                 if recentAutonomyDecisions.isEmpty {
-                    Text("No bounded autonomous decisions recorded yet.")
+                    Text("No autonomous decisions recorded yet.")
                         .font(.footnote)
                         .foregroundStyle(Color.jeevesSubtleText)
                 } else {
@@ -1024,7 +1215,7 @@ struct MissionControlDashboardView: View {
                     .foregroundStyle(Color.jeevesMutedText)
 
                 if recentRealityAudits.isEmpty {
-                    Text("Adjusted confidence will appear here after bounded autonomous decisions are audited.")
+                    Text("Adjusted confidence will appear here after autonomous decisions are audited.")
                         .font(.footnote)
                         .foregroundStyle(Color.jeevesSubtleText)
                 } else {
@@ -1088,7 +1279,7 @@ struct MissionControlDashboardView: View {
 
                 Spacer(minLength: 12)
 
-                Text("Operator wallet")
+                Text("Your wallet")
                     .font(.headline)
                     .foregroundStyle(Color.jeevesInk)
             }
@@ -1111,7 +1302,7 @@ struct MissionControlDashboardView: View {
     private var residueCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("RESIDUE FIELD")
+                Text("SIGNAL HISTORY")
                     .font(.caption.monospaced())
                     .foregroundStyle(.green)
 
@@ -1371,7 +1562,7 @@ struct MissionControlDashboardView: View {
         if let latest = poller.recentReceipts.first, !latest.receiptId.isEmpty {
             return "Recent receipt \(shortId(latest.receiptId)) links this wallet to governed runtime activity without enabling automatic spending."
         }
-        return "Wallet \(shortId(wallet.walletId)) is visible to the operator. Receipts will appear here after SafeClash writes them."
+        return "Wallet \(shortId(wallet.walletId)) is visible. Receipts will appear here after SafeClash writes them."
     }
 
     private var latestWalletReceiptLine: String {
@@ -1430,7 +1621,7 @@ struct MissionControlDashboardView: View {
             return "The residue field is built from governed decisions. \(field.activeNodeCount) nodes, \(field.activeRegionCount) regions, and \(field.activeSignalFamilyCount) signal families are active."
         }
         if let topRegion = topResidueRegion, let topNode = topResidueNode {
-            return "Residue is operator-visible. Highest region is \(topRegion.region) (\(formatResidue(topRegion.residue))). Highest node is \(topNode.nodeId) (\(formatResidue(topNode.residue)))."
+            return "Residue is visible. Highest region is \(topRegion.region) (\(formatResidue(topRegion.residue))). Highest node is \(topNode.nodeId) (\(formatResidue(topNode.residue)))."
         }
         return "Residue becomes visible here after governed proposal decisions create new residue history."
     }
@@ -1454,14 +1645,14 @@ struct MissionControlDashboardView: View {
             return "idle"
         }
         if autonomyStateSnapshot.recentAutonomousDecisions.isEmpty {
-            return "bounded"
+            return "limited"
         }
         return formatPercent(autonomyStateSnapshot.successRate)
     }
 
     private var autonomyHeadline: String {
         guard let autonomyStateSnapshot else {
-            return "Bounded autonomy is available but inactive."
+            return "Limited autonomy is available but inactive."
         }
         return "\(autonomyStateSnapshot.recentAutonomousDecisions.count) autonomous decisions tracked"
     }
@@ -1527,7 +1718,7 @@ struct MissionControlDashboardView: View {
         case "degrading":
             return "Entropy is rising. Review contradiction-heavy automatic decisions before they gain more influence."
         case "improving":
-            return "Entropy is lowering. Recent bounded decisions are holding up under counter-analysis."
+            return "Entropy is lowering. Recent decisions are holding up under counter-analysis."
         default:
             return "Entropy is stable. Watch contradiction spikes and confidence reductions."
         }

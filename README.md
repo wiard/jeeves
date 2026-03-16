@@ -1,6 +1,31 @@
 # Jeeves iOS
 
-Native iOS companion for OpenClashd. Jeeves now uses the same real gateway APIs as the web frontend for proposals and observatory data.
+Native operator cockpit for the governed AI system.
+
+Jeeves is the place where an operator:
+
+- sees what needs attention now
+- reviews governed decisions
+- starts bounded investigations
+- understands what changed
+
+It is not the governance kernel, the research site, or the trust marketplace.
+
+## First-Time Mental Model
+
+If you open Jeeves for the first time, the surfaces should be read like this:
+
+- `Mission Control`: the main operator surface for system state, pending work, and bounded investigations
+- `Briefing`: the conversational and morning-intelligence surface inside Jeeves
+- `Observatory`: a read-only summary of patterns, signals, and discovery pressure
+- `Knowledge`: the retained library of discoveries, evidence, and code signals
+- `Settings`: connection, security, and gateway state
+
+The governed loop stays the same:
+
+`signal -> proposal -> human approval -> bounded action -> knowledge`
+
+Jeeves helps the operator see and steer that loop clearly. It does not bypass it.
 
 ## Connection Modes
 

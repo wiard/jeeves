@@ -22,7 +22,7 @@ enum IntelligencePhaseStage: String, CaseIterable, Identifiable {
     var note: String {
         switch self {
         case .safety:
-            return "Human authority and bounded risk stay explicit."
+            return "Human authority and risk limits stay explicit."
         case .define:
             return "Signals are being shaped into something legible."
         case .investigate:
@@ -47,13 +47,21 @@ struct IntelligencePhaseStrip: View {
             return summary
         }
 
-        return "\(summary) Entropy \(String(format: "%.3f", remoteSnapshot.entropy)) with residue strength \(Int((remoteSnapshot.residueStrength * 100).rounded()))%."
+        let confidenceLabel: String
+        if remoteSnapshot.entropy > 0.6 {
+            confidenceLabel = "Low"
+        } else if remoteSnapshot.entropy > 0.3 {
+            confidenceLabel = "Medium"
+        } else {
+            confidenceLabel = "High"
+        }
+        return "\(summary) Confidence: \(confidenceLabel) · pattern strength \(Int((remoteSnapshot.residueStrength * 100).rounded()))%."
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("INTELLIGENCE FORMULA")
+                Text("HOW THIS WORKS")
                     .font(.jeevesMonoSmall)
                     .foregroundStyle(Color.jeevesMutedText)
 

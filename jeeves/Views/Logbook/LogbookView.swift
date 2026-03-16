@@ -70,7 +70,7 @@ struct LogbookView: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Logboek")
+            .navigationTitle("Logbook")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             #endif

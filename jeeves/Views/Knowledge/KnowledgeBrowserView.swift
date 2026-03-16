@@ -30,7 +30,7 @@ struct KnowledgeBrowserView: View {
                 Group {
                     if viewModel.isLoading && !viewModel.hasLoaded {
                         let _ = print("[KnowledgeView] branch: loading")
-                        ProgressView("Knowledge laden...")
+                        ProgressView("Loading knowledge...")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if viewModel.isRateLimited && viewModel.objects.isEmpty {
                         let _ = print("[KnowledgeView] branch: rateLimited+empty")
@@ -73,7 +73,7 @@ struct KnowledgeBrowserView: View {
                                 KnowledgeBrowserHero(
                                     count: viewModel.objects.count,
                                     warning: viewModel.errorMessage
-                                        ?? (viewModel.isRateLimited ? "Laatste data — server beperkt verzoeken." : nil)
+                                        ?? (viewModel.isRateLimited ? "Cached data — server is rate-limiting requests." : nil)
                                 )
                                 .calmAppear(delay: 0.06)
 
@@ -108,9 +108,9 @@ struct KnowledgeBrowserView: View {
 
                                 if let gapFinder = viewModel.gapFinderSnapshot {
                                     GapFinderPanel(
-                                        eyebrow: "Candidate Knowledge Structures",
-                                        title: "Cross-domain evidence nearing structure",
-                                        subtitle: "These matches and gaps are still candidate structures. They show where repeated cross-domain evidence may be strong enough to become future knowledge after human review.",
+                                        eyebrow: "Emerging Patterns",
+                                        title: "Patterns forming across topics",
+                                        subtitle: "These matches and gaps show where repeated evidence from different areas may be strong enough to become confirmed knowledge after your review.",
                                         accent: .jeevesSky,
                                         snapshot: gapFinder
                                     )
@@ -162,7 +162,7 @@ struct KnowledgeBrowserView: View {
                     }
                 }
             }
-            .navigationTitle("Jeeves")
+            .navigationTitle("Knowledge")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -450,7 +450,7 @@ private struct KnowledgeBrowserCard: View {
                 Spacer()
 
                 if let refs = object.sourceRefs, !refs.isEmpty {
-                    Text("\(refs.count) bron\(refs.count == 1 ? "" : "nen")")
+                    Text("\(refs.count) source\(refs.count == 1 ? "" : "s")")
                         .font(.jeevesCaption)
                         .foregroundStyle(.secondary)
                 }

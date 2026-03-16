@@ -22,12 +22,12 @@ struct SystemReadinessCard: View {
                     .background(Capsule().fill(statusTint.opacity(0.14)))
             }
 
-            Text("Bootstrap prepares the machine. The research computer waits for your command.")
+            Text("System startup prepares the environment. The analysis engine waits for your command.")
                 .font(.headline)
                 .foregroundStyle(Color.jeevesInk)
 
             if isLoading && readiness == nil {
-                ProgressView("System readiness laden...")
+                ProgressView("Loading system readiness...")
                     .font(.footnote)
             } else {
                 Text(readiness?.summary ?? "Jeeves is waiting for the kernel to expose readiness.")
@@ -40,7 +40,7 @@ struct SystemReadinessCard: View {
                 Text("Adapters: \(readiness.bootstrap.availableAdapterTypes.joined(separator: ", "))")
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
-                Text(readiness.bootstrap.checks.first(where: { $0.id == "clashd27_compute" })?.detail ?? "The research computer check is not available yet.")
+                Text(readiness.bootstrap.checks.first(where: { $0.id == "clashd27_compute" })?.detail ?? "The analysis engine check is not available yet.")
                     .font(.caption)
                     .foregroundStyle(Color.jeevesMutedText)
                     .fixedSize(horizontal: false, vertical: true)

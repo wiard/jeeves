@@ -81,7 +81,7 @@ struct SettingsView: View {
     }
 
     private var tokenInfoSection: some View {
-        Section("Token details") {
+        Section("Token Details") {
             if let conn = connections.first,
                let token = KeychainHelper.load(for: "\(conn.host):\(conn.port)") {
                 let decoded = TokenDecoder.decode(token)
@@ -115,22 +115,22 @@ struct SettingsView: View {
                     }
                 } else {
                     HStack {
-                        Text("Formaat")
+                        Text("Format")
                         Spacer()
-                        Text("Niet-standaard token")
+                        Text("Non-standard token")
                             .font(.jeevesMono)
                             .foregroundStyle(.secondary)
                     }
                 }
             } else {
-                Text("Geen token opgeslagen")
+                Text("No token stored")
                     .foregroundStyle(.secondary)
             }
         }
     }
 
     private var actionsSection: some View {
-        Section("Acties") {
+        Section("Actions") {
             Button {
                 testConnection()
             } label: {
@@ -164,22 +164,22 @@ struct SettingsView: View {
     }
 
     private var displaySection: some View {
-        Section("Weergave") {
+        Section("Display") {
             HStack {
-                Text("Taal")
+                Text("Language")
                 Spacer()
-                Text("Nederlands")
+                Text("English")
                     .foregroundStyle(.secondary)
             }
 
-            Toggle("Spraak input", isOn: .constant(true))
+            Toggle("Voice input", isOn: .constant(true))
 
             Toggle("Haptic feedback", isOn: .constant(true))
 
             HStack {
-                Text("Donkere modus")
+                Text("Dark mode")
                 Spacer()
-                Text("Automatisch")
+                Text("Automatic")
                     .foregroundStyle(.secondary)
             }
         }
@@ -188,7 +188,7 @@ struct SettingsView: View {
     private var infoSection: some View {
         Section("Info") {
             HStack {
-                Text("Versie")
+                Text("Version")
                 Spacer()
                 Text("Jeeves v0.1.0")
                     .font(.jeevesMono)

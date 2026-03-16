@@ -5,6 +5,7 @@ struct OnboardingView: View {
     private static let localDefaultPort = 19001
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
+    @State private var currentPage = 0
     @State private var host = "localhost"
     @State private var port = "19001"
     @State private var isConnecting = false
@@ -13,44 +14,130 @@ struct OnboardingView: View {
     let onComplete: () -> Void
 
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
+        ZStack {
+            InstrumentBackdrop(
+                colors: [
+                    Color(red: 0.96, green: 0.97, blue: 0.99),
+                    Color(red: 0.94, green: 0.96, blue: 0.99),
+                    Color(red: 0.98, green: 0.96, blue: 0.93)
+                ]
+            )
+            .ignoresSafeArea()
 
-            // Butler hat icon
-            Text("\u{1f3a9}")
-                .font(.system(size: 80, weight: .light, design: .rounded))
+            VStack(spacing: 0) {
+                Spacer()
 
-            VStack(spacing: 8) {
-                Text("Welkom, meneer.")
+                switch currentPage {
+                case 0:
+                    welcomePage
+                case 1:
+                    tabsPage
+                case 2:
+                    connectionPage
+                default:
+                    welcomePage
+                }
+
+                Spacer()
+
+                pageIndicator
+                    .padding(.bottom, 16)
+
+                navigationButtons
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 32)
+            }
+        }
+    }
+
+    // MARK: - Page 1: Meet Jeeves
+
+    private var welcomePage: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "sun.max")
+                .font(.system(size: 64, weight: .light, design: .rounded))
+                .foregroundStyle(Color.jeevesGold)
+
+            VStack(spacing: 12) {
+                Text("Meet Jeeves")
                     .font(.jeevesLargeTitle)
 
-                Text("Ik ben Jeeves, uw persoonlijke butler.")
-                    .font(.jeevesBody)
-                    .foregroundStyle(.secondary)
-
-                Text("Om te beginnen heb ik het adres van uw gateway nodig.")
+                Text("Jeeves monitors intelligence signals, surfaces what needs your decision, and tracks what your system learns.")
                     .font(.jeevesBody)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 4)
+                    .padding(.horizontal, 32)
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .trailing)))
+    }
+
+    // MARK: - Page 2: Tabs Explained
+
+    private var tabsPage: some View {
+        VStack(spacing: 28) {
+            Text("Three views, one picture")
+                .font(.jeevesLargeTitle)
+
+            VStack(alignment: .leading, spacing: 20) {
+                tabExplanation(
+                    icon: "sun.max",
+                    title: "Jeeves",
+                    description: "Your daily briefing. World signals, AI developments, and emerging patterns — summarized each morning."
+                )
+
+                tabExplanation(
+                    icon: "scope",
+                    title: "Mission Control",
+                    description: "The full dashboard. System status, pending decisions, research tasks, and live signal activity."
+                )
+
+                tabExplanation(
+                    icon: "binoculars",
+                    title: "Observatory",
+                    description: "Incoming signals and discovery patterns as they arrive from your connected sources."
+                )
+            }
+            .padding(.horizontal, 32)
+        }
+        .transition(.opacity.combined(with: .move(edge: .trailing)))
+    }
+
+    // MARK: - Page 3: Connection
+
+    private var connectionPage: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "network")
+                .font(.system(size: 48, weight: .light, design: .rounded))
+                .foregroundStyle(Color.jeevesSky)
+
+            VStack(spacing: 8) {
+                Text("Connect your gateway")
+                    .font(.jeevesLargeTitle)
+
+                Text("Enter the address of your gateway to see live data. Or try the demo to explore the interface first.")
+                    .font(.jeevesBody)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
             }
 
             VStack(spacing: 12) {
-                TextField("Gateway adres", text: $host)
+                TextField("Gateway address", text: $host)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.URL)
                     .autocorrectionDisabled()
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
-                    .accessibilityLabel("Gateway IP adres")
+                    .accessibilityLabel("Gateway address")
 
-                TextField("Poort", text: $port)
+                TextField("Port", text: $port)
                     .textFieldStyle(.roundedBorder)
                     #if os(iOS)
                     .keyboardType(.numberPad)
                     #endif
-                    .accessibilityLabel("Gateway poort")
+                    .accessibilityLabel("Gateway port")
             }
             .padding(.horizontal, 40)
 
@@ -66,29 +153,95 @@ struct OnboardingView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text("Verbind")
+                        Text("Connect")
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.jeevesGold)
                 .disabled(host.isEmpty || isConnecting)
-                .accessibilityLabel("Verbind met gateway")
+                .accessibilityLabel("Connect to gateway")
 
-                Button("Gebruik mock modus") {
-                    connectMock()
+                Button("Try with demo data") {
+                    connectDemo()
                 }
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
             }
+        }
+        .transition(.opacity.combined(with: .move(edge: .trailing)))
+    }
+
+    // MARK: - Navigation
+
+    private var pageIndicator: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(index == currentPage ? Color.jeevesGold : Color.jeevesGold.opacity(0.25))
+                    .frame(width: 8, height: 8)
+            }
+        }
+    }
+
+    private var navigationButtons: some View {
+        HStack {
+            if currentPage > 0 {
+                Button("Back") {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentPage -= 1
+                    }
+                }
+                .font(.jeevesBody)
+                .foregroundStyle(.secondary)
+            }
 
             Spacer()
+
+            if currentPage < 2 {
+                Button("Next") {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentPage += 1
+                    }
+                }
+                .font(.jeevesBody.weight(.semibold))
+                .foregroundStyle(Color.jeevesGold)
+
+                Button("Skip") {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentPage = 2
+                    }
+                }
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+            }
         }
-        .padding()
     }
+
+    // MARK: - Helpers
+
+    private func tabExplanation(icon: String, title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(Color.jeevesGold)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.jeevesHeadline)
+                Text(description)
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Connection Logic
 
     private func connect() {
         guard let portNum = Int(port), portNum > 0 else {
-            errorMessage = "Ongeldig poortnummer"
+            errorMessage = "Invalid port number"
             return
         }
         let normalizedInputHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -133,7 +286,7 @@ struct OnboardingView: View {
         }
     }
 
-    private func connectMock() {
+    private func connectDemo() {
         let connection = GatewayConnection(host: "mock", port: Self.localDefaultPort)
         modelContext.insert(connection)
 

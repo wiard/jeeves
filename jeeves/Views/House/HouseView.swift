@@ -105,7 +105,7 @@ struct HouseView: View {
 private struct MachinekamerObservatoryCard: View {
     var body: some View {
         HStack {
-            Label("Machinekamer", systemImage: "cpu")
+            Label("Engine Room", systemImage: "cpu")
                 .font(.jeevesHeadline)
             Spacer()
             Text("Observatory")

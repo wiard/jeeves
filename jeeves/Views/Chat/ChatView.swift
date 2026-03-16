@@ -27,7 +27,7 @@ struct ChatView: View {
                     VStack(spacing: 1) {
                         Text("Jeeves")
                             .font(.jeevesHeadline)
-                        Text(gateway.isConnected ? "Verbonden" : "Niet verbonden")
+                        Text(gateway.isConnected ? "Connected" : "Not connected")
                             .font(.jeevesCaption)
                             .foregroundStyle(gateway.isConnected ? Color.consentGreen : Color.secondary)
                     }
@@ -46,7 +46,7 @@ struct ChatView: View {
                 HStack {
                     ProgressView()
                         .tint(.white)
-                    Text("Opnieuw verbinden...")
+                    Text("Reconnecting...")
                         .font(.jeevesCaption)
                 }
                 .frame(maxWidth: .infinity)
@@ -235,7 +235,7 @@ struct ChatView: View {
     private func addWelcomeMessageIfNeeded() {
         if messages.isEmpty {
             let welcome = ChatMessage(
-                text: "Welkom terug, meneer. Het huis is in orde.",
+                text: "Welcome back. The system is in order.",
                 sender: .jeeves
             )
             modelContext.insert(welcome)

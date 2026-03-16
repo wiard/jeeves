@@ -16,7 +16,7 @@ struct KillSwitchButton: View {
                 Text("Status:")
                     .font(.jeevesCaption)
                     .foregroundStyle(.secondary)
-                Text(isActive ? "AAN" : "UIT")
+                Text(isActive ? "ON" : "OFF")
                     .font(.jeevesMono)
                     .foregroundStyle(isActive ? Color.consentRed : Color.consentGreen)
             }
@@ -24,19 +24,19 @@ struct KillSwitchButton: View {
             Button(action: { showConfirmation = true }) {
                 HStack {
                     Image(systemName: isActive ? "checkmark.shield" : "exclamationmark.octagon.fill")
-                    Text(isActive ? "NOODSTOP DEACTIVEREN" : "NOODSTOP ACTIVEREN")
+                    Text(isActive ? "DEACTIVATE KILL SWITCH" : "ACTIVATE KILL SWITCH")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(isActive ? .consentGreen : .consentRed)
-            .accessibilityLabel(isActive ? "Noodstop deactiveren" : "Noodstop activeren")
+            .accessibilityLabel(isActive ? "Deactivate kill switch" : "Activate kill switch")
             .alert(
-                isActive ? "Noodstop deactiveren?" : "Weet u het zeker, meneer?",
+                isActive ? "Deactivate kill switch?" : "Are you sure?",
                 isPresented: $showConfirmation
             ) {
-                Button(isActive ? "Deactiveren" : "Activeren", role: isActive ? nil : .destructive) {
+                Button(isActive ? "Deactivate" : "Activate", role: isActive ? nil : .destructive) {
                     JeevesHaptics.killSwitch()
                     if isActive {
                         onDeactivate()
@@ -44,11 +44,11 @@ struct KillSwitchButton: View {
                         onActivate()
                     }
                 }
-                Button("Annuleren", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text(isActive
-                    ? "Jeeves zal weer normale operaties hervatten."
-                    : "Alle lopende acties worden onmiddellijk gestopt. Jeeves wordt volledig stilgelegd."
+                    ? "Jeeves will resume normal operations."
+                    : "All running actions will be stopped immediately. Jeeves will be fully shut down."
                 )
             }
         }

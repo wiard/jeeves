@@ -111,6 +111,6 @@ struct InvestigationCycleView: View {
         guard let session else {
             return "The system is standing by for a command-driven investigation."
         }
-        return "\(session.command.target.label) is being examined because the operator started a CLASH Injection session."
+        return "\(session.command.target.label) is being examined because you started a research session."
     }
 }

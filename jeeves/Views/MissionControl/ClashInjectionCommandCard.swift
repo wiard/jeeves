@@ -13,7 +13,7 @@ struct ClashInjectionCommandCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("CLASH INJECTION")
+                Text("RESEARCH TASK")
                     .font(.caption.monospaced())
                     .foregroundStyle(Color.jeevesSky)
 
@@ -27,6 +27,11 @@ struct ClashInjectionCommandCard: View {
             Text("You give the command. The investigation begins because you asked for it.")
                 .font(.headline)
                 .foregroundStyle(Color.jeevesInk)
+
+            Text("Investigations stay bounded and read-only in Phase 1. Typical targets are repositories, APIs, and service environments.")
+                .font(.footnote)
+                .foregroundStyle(Color.jeevesSubtleText)
+                .fixedSize(horizontal: false, vertical: true)
 
             Picker("Target", selection: $selectedTargetId) {
                 ForEach(targets.filter { $0.status == "ready" }) { target in
@@ -72,7 +77,7 @@ struct ClashInjectionCommandCard: View {
             }
 
             Text(readiness?.commandInitiationReady == true
-                 ? "The system is ready. Starting this command will create a bounded CLASH Injection session."
+                 ? "The system is ready. Starting this command will create a bounded research session."
                  : "Bootstrap must be ready before an investigation can begin.")
                 .font(.caption)
                 .foregroundStyle(Color.jeevesMutedText)

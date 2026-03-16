@@ -9,10 +9,10 @@ struct ConnectionSettings: View {
     private let runtime = RuntimeConfig.shared
 
     var body: some View {
-        Section("Verbinding") {
-            settingRow("Databron", modeLabel)
-            settingRow("Gateway", gatewayLabel)
-            settingRow("Ontdekt", discoveredGatewayLabel)
+        Section("Connection") {
+            settingRow("Mode", modeLabel)
+            settingRow("Endpoint", gatewayLabel)
+            settingRow("Discovered", discoveredGatewayLabel)
 
             HStack {
                 Text("Status")
@@ -30,9 +30,9 @@ struct ConnectionSettings: View {
                 settingRow("Latency", "\(latency)ms")
             }
 
-            settingRow("Kanaal", saved?.channelId ?? "ios-app")
-            settingRow("Token", tokenLabel, color: tokenLabel == "Geen token" ? .red : .secondary)
-            settingRow("Mock flag", runtime.useMock ? "aan" : "uit")
+            settingRow("Channel", saved?.channelId ?? "ios-app")
+            settingRow("Token", tokenLabel, color: tokenLabel == "No token" ? .red : .secondary)
+            settingRow("Mock flag", runtime.useMock ? "on" : "off")
         }
     }
 
@@ -48,7 +48,7 @@ struct ConnectionSettings: View {
     }
 
     private var modeLabel: String {
-        (gateway.useMock || gateway.host.lowercased() == "mock") ? "Mock" : "Gateway"
+        (gateway.useMock || gateway.host.lowercased() == "mock") ? "Demo preview" : "Governed gateway"
     }
 
     private var gatewayLabel: String {
@@ -70,7 +70,7 @@ struct ConnectionSettings: View {
             let normalized = GatewayManager.normalizeEndpoint(host: c.host, port: c.port)
             return "\(normalized.host):\(normalized.port)"
         }
-        return "Niet geconfigureerd"
+        return "Not configured"
     }
 
     private var discoveredGatewayLabel: String {
@@ -79,9 +79,9 @@ struct ConnectionSettings: View {
             return "\(normalized.host):\(normalized.port)"
         }
         if gateway.startupGatewayFileExists() {
-            return "gateway.json gevonden, endpoint onleesbaar"
+            return "gateway.json found, endpoint unreadable"
         }
-        return "Geen gateway.json"
+        return "No gateway.json"
     }
 
     private var tokenLabel: String {
@@ -103,7 +103,7 @@ struct ConnectionSettings: View {
                 return "\(token.prefix(10))…"
             }
         }
-        return "Geen token"
+        return "No token"
     }
 
     private var statusColor: Color {
@@ -117,15 +117,15 @@ struct ConnectionSettings: View {
     private var statusText: String {
         switch gateway.connectionState {
         case .connected:
-            return "Verbonden"
+            return "Connected"
         case .connecting:
-            return "Verbinden..."
+            return "Connecting..."
         case .reconnecting:
-            return "Opnieuw verbinden..."
+            return "Reconnecting..."
         case .idle, .disconnected:
-            return "Niet verbonden"
+            return "Not connected"
         case .failed:
-            return tokenLabel == "Geen token" ? "Token ontbreekt" : "Verbinding mislukt"
+            return tokenLabel == "No token" ? "Token missing" : "Connection failed"
         }
     }
 }

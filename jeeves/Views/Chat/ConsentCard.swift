@@ -41,7 +41,7 @@ struct ConsentCard: View {
             if isPending {
                 HStack(spacing: 12) {
                     Button(action: onApprove) {
-                        Text("Ja, meneer")
+                        Text("Approve")
                             .font(.jeevesBody)
                             .frame(maxWidth: .infinity)
                     }
@@ -49,7 +49,7 @@ struct ConsentCard: View {
                     .tint(.consentGreen)
 
                     Button(action: onDeny) {
-                        Text("Nee")
+                        Text("Deny")
                             .font(.jeevesBody)
                             .frame(maxWidth: .infinity)
                     }
@@ -58,14 +58,14 @@ struct ConsentCard: View {
             } else if isResolved {
                 HStack {
                     Image(systemName: approved == true ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    Text(approved == true ? "Goedgekeurd" : "Geweigerd")
+                    Text(approved == true ? "Approved" : "Denied")
                         .font(.jeevesCaption)
                 }
                 .foregroundStyle(approved == true ? Color.consentGreen : Color.secondary)
             } else if isBlocked {
                 HStack {
                     Image(systemName: "lock.fill")
-                    Text("Geblokkeerd")
+                    Text("Blocked")
                         .font(.jeevesCaption)
                 }
                 .foregroundStyle(Color.consentRed)
@@ -90,9 +90,9 @@ struct ConsentCard: View {
 
     private var headerText: String {
         switch risk {
-        case .green: "GROEN"
-        case .orange: "ORANJE"
-        case .red: "ROOD"
+        case .green: "GREEN"
+        case .orange: "ORANGE"
+        case .red: "RED"
         }
     }
 

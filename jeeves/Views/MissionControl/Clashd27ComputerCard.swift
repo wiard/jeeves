@@ -8,7 +8,7 @@ struct Clashd27ComputerCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("RESEARCH COMPUTER")
+                Text("ANALYSIS ENGINE")
                     .font(.caption.monospaced())
                     .foregroundStyle(Color.jeevesMint)
 
@@ -22,15 +22,15 @@ struct Clashd27ComputerCard: View {
                     .background(Capsule().fill(Color.jeevesMint.opacity(0.14)))
             }
 
-            Text("C1 controls, C2 computes, the cube explores, and residue memory retains what mattered.")
+            Text("The analysis engine processes signals, explores patterns, and retains what mattered.")
                 .font(.headline)
                 .foregroundStyle(Color.jeevesInk)
 
             if isLoading && computer == nil {
-                ProgressView("Research computer laden...")
+                ProgressView("Loading analysis engine...")
                     .font(.footnote)
             } else {
-                Text(computer?.lastSummary ?? "The research computer is waiting for a governed command.")
+                Text(computer?.lastSummary ?? "The analysis engine is waiting for a command.")
                     .font(.footnote)
                     .foregroundStyle(Color.jeevesSubtleText)
                     .fixedSize(horizontal: false, vertical: true)
