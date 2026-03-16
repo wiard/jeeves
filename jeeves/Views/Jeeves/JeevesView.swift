@@ -238,7 +238,7 @@ struct JeevesView: View {
             briefingLandingCard(
                 eyebrow: "Pending Decisions",
                 title: "\(cards.count) research gap\(cards.count == 1 ? "" : "s") need review",
-                subtitle: "These governed gaps were surfaced by the kernel and are waiting for an operator decision."
+                subtitle: "CLASHD27 discovered these gaps. OpenClashd stored them as governed proposals that now await your review."
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let summary = gapViewModel.statusSummary {
@@ -360,11 +360,16 @@ struct JeevesView: View {
                 .foregroundStyle(Color.jeevesSubtleText)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text("Discovered by CLASHD27. Stored by OpenClashd. No automatic action will execute before you review it.")
+                .font(.caption)
+                .foregroundStyle(Color.jeevesMutedText)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack {
                 Spacer()
 
                 Button("Review") {
-                    selectedGap = gapViewModel.proposedGaps.first { $0.id == card.id }
+                    selectedGap = gapViewModel.proposedGaps.first { $0.gapId == card.id }
                 }
                 .font(.caption.weight(.semibold))
             }

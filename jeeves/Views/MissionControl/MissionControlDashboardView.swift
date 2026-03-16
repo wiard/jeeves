@@ -833,7 +833,7 @@ struct MissionControlDashboardView: View {
 
     private var pendingDecisionsSubtitle: String {
         if let topGap = proposedGapCards.first {
-            return topGap.title
+            return "Top governed gap: \(topGap.title)"
         }
         return "No research gaps are waiting for operator review right now."
     }
@@ -843,7 +843,7 @@ struct MissionControlDashboardView: View {
             return [
                 topGap.hypothesisPreview,
                 topGap.confidenceLabel,
-                "Reviewing a gap keeps the next bounded research move inside governance."
+                "CLASHD27 discovered this. OpenClashd stored it. No automatic execution occurs before operator review."
             ]
         }
         return [
@@ -1237,15 +1237,15 @@ struct MissionControlDashboardView: View {
                     GapDetailView(viewModel: gapViewModel, gap: gap)
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(OperatorSignalPresentation.plainGapTitle(gap.title))
+                        Text(gap.displayTitle)
                             .font(.body.weight(.semibold))
                             .foregroundStyle(Color.jeevesInk)
 
-                        Text(OperatorSignalPresentation.gapConfidenceLabel(score: gap.score))
+                        Text(gap.confidenceLabel)
                             .font(.caption.monospaced())
                             .foregroundStyle(Color.jeevesSky)
 
-                        Text(gap.hypothesis)
+                        Text(gap.displayHypothesis)
                             .font(.footnote)
                             .foregroundStyle(Color.jeevesSubtleText)
                             .lineLimit(2)
