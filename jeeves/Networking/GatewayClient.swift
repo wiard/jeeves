@@ -36,7 +36,7 @@ actor GatewayClient {
     }
 
     func decideGapProposal(id: String, decision: String) async throws -> GapProposalDecisionResponse {
-        let body = GapProposalDecisionRequest(id: id, decision: decision)
+        let body = GapProposalDecisionRequest(gapProposalId: id, decision: decision)
         let payload = try JSONEncoder().encode(body)
         let (data, _) = try await request(path: "/api/gaps/decide", method: "POST", body: payload)
         let decoder = JSONDecoder()

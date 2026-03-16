@@ -99,7 +99,7 @@ struct JeevesView: View {
             Text("AI Observatory")
                 .font(.jeevesLargeTitle)
 
-            Text("Jeeves monitors global signals, detects emerging patterns and brings important decisions to your attention.")
+            Text("The system watched the world for you. You decide what happens next.")
                 .font(.jeevesBody)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -236,17 +236,17 @@ struct JeevesView: View {
 
         if !cards.isEmpty {
             briefingLandingCard(
-                eyebrow: "Pending Decisions",
-                title: "\(cards.count) research gap\(cards.count == 1 ? "" : "s") need review",
-                subtitle: "CLASHD27 discovered these gaps. OpenClashd stored them as governed proposals that now await your review."
+                eyebrow: "Research frontiers",
+                title: "What the system found",
+                subtitle: "CLASHD27 scanned recent research and surfaced these gaps. Each one may be worth your attention."
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     if let summary = gapViewModel.statusSummary {
                         HStack(spacing: 8) {
                             briefingMetaPill("\(summary.detected) detected", tint: .jeevesSky)
-                            briefingMetaPill("\(summary.proposed) proposed", tint: .jeevesGold)
+                            briefingMetaPill("\(summary.proposed) awaiting review", tint: .jeevesGold)
                             briefingMetaPill("\(summary.approved) approved", tint: .jeevesMint)
-                            briefingMetaPill("\(summary.denied) denied", tint: .orange)
+                            briefingMetaPill("\(summary.denied) dismissed", tint: .orange)
                         }
                     }
 
@@ -254,6 +254,12 @@ struct JeevesView: View {
                         pendingGapCard(card)
                     }
                 }
+            }
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.jeevesMint)
+                    .frame(width: 2)
+                    .padding(.vertical, 18)
             }
         }
     }
@@ -384,6 +390,14 @@ struct JeevesView: View {
                         .stroke(gapTint(for: card.score).opacity(0.14), lineWidth: 1)
                 )
         )
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(gapTint(for: card.score))
+                .frame(height: 3)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+        }
     }
 
     private func briefingMetaPill(_ label: String, tint: Color) -> some View {
@@ -416,7 +430,7 @@ struct JeevesView: View {
         case 0.5..<0.7:
             return .jeevesGold
         default:
-            return .jeevesSky
+            return .gray
         }
     }
 

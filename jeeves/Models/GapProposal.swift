@@ -55,13 +55,13 @@ struct GapProposal: Decodable, Identifiable, Hashable {
             options: [.caseInsensitive]
         )
         let trimmed = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Untitled research gap" : trimmed
+        return trimmed.isEmpty ? "Untitled research frontier" : trimmed
     }
 
     var displayHypothesis: String {
-        let candidate = (hypothesis ?? summary ?? "CLASHD27 surfaced a governed research gap that now needs operator review.")
+        let candidate = (hypothesis ?? summary ?? "The system found a research frontier that may be worth your attention.")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return candidate.isEmpty ? "CLASHD27 surfaced a governed research gap that now needs operator review." : candidate
+        return candidate.isEmpty ? "The system found a research frontier that may be worth your attention." : candidate
     }
 
     var displayScore: String {
@@ -72,11 +72,11 @@ struct GapProposal: Decodable, Identifiable, Hashable {
     var confidenceLabel: String {
         switch score ?? 0 {
         case 0.7...:
-            return "High confidence"
+            return "Strong signal"
         case 0.5..<0.7:
-            return "Medium confidence"
+            return "Worth a look"
         default:
-            return "Low confidence"
+            return "Weak signal"
         }
     }
 

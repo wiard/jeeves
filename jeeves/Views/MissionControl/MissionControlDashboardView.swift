@@ -826,16 +826,17 @@ struct MissionControlDashboardView: View {
     private var pendingDecisionsTitle: String {
         let gapCount = proposedGapCards.count
         if gapCount == 0 {
-            return "No pending decisions"
+            return "The system is watching"
         }
-        return "\(gapCount) research gap\(gapCount == 1 ? "" : "s") need your review"
+        return "Needs your attention"
     }
 
     private var pendingDecisionsSubtitle: String {
-        if let topGap = proposedGapCards.first {
-            return "Top governed gap: \(topGap.title)"
+        let gapCount = proposedGapCards.count
+        if gapCount > 0 {
+            return "The system found \(gapCount) research frontier\(gapCount == 1 ? "" : "s"). You decide what happens next."
         }
-        return "No research gaps are waiting for operator review right now."
+        return "The system is quiet. CLASHD27 is watching."
     }
 
     private var pendingDecisionLines: [String] {
@@ -843,11 +844,11 @@ struct MissionControlDashboardView: View {
             return [
                 topGap.hypothesisPreview,
                 topGap.confidenceLabel,
-                "CLASHD27 discovered this. OpenClashd stored it. No automatic execution occurs before operator review."
+                "CLASHD27 discovered this. OpenClashd stored it. No automatic action happens before your review."
             ]
         }
         return [
-            "The governed gap queue is clear."
+            "The system is watching the world for you."
         ]
     }
 
@@ -1200,7 +1201,7 @@ struct MissionControlDashboardView: View {
     private var gapReviewSheet: some View {
         NavigationStack {
             gapReviewSheetContent
-                .navigationTitle("Research Gaps")
+                .navigationTitle("Research frontiers")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -1228,8 +1229,8 @@ struct MissionControlDashboardView: View {
             JeevesEmptyState(
                 icon: "checkmark.circle",
                 tint: .jeevesMint,
-                title: "No pending decisions",
-                subtitle: "The governed gap queue is clear."
+                title: "The system is watching",
+                subtitle: "The system is quiet. CLASHD27 is watching."
             )
         } else {
             List(gapViewModel.proposedGaps) { gap in

@@ -13,13 +13,18 @@ struct GapDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Governed Gap")
+                        Text("Research frontier")
                             .font(.caption.monospaced())
                             .foregroundStyle(Color.jeevesSky)
 
-                        Text(OperatorSignalPresentation.plainGapTitle(gap.title))
+                        Text(gap.displayTitle)
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(Color.jeevesInk)
+
+                        Text("Discovered by CLASHD27 from live research signals.")
+                            .font(.footnote)
+                            .foregroundStyle(Color.jeevesSubtleText)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         HStack(spacing: 8) {
                             statusBadge
@@ -28,18 +33,24 @@ struct GapDetailView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Hypothesis")
+                        Text("What the system thinks")
                             .font(.headline)
                             .foregroundStyle(Color.jeevesInk)
 
-                        Text(gap.hypothesis)
+                        Text(gap.displayHypothesis)
                             .font(.body)
                             .foregroundStyle(Color.jeevesSubtleText)
                             .fixedSize(horizontal: false, vertical: true)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color.jeevesSky.opacity(0.08))
+                            )
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Confidence")
+                        Text("Signal strength")
                             .font(.headline)
                             .foregroundStyle(Color.jeevesInk)
 
@@ -47,7 +58,7 @@ struct GapDetailView: View {
                             .tint(confidenceTint)
 
                         HStack {
-                            Text(OperatorSignalPresentation.gapConfidenceLabel(score: gap.score))
+                            Text(gap.confidenceLabel)
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(confidenceTint)
 
@@ -71,6 +82,40 @@ struct GapDetailView: View {
                         }
                     }
 
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Governed status")
+                            .font(.headline)
+                            .foregroundStyle(Color.jeevesInk)
+
+                        Text(displayStatusLabel(gap.status))
+                            .font(.footnote)
+                            .foregroundStyle(Color.jeevesSubtleText)
+                    }
+
+                    if let reviewStatus = gap.reviewStatus, !reviewStatus.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Review status")
+                                .font(.headline)
+                                .foregroundStyle(Color.jeevesInk)
+
+                            Text(displayStatusLabel(reviewStatus))
+                                .font(.footnote)
+                                .foregroundStyle(Color.jeevesSubtleText)
+                        }
+                    }
+
+                    if let trustBoundary = gap.trustBoundary, !trustBoundary.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Trust boundary")
+                                .font(.headline)
+                                .foregroundStyle(Color.jeevesInk)
+
+                            Text(trustBoundary.replacingOccurrences(of: "_", with: " "))
+                                .font(.footnote)
+                                .foregroundStyle(Color.jeevesSubtleText)
+                        }
+                    }
+
                     if let actionError {
                         Text(actionError)
                             .font(.footnote)
@@ -83,14 +128,14 @@ struct GapDetailView: View {
 
                     HStack(spacing: 12) {
                         Button {
-                            submit(decision: "approved")
+                            submit(decision: "approve")
                         } label: {
                             if isSubmitting {
                                 ProgressView()
                                     .controlSize(.small)
                                     .frame(maxWidth: .infinity)
                             } else {
-                                Text("Approve")
+                                Text("Approve this")
                                     .frame(maxWidth: .infinity)
                             }
                         }
@@ -99,9 +144,9 @@ struct GapDetailView: View {
                         .disabled(isSubmitting)
 
                         Button {
-                            submit(decision: "denied")
+                            submit(decision: "deny")
                         } label: {
-                            Text("Deny")
+                            Text("Dismiss")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
@@ -111,7 +156,7 @@ struct GapDetailView: View {
                 }
                 .padding(20)
             }
-            .navigationTitle("Gap Review")
+            .navigationTitle("Research frontier")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -148,7 +193,7 @@ struct GapDetailView: View {
     }
 
     private var statusBadge: some View {
-        Text(gap.status.capitalized)
+        Text(displayStatusLabel(gap.status))
             .font(.caption.weight(.semibold))
             .foregroundStyle(statusTint)
             .padding(.horizontal, 10)
@@ -160,7 +205,7 @@ struct GapDetailView: View {
     }
 
     private var confidenceBadge: some View {
-        Text(OperatorSignalPresentation.gapConfidenceLabel(score: gap.score))
+        Text(gap.confidenceLabel)
             .font(.caption.weight(.semibold))
             .foregroundStyle(confidenceTint)
             .padding(.horizontal, 10)
@@ -182,6 +227,19 @@ struct GapDetailView: View {
         }
     }
 
+    private func displayStatusLabel(_ value: String) -> String {
+        switch value.lowercased() {
+        case "proposed", "pending":
+            return "Awaiting your review"
+        case "approved":
+            return "Approved"
+        case "denied":
+            return "Dismissed"
+        default:
+            return value.capitalized
+        }
+    }
+
     private func submit(decision: String) {
         guard !isSubmitting else { return }
 
@@ -189,7 +247,7 @@ struct GapDetailView: View {
         actionError = nil
 
         Task {
-            let succeeded = await viewModel.decide(gapId: gap.id, decision: decision)
+            let succeeded = await viewModel.decide(gapProposalId: gap.gapProposalId, decision: decision)
             await MainActor.run {
                 isSubmitting = false
                 if succeeded {

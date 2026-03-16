@@ -354,7 +354,7 @@ enum OperatorSignalPresentation {
                     title: gap.displayTitle,
                     hypothesisPreview: compactSentence(gap.displayHypothesis, maxLength: 120),
                     confidenceLabel: gap.confidenceLabel,
-                    statusLabel: humanizePhrase(gap.status),
+                    statusLabel: gapStatusLabel(gap.status),
                     score: gap.score
                 )
             }
@@ -372,11 +372,24 @@ enum OperatorSignalPresentation {
     static func gapConfidenceLabel(score: Double?) -> String {
         switch score ?? 0 {
         case 0.7...:
-            return "High confidence"
+            return "Strong signal"
         case 0.5..<0.7:
-            return "Medium confidence"
+            return "Worth a look"
         default:
-            return "Low confidence"
+            return "Weak signal"
+        }
+    }
+
+    private static func gapStatusLabel(_ status: String) -> String {
+        switch status.lowercased() {
+        case "proposed":
+            return "Awaiting your review"
+        case "approved":
+            return "Approved"
+        case "denied":
+            return "Dismissed"
+        default:
+            return humanizePhrase(status)
         }
     }
 
