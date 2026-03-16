@@ -32,6 +32,7 @@ struct JeevesView: View {
                         dailyBriefingCard
                         systemStatusCard
                         nextDecisionCard
+                        footerLine
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
@@ -107,6 +108,14 @@ struct JeevesView: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(landingCardBackground(accent: .jeevesSky))
+    }
+
+    private var footerLine: some View {
+        Text("AI observes. Humans decide.")
+            .font(.caption)
+            .foregroundStyle(Color.jeevesMutedText)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 4)
     }
 
     private var primaryActions: some View {

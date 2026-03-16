@@ -186,7 +186,53 @@ struct SettingsView: View {
     }
 
     private var infoSection: some View {
-        Section("Info") {
+        Section("About Jeeves") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Jeeves")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.jeevesInk)
+
+                Text("""
+We believe AI should watch the world, detect what matters,
+and surface it for human review - never act alone.
+Knowledge grows through observation, not execution.
+Consent is not a feature. It is the architecture.
+""")
+                    .font(.jeevesBody)
+                    .foregroundStyle(Color.jeevesSubtleText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("""
+Jeeves is the operator interface of the OpenClashd governance stack.
+It presents what CLASHD27 discovered.
+You decide what happens next.
+""")
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesMutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("\"Not Jarvis. Jeeves.\"")
+                    .font(.jeevesCaption)
+                    .foregroundStyle(.secondary)
+                    .italic()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 10) {
+                    Link("openclashd.com", destination: URL(string: "https://openclashd.com")!)
+                    Text("·")
+                        .foregroundStyle(Color.jeevesMutedText)
+                    Link("safeclash.com", destination: URL(string: "https://safeclash.com")!)
+                    Text("·")
+                        .foregroundStyle(Color.jeevesMutedText)
+                    Link("clashd27.com", destination: URL(string: "https://clashd27.com")!)
+                }
+                .font(.footnote)
+
+                Text("Designed and built by Wiard Vasen, Amsterdam.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.jeevesMutedText)
+            }
+
             HStack {
                 Text("Version")
                 Spacer()
@@ -202,13 +248,6 @@ struct SettingsView: View {
                     .font(.jeevesMono)
                     .foregroundStyle(.secondary)
             }
-
-            Text("\"Not Jarvis. Jeeves.\"")
-                .font(.jeevesCaption)
-                .foregroundStyle(.secondary)
-                .italic()
-                .frame(maxWidth: .infinity)
-                .listRowBackground(Color.clear)
         }
     }
 

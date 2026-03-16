@@ -2,6 +2,12 @@
 
 Native operator cockpit for the governed AI system.
 
+*AI observes. Humans decide.*
+
+We believe AI should watch the world, detect what matters, and surface it for human review - never act alone. Knowledge grows through observation, not execution. Consent is not a feature. It is the architecture.
+
+Jeeves is how an operator sees what CLASHD27 discovered, reviews what OpenClashd is holding for consent, and decides what happens next without bypassing governance.
+
 Jeeves is the place where an operator:
 
 - sees what needs attention now
