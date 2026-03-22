@@ -191,9 +191,8 @@ struct LobbyView: View {
     @State private var showOrangeConfirm = false
     @State private var pendingDecision: (proposalId: String, decision: String)?
     @State private var decidingProposalId: String?
+    @State private var decisionStatusMessage: String?
     @State private var decisionErrorMessage: String?
-    @State private var showDecisionError = false
-    @State private var showActionReceipt = false
     @State private var selectedDecision: DecidedProposal?
     @State private var selectedKnowledgeObjectId: String?
     @State private var knowledgeGraphData: KnowledgeGraphResponse?
@@ -204,7 +203,6 @@ struct LobbyView: View {
     @State private var selectedIncomingTool: IncomingToolSummary?
     @State private var incomingToolActionInFlightId: String?
     @State private var incomingToolActionErrorMessage: String?
-    @State private var showIncomingToolActionError = false
     @State private var incomingToolStatusMessage: String?
     @State private var browserDomain = "financial"
     @State private var browserSubdomain = "investing"
@@ -232,11 +230,9 @@ struct LobbyView: View {
     @State private var pendingBrowserDeployment: DeployConfigurationRequest?
     @State private var browserLastCreatedProposalId: String?
     @State private var browserActionErrorMessage: String?
-    @State private var showBrowserActionError = false
     @State private var decidingExtensionId: String?
     @State private var loadingManifestExtensionId: String?
     @State private var extensionActionErrorMessage: String?
-    @State private var showExtensionActionError = false
     @State private var selectedExtensionManifest: ExtensionManifest?
     @State private var extensionDecisions: [String: ExtensionDecision] = [:]
     @State private var expandedClusterIDs: Set<String> = []
@@ -287,6 +283,7 @@ struct LobbyView: View {
                         VStack(spacing: 20) {
                             systemZoneSection
                                 .id(MissionZone.system.anchorId)
+                            inlineNoticesSection
                             radarZoneSection
                                 .id(MissionZone.radar.anchorId)
                             gapInboxZoneSection
@@ -336,41 +333,6 @@ struct LobbyView: View {
                 }
                 Button(TextKeys.Lobby.confirmNo, role: .cancel) {
                     pendingDecision = nil
-                }
-            }
-            .alert("Actie niet uitgevoerd", isPresented: $showDecisionError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(decisionErrorMessage ?? "Onbekende fout.")
-            }
-            .alert("Extension actie niet uitgevoerd", isPresented: $showExtensionActionError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(extensionActionErrorMessage ?? "Onbekende fout.")
-            }
-            .alert("Incoming Tool actie niet uitgevoerd", isPresented: $showIncomingToolActionError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(incomingToolActionErrorMessage ?? "Onbekende fout.")
-            }
-            .alert("AI Browser actie niet uitgevoerd", isPresented: $showBrowserActionError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(browserActionErrorMessage ?? "Onbekende fout.")
-            }
-            .sheet(isPresented: $showActionReceipt) {
-                if let action = poller.lastActionReceipt {
-                    ActionReceiptSheet(
-                        action: action,
-                        linkedKnowledge: poller.lastDecideLinkedKnowledge,
-                        residueRecordedMessage: poller.lastApprovedCorrelatedGridProposalTitle != nil
-                            ? "Residue recorded for this cluster."
-                            : nil,
-                        onKnowledgeTap: { objectId in
-                            showActionReceipt = false
-                            fetchAndShowKnowledgeGraph(objectId: objectId)
-                        }
-                    )
                 }
             }
             .sheet(item: $selectedDecision) { decision in
@@ -496,6 +458,125 @@ struct LobbyView: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private struct InlineNotice: Identifiable {
+        let id: String
+        let title: String
+        let message: String
+        let tint: Color
+        let clear: () -> Void
+    }
+
+    @ViewBuilder
+    private var inlineNoticesSection: some View {
+        let notices = inlineNotices
+
+        if !notices.isEmpty {
+            VStack(spacing: 10) {
+                ForEach(notices) { notice in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundStyle(notice.tint)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(notice.title)
+                                .font(.jeevesCaption.weight(.semibold))
+                                .foregroundStyle(.white)
+                            Text(notice.message)
+                                .font(.jeevesCaption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Button("Sluiten") {
+                            notice.clear()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(notice.tint)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(notice.tint.opacity(0.24), lineWidth: 1)
+                            )
+                    )
+                }
+            }
+        }
+    }
+
+    private var inlineNotices: [InlineNotice] {
+        var notices: [InlineNotice] = []
+
+        if let message = decisionStatusMessage, !message.isEmpty {
+            notices.append(
+                InlineNotice(
+                    id: "decision-status",
+                    title: "Besluit verwerkt",
+                    message: message,
+                    tint: .consentGreen,
+                    clear: { decisionStatusMessage = nil }
+                )
+            )
+        }
+
+        if let message = decisionErrorMessage, !message.isEmpty {
+            notices.append(
+                InlineNotice(
+                    id: "decision-error",
+                    title: "Actie niet uitgevoerd",
+                    message: message,
+                    tint: .consentRed,
+                    clear: { decisionErrorMessage = nil }
+                )
+            )
+        }
+
+        if let message = extensionActionErrorMessage, !message.isEmpty {
+            notices.append(
+                InlineNotice(
+                    id: "extension-error",
+                    title: "Extension actie niet uitgevoerd",
+                    message: message,
+                    tint: .consentRed,
+                    clear: { extensionActionErrorMessage = nil }
+                )
+            )
+        }
+
+        if let message = incomingToolActionErrorMessage, !message.isEmpty {
+            notices.append(
+                InlineNotice(
+                    id: "incoming-tool-error",
+                    title: "Incoming Tool actie niet uitgevoerd",
+                    message: message,
+                    tint: .consentRed,
+                    clear: { incomingToolActionErrorMessage = nil }
+                )
+            )
+        }
+
+        if let message = browserActionErrorMessage, !message.isEmpty {
+            notices.append(
+                InlineNotice(
+                    id: "browser-action-error",
+                    title: "AI Browser actie niet uitgevoerd",
+                    message: message,
+                    tint: .consentRed,
+                    clear: { browserActionErrorMessage = nil }
+                )
+            )
+        }
+
+        return notices
     }
 
     private var systemZoneSection: some View {
@@ -2115,12 +2196,10 @@ struct LobbyView: View {
         let action = tool.actions.state(for: kind)
         guard action.available else {
             incomingToolActionErrorMessage = "\(kind.rawValue.capitalized) is currently unavailable for this tool."
-            showIncomingToolActionError = true
             return
         }
         guard let endpoint = action.endpoint, !endpoint.isEmpty else {
             incomingToolActionErrorMessage = "No backend endpoint is available for this action."
-            showIncomingToolActionError = true
             return
         }
 
@@ -2132,7 +2211,6 @@ struct LobbyView: View {
                 await MainActor.run {
                     incomingToolActionInFlightId = nil
                     incomingToolActionErrorMessage = "Geen token beschikbaar. Voeg een token toe in Instellingen."
-                    showIncomingToolActionError = true
                 }
                 return
             }
@@ -2147,8 +2225,8 @@ struct LobbyView: View {
                 await poller.refresh(gateway: gateway)
                 await MainActor.run {
                     incomingToolActionInFlightId = nil
+                    incomingToolActionErrorMessage = nil
                     incomingToolStatusMessage = incomingToolActionSuccessMessage(for: kind, extensionId: tool.extensionId)
-                    selectedIncomingTool = incomingTools.first(where: { $0.id == tool.id })
                 }
             } catch {
                 await MainActor.run {
@@ -2158,7 +2236,6 @@ struct LobbyView: View {
                         host: resolved.host,
                         port: resolved.port
                     )
-                    showIncomingToolActionError = true
                 }
             }
         }
@@ -3275,7 +3352,6 @@ struct LobbyView: View {
     private func requestBrowserDeployment(for card: BrowserCard, origin: BrowserDeployActionOrigin) {
         guard card.deployReady else {
             browserActionErrorMessage = "This certified result is not deploy-ready yet. Inspect details and wait for certification readiness."
-            showBrowserActionError = true
             return
         }
         let configuration = browserConfigurationCache[card.bestConfiguration.configId] ?? card.bestConfiguration
@@ -3344,7 +3420,6 @@ struct LobbyView: View {
                 await MainActor.run {
                     browserDeployingConfigId = nil
                     browserActionErrorMessage = "Geen token beschikbaar. Voeg een token toe in Instellingen."
-                    showBrowserActionError = true
                 }
                 return
             }
@@ -3356,6 +3431,7 @@ struct LobbyView: View {
                 await poller.refresh(gateway: gateway)
                 await MainActor.run {
                     browserDeployingConfigId = nil
+                    browserActionErrorMessage = nil
                     browserLastCreatedProposalId = response.proposalId
                     if let proposalId = response.proposalId, !proposalId.isEmpty {
                         browserDeploymentProposalByConfigId[request.configId] = proposalId
@@ -3369,7 +3445,6 @@ struct LobbyView: View {
                 await MainActor.run {
                     browserDeployingConfigId = nil
                     browserActionErrorMessage = describeBrowserDeployFailure(error, host: resolved.host, port: resolved.port)
-                    showBrowserActionError = true
                 }
             }
         }
@@ -3990,12 +4065,14 @@ struct LobbyView: View {
                 decidingProposalId = nil
                 switch result {
                 case .success:
+                    decisionErrorMessage = nil
                     if decision == "approve" && poller.lastActionReceipt != nil {
-                        showActionReceipt = true
+                        decisionStatusMessage = "De actie is uitgevoerd. De receipt staat in het logboek en de gekoppelde kennis blijft beschikbaar via de cockpit."
+                    } else {
+                        decisionStatusMessage = "Het besluit is verwerkt."
                     }
                 case .failure(let message):
                     decisionErrorMessage = message
-                    showDecisionError = true
                 }
             }
         }
@@ -4021,7 +4098,6 @@ struct LobbyView: View {
                 await MainActor.run {
                     decidingExtensionId = nil
                     extensionActionErrorMessage = "Geen token beschikbaar. Voeg een token toe in Instellingen."
-                    showExtensionActionError = true
                 }
                 return
             }
@@ -4035,9 +4111,7 @@ struct LobbyView: View {
                 await MainActor.run {
                     extensionDecisions[proposal.extensionId] = decision
                     decidingExtensionId = nil
-                }
-                await MainActor.run {
-                    inspectExtensionManifest(proposal)
+                    extensionActionErrorMessage = nil
                 }
             } catch {
                 await MainActor.run {
@@ -4047,7 +4121,6 @@ struct LobbyView: View {
                         host: resolved.host,
                         port: resolved.port
                     )
-                    showExtensionActionError = true
                 }
             }
         }

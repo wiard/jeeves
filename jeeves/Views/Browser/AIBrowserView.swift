@@ -20,6 +20,11 @@ struct AIBrowserView: View {
                         errorBanner(error)
                     }
 
+                    if let deploymentError = viewModel.deploymentError,
+                       viewModel.showingDeploymentProposal == nil {
+                        deploymentErrorBanner(deploymentError)
+                    }
+
                     switch viewModel.selectedSection {
                     case .marketplace:
                         BrowserMarketplaceView(viewModel: viewModel)
@@ -82,11 +87,6 @@ struct AIBrowserView: View {
                     }
                 )
             }
-            .alert("Deployment Error", isPresented: .constant(viewModel.deploymentError != nil && viewModel.showingDeploymentProposal == nil)) {
-                Button("OK") { viewModel.deploymentError = nil }
-            } message: {
-                Text(viewModel.deploymentError ?? "")
-            }
         }
     }
 
@@ -148,6 +148,25 @@ struct AIBrowserView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    private func deploymentErrorBanner(_ error: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "xmark.octagon.fill")
+                .foregroundStyle(Color.consentRed)
+            Text(error)
+                .font(.jeevesCaption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Sluiten") {
+                viewModel.deploymentError = nil
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.02))
     }
 
     // MARK: - Related Cards

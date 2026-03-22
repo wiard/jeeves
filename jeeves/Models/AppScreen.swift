@@ -11,6 +11,10 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
     case logbook     = 5
     case aiBrowser   = 6
     case settings    = 7
+    case vandaag     = 8
+    case zoeker      = 9
+    case beslissingen = 10
+    case research    = 11
 
     var id: Int { rawValue }
 
@@ -24,6 +28,10 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .logbook:     return "Logbook"
         case .aiBrowser:   return "AI Browser"
         case .settings:    return "System"
+        case .vandaag:     return "Vandaag"
+        case .zoeker:      return "De Zoeker"
+        case .beslissingen:return "Beslissingen"
+        case .research:    return "Disciplines"
         }
     }
 
@@ -37,6 +45,10 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .logbook:     return "scroll.fill"
         case .aiBrowser:   return "sparkle.magnifyingglass"
         case .settings:    return "gearshape.fill"
+        case .vandaag:     return "house.fill"
+        case .zoeker:      return "circle.grid.3x3.fill"
+        case .beslissingen:return "checkmark.circle.fill"
+        case .research:    return "magnifyingglass.circle.fill"
         }
     }
 
@@ -48,6 +60,10 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .observatory: return ["oracle", "loop", "fabric", "lobby", "signals", "knowledge", "radar", "discovery", "alerts"]
         case .house:       return ["library", "discoveries", "evidence", "codeSignals", "memory"]
         case .aiBrowser:   return ["marketplace", "deployments", "myAgents"]
+        case .vandaag:     return ["bieb", "latest", "queue"]
+        case .zoeker:      return ["heatmap", "cells", "radar"]
+        case .beslissingen:return ["gaps", "queue", "review"]
+        case .research:    return ["disciplines", "gaps", "detail"]
         case .logbook:     return []
         case .chat:        return []
         case .settings:    return ["connection", "security", "systemState"]

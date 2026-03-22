@@ -4,6 +4,9 @@ import SwiftData
 
 struct ContentView: View {
     private static let localDefaultPort = 19001
+    private static let defaultHost = "178.104.55.41"
+    private static let defaultPort = 19001
+    private static let defaultConductorToken = "v1.eyJzY29wZSI6ImNvbmR1Y3RvciIsInNlc3Npb25JZCI6Im9yYWNsZSIsImlzc3VlZEF0SXNvIjoiMjAyNi0wMy0xOVQwNjoxOToxMy43MjNaIiwiZXhwaXJlc0F0SXNvIjoiMjAyNy0wMy0xOVQwNjoxOToxMy43MjNaIn0.nKJRvtALsboY-RWKt2sUtbwu2i0TtzbEViIh_6KU10A"
 
     @Environment(\.modelContext) private var modelContext
     @Environment(GatewayManager.self) private var gateway
@@ -14,11 +17,11 @@ struct ContentView: View {
     @State private var hasBootstrappedStartupConnection = false
     @State private var isBootstrappingConnection = true
     @State private var needsOnboarding = false
-    @State private var selectedTab: AppScreen = .chat
-    @State private var auxiliaryScreen: AppScreen?
+    @State private var selectedTab: AppScreen = .vandaag
+    @StateObject private var beslissingenViewModel = BeslissingenViewModel()
 
     private var primaryTabs: Set<AppScreen> {
-        [.chat, .stream, .observatory, .house, .settings]
+        [.vandaag, .zoeker, .beslissingen, .research, .chat, .stream, .observatory, .house, .settings]
     }
 
     var body: some View {
@@ -28,7 +31,7 @@ struct ContentView: View {
                     hasCompletedOnboarding = true
                     needsOnboarding = false
                     isBootstrappingConnection = false
-                    selectedTab = .chat
+                    selectedTab = .vandaag
                 }
             } else if isBootstrappingConnection {
                 ProgressView("Initializing gateway connection...")
@@ -52,8 +55,12 @@ struct ContentView: View {
             }
         }
         .onChange(of: gateway.isConnected) {
+            beslissingenViewModel.configure(gateway: gateway)
             if gateway.isConnected {
                 poller.start(gateway: gateway)
+                Task {
+                    await beslissingenViewModel.fetchOpenDecisions()
+                }
             } else {
                 poller.stop()
             }
@@ -67,22 +74,77 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenMissionControlTab)) { _ in
             selectedTab = .stream
         }
+        .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenVandaagTab)) { _ in
+            selectedTab = .vandaag
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenResearchTab)) { _ in
+            selectedTab = .research
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .jeevesOpenDisciplinesTab)) { _ in
+            selectedTab = .research
+        }
         .onChange(of: orchestrator.activeDirective) {
             guard let directive = orchestrator.activeDirective else { return }
             if primaryTabs.contains(directive.destination) {
                 selectedTab = directive.destination
-            } else {
-                auxiliaryScreen = directive.destination
-                orchestrator.session.recordScreenChange(directive.destination)
             }
         }
         .onChange(of: selectedTab) {
             orchestrator.session.recordScreenChange(selectedTab)
         }
+        .task {
+            guard hasCompletedOnboarding else { return }
+            beslissingenViewModel.configure(gateway: gateway)
+            await beslissingenViewModel.fetchOpenDecisions()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(300))
+                beslissingenViewModel.configure(gateway: gateway)
+                await beslissingenViewModel.fetchOpenDecisions()
+            }
+        }
+    }
+
+    /// Seeds factory defaults for host and conductor token on first launch.
+    /// Only writes when no GatewayConnection and no Keychain token exist yet.
+    @MainActor
+    private func seedDefaultsIfNeeded() {
+        guard connections.isEmpty else { return }
+
+        let keychainKey = "\(Self.defaultHost):\(Self.defaultPort)"
+        guard KeychainHelper.load(for: keychainKey) == nil else { return }
+
+        let connection = GatewayConnection(
+            host: Self.defaultHost,
+            port: Self.defaultPort,
+            channelId: "ios-app"
+        )
+        modelContext.insert(connection)
+        try? KeychainHelper.save(token: Self.defaultConductorToken, for: keychainKey)
     }
 
     @MainActor
     private func bootstrapStartupConnection() async {
+        seedDefaultsIfNeeded()
+
+        // If we have a configured endpoint that is NOT localhost / local-network,
+        // use it directly — discovery must never override an explicit remote host.
+        if let existing = connections.first {
+            let normalized = GatewayManager.normalizeEndpoint(host: existing.host, port: existing.port)
+            if !GatewayManager.isLocalDevelopmentHost(normalized.host) {
+                let keychainKey = "\(normalized.host):\(normalized.port)"
+                let token = KeychainHelper.load(for: keychainKey) ?? KeychainHelper.loadAnyToken()
+                gateway.useMock = false
+                gateway.connect(
+                    host: normalized.host,
+                    port: normalized.port,
+                    token: token,
+                    channelId: existing.channelId
+                )
+                return
+            }
+        }
+
         if let discovered = gateway.startupGatewayConfigFromFile() {
             let normalized = GatewayManager.normalizeEndpoint(host: discovered.host, port: discovered.port)
             let connection = upsertConnection(
@@ -141,6 +203,12 @@ struct ContentView: View {
         #if os(macOS)
         NavigationSplitView {
             List(selection: $selectedTab) {
+                Section("Cockpit") {
+                    Label("Vandaag", systemImage: AppScreen.vandaag.icon).tag(AppScreen.vandaag)
+                    Label("De Zoeker", systemImage: AppScreen.zoeker.icon).tag(AppScreen.zoeker)
+                    Label("Beslissingen", systemImage: AppScreen.beslissingen.icon).tag(AppScreen.beslissingen)
+                    Label("Disciplines", systemImage: AppScreen.research.icon).tag(AppScreen.research)
+                }
                 Section("Jeeves") {
                     Label("Jeeves", systemImage: "sun.max").tag(AppScreen.chat)
                     Label("Mission Control", systemImage: "scope").tag(AppScreen.stream)
@@ -164,6 +232,19 @@ struct ContentView: View {
         .tint(Color.jeevesSky)
         #else
         TabView(selection: $selectedTab) {
+            Tab("Vandaag", systemImage: "house.fill", value: .vandaag) {
+                VandaagView()
+            }
+            Tab("De Zoeker", systemImage: "circle.grid.3x3.fill", value: .zoeker) {
+                ZoekerView()
+            }
+            Tab("Beslissingen", systemImage: "checkmark.circle.fill", value: .beslissingen) {
+                BeslissingenView(viewModel: beslissingenViewModel)
+                    .badge(beslissingenViewModel.badgeText)
+            }
+            Tab("Disciplines", systemImage: "magnifyingglass.circle.fill", value: .research) {
+                DisciplineView()
+            }
             Tab("Jeeves", systemImage: "sun.max", value: .chat) {
                 JeevesView()
             }
@@ -179,9 +260,6 @@ struct ContentView: View {
             Tab("System", systemImage: "gearshape.fill", value: .settings) {
                 SettingsView()
             }
-        }
-        .sheet(item: $auxiliaryScreen) { screen in
-            screenView(for: screen)
         }
         .tint(.jeevesSky)
         .overlay(alignment: .top) {
@@ -204,6 +282,10 @@ struct ContentView: View {
     @ViewBuilder
     private func screenView(for screen: AppScreen) -> some View {
         switch screen {
+        case .vandaag:    VandaagView()
+        case .zoeker:     ZoekerView()
+        case .beslissingen: BeslissingenView(viewModel: beslissingenViewModel)
+        case .research:   DisciplineView()
         case .stream:      MissionControlDashboardView()
         case .lobby:       LobbyView()
         case .chat:        JeevesView()
@@ -217,6 +299,9 @@ struct ContentView: View {
 }
 
 extension Notification.Name {
+    static let jeevesOpenVandaagTab = Notification.Name("jeeves.openVandaagTab")
+    static let jeevesOpenResearchTab = Notification.Name("jeeves.openResearchTab")
+    static let jeevesOpenDisciplinesTab = Notification.Name("jeeves.openDisciplinesTab")
     static let jeevesOpenSystemTab = Notification.Name("jeeves.openSystemTab")
     static let jeevesOpenMissionControlTab = Notification.Name("jeeves.openMissionControlTab")
 }

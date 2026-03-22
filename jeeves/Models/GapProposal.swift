@@ -30,6 +30,7 @@ struct GapProposalResponse: Decodable {
 struct GapProposal: Decodable, Identifiable, Hashable {
     let gapId: String
     let gapProposalId: String
+    let sourcePacketId: String?
     let title: String
     let status: String
     let summary: String?

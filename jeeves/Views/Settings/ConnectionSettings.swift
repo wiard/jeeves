@@ -3,7 +3,10 @@ import SwiftData
 
 struct ConnectionSettings: View {
     @Environment(GatewayManager.self) private var gateway
+    @Environment(\.modelContext) private var modelContext
     @Query private var connections: [GatewayConnection]
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var showResetConfirmation = false
 
     private var saved: GatewayConnection? { connections.first }
     private let runtime = RuntimeConfig.shared
@@ -33,7 +36,46 @@ struct ConnectionSettings: View {
             settingRow("Channel", saved?.channelId ?? "ios-app")
             settingRow("Token", tokenLabel, color: tokenLabel == "No token" ? .red : .secondary)
             settingRow("Mock flag", runtime.useMock ? "on" : "off")
+
+            Button(role: .destructive) {
+                showResetConfirmation = true
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("Reset verbinding")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .confirmationDialog(
+                "Weet je het zeker?",
+                isPresented: $showResetConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Reset verbinding", role: .destructive) {
+                    resetConnection()
+                }
+                Button("Annuleer", role: .cancel) {}
+            } message: {
+                Text("Alle opgeslagen verbindingen en tokens worden verwijderd. Je keert terug naar het onboarding scherm.")
+            }
         }
+    }
+
+    private func resetConnection() {
+        // 1. Delete all GatewayConnections from SwiftData
+        for connection in connections {
+            modelContext.delete(connection)
+        }
+        try? modelContext.save()
+
+        // 2. Delete all conductor tokens from Keychain
+        KeychainHelper.deleteAll()
+
+        // 3. Disconnect the active gateway
+        gateway.disconnect()
+
+        // 4. Return to onboarding
+        hasCompletedOnboarding = false
     }
 
     @ViewBuilder
@@ -80,6 +122,9 @@ struct ConnectionSettings: View {
         }
         if gateway.startupGatewayFileExists() {
             return "gateway.json found, endpoint unreadable"
+        }
+        if let c = saved, !GatewayManager.isLocalDevelopmentHost(c.host) {
+            return "Skipped (remote connection active)"
         }
         return "No gateway.json"
     }

@@ -113,11 +113,26 @@ struct SettingsView: View {
                                 .foregroundStyle(.green)
                         }
                     }
+                } else if token.hasPrefix("v1.") {
+                    HStack {
+                        Text("Format")
+                        Spacer()
+                        Text("Conductor token (v1)")
+                            .font(.jeevesMono)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        Text(TextKeys.Settings.tokenValid)
+                            .font(.jeevesMono)
+                            .foregroundStyle(.green)
+                    }
                 } else {
                     HStack {
                         Text("Format")
                         Spacer()
-                        Text("Non-standard token")
+                        Text("Opaque token")
                             .font(.jeevesMono)
                             .foregroundStyle(.secondary)
                     }
@@ -339,13 +354,25 @@ enum TokenDecoder {
     static func decode(_ token: String) -> DecodedToken? {
         let payload: String
         if token.hasPrefix("v1.") {
-            payload = String(token.dropFirst(3))
+            // Conductor token format: v1.<base64payload>.<signature>
+            // Strip v1. prefix, then take only the payload (before the signature dot)
+            let afterPrefix = String(token.dropFirst(3))
+            if let dotIndex = afterPrefix.firstIndex(of: ".") {
+                payload = String(afterPrefix[afterPrefix.startIndex..<dotIndex])
+            } else {
+                payload = afterPrefix
+            }
         } else {
             payload = token
         }
 
-        guard let data = Data(base64Encoded: payload) ??
-              Data(base64Encoded: padBase64(payload)),
+        // Handle URL-safe base64 (replace - with + and _ with /)
+        let standardBase64 = payload
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        guard let data = Data(base64Encoded: standardBase64) ??
+              Data(base64Encoded: padBase64(standardBase64)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
