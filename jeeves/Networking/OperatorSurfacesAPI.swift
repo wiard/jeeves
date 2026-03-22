@@ -114,6 +114,44 @@ struct OperatorSurfacesAPI: Sendable {
         throw URLError(.cannotParseResponse)
     }
 
+    func fetchAgentProposals() async throws -> [Proposal] {
+        let data = try await request(path: "/api/agents/proposals", method: "GET")
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode([Proposal].self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(ProposalsEnvelope.self, from: data) {
+            return envelope.resolved
+        }
+
+        throw URLError(.cannotParseResponse)
+    }
+
+    func fetchConductorState() async throws -> ConductorState {
+        let data = try await request(path: "/api/conductor/state", method: "GET")
+        return try JSONDecoder().decode(ConductorState.self, from: data)
+    }
+
+    func fetchRadarDiscoveries() async throws -> [RadarDiscoveryCandidate] {
+        let data = try await request(path: "/api/radar/discoveries", method: "GET")
+        let decoder = JSONDecoder()
+
+        if let direct = try? decoder.decode([RadarDiscoveryCandidate].self, from: data) {
+            return direct
+        }
+        if let envelope = try? decoder.decode(RadarDiscoveriesEnvelope.self, from: data) {
+            return envelope.candidates ?? envelope.items ?? envelope.data ?? []
+        }
+
+        throw URLError(.cannotParseResponse)
+    }
+
+    func fetchJacobMeaning() async throws -> [JeevesKanaalMeaningItem] {
+        let data = try await request(path: "/api/jacob/meaning", method: "GET")
+        return try decodeJacobMeaningItems(from: data)
+    }
+
     func decideProposal(proposalId: String, decision: String) async throws -> OperatorMutationAck {
         let body = try JSONEncoder().encode(DecisionBody(decision: decision, reason: nil))
         let data = try await request(path: "/api/agents/proposals/\(proposalId)/decide", method: "POST", body: body)
@@ -235,6 +273,36 @@ struct OperatorSurfacesAPI: Sendable {
 
         return OperatorSurfacesError(message: fallback)
     }
+
+    private func decodeJacobMeaningItems(from data: Data) throws -> [JeevesKanaalMeaningItem] {
+        if let direct = try? JSONDecoder().decode([JeevesKanaalMeaningItem].self, from: data) {
+            return direct
+        }
+
+        let json = try JSONSerialization.jsonObject(with: data)
+
+        if let array = json as? [Any] {
+            return array.compactMap(JeevesKanaalMeaningItem.init(json:))
+        }
+
+        if let dictionary = json as? [String: Any] {
+            let candidateKeys = ["items", "meanings", "decisions", "entries", "data"]
+            for key in candidateKeys {
+                if let array = dictionary[key] as? [Any] {
+                    return array.compactMap(JeevesKanaalMeaningItem.init(json:))
+                }
+            }
+            if let nested = dictionary["result"] as? [String: Any] {
+                for key in candidateKeys {
+                    if let array = nested[key] as? [Any] {
+                        return array.compactMap(JeevesKanaalMeaningItem.init(json:))
+                    }
+                }
+            }
+        }
+
+        throw URLError(.cannotParseResponse)
+    }
 }
 
 private extension OperatorSurfacesAPI {
@@ -250,6 +318,8 @@ private extension OperatorSurfacesAPI {
         ]
     }
 }
+
+extension OperatorSurfacesAPI: JeevesKanaalAPIClient {}
 
 extension GatewayManager {
     func makeOperatorSurfacesAPI() async -> OperatorSurfacesAPI? {
@@ -291,6 +361,12 @@ extension GatewayManager {
 
         return nil
     }
+}
+
+private struct RadarDiscoveriesEnvelope: Decodable {
+    let candidates: [RadarDiscoveryCandidate]?
+    let items: [RadarDiscoveryCandidate]?
+    let data: [RadarDiscoveryCandidate]?
 }
 
 private struct DecisionBody: Encodable {

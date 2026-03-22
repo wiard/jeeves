@@ -15,6 +15,7 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
     case zoeker      = 9
     case beslissingen = 10
     case research    = 11
+    case kanaal      = 12
 
     var id: Int { rawValue }
 
@@ -32,6 +33,7 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .zoeker:      return "De Zoeker"
         case .beslissingen:return "Beslissingen"
         case .research:    return "Disciplines"
+        case .kanaal:      return "Kanaal"
         }
     }
 
@@ -49,6 +51,7 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .zoeker:      return "circle.grid.3x3.fill"
         case .beslissingen:return "checkmark.circle.fill"
         case .research:    return "magnifyingglass.circle.fill"
+        case .kanaal:      return "message.fill"
         }
     }
 
@@ -64,6 +67,7 @@ enum AppScreen: Int, CaseIterable, Identifiable, Sendable, Hashable {
         case .zoeker:      return ["heatmap", "cells", "radar"]
         case .beslissingen:return ["gaps", "queue", "review"]
         case .research:    return ["disciplines", "gaps", "detail"]
+        case .kanaal:      return ["chat", "commands", "decisions"]
         case .logbook:     return []
         case .chat:        return []
         case .settings:    return ["connection", "security", "systemState"]

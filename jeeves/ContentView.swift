@@ -21,7 +21,7 @@ struct ContentView: View {
     @StateObject private var beslissingenViewModel = BeslissingenViewModel()
 
     private var primaryTabs: Set<AppScreen> {
-        [.vandaag, .zoeker, .beslissingen, .research, .chat, .stream, .observatory, .house, .settings]
+        [.vandaag, .zoeker, .beslissingen, .kanaal, .research, .chat, .stream, .observatory, .house, .settings]
     }
 
     var body: some View {
@@ -207,6 +207,7 @@ struct ContentView: View {
                     Label("Vandaag", systemImage: AppScreen.vandaag.icon).tag(AppScreen.vandaag)
                     Label("De Zoeker", systemImage: AppScreen.zoeker.icon).tag(AppScreen.zoeker)
                     Label("Beslissingen", systemImage: AppScreen.beslissingen.icon).tag(AppScreen.beslissingen)
+                    Label("Kanaal", systemImage: AppScreen.kanaal.icon).tag(AppScreen.kanaal)
                     Label("Disciplines", systemImage: AppScreen.research.icon).tag(AppScreen.research)
                 }
                 Section("Jeeves") {
@@ -241,6 +242,9 @@ struct ContentView: View {
             Tab("Beslissingen", systemImage: "checkmark.circle.fill", value: .beslissingen) {
                 BeslissingenView(viewModel: beslissingenViewModel)
                     .badge(beslissingenViewModel.badgeText)
+            }
+            Tab("Kanaal", systemImage: "message.fill", value: .kanaal) {
+                JeevesKanaalView()
             }
             Tab("Disciplines", systemImage: "magnifyingglass.circle.fill", value: .research) {
                 DisciplineView()
@@ -285,6 +289,7 @@ struct ContentView: View {
         case .vandaag:    VandaagView()
         case .zoeker:     ZoekerView()
         case .beslissingen: BeslissingenView(viewModel: beslissingenViewModel)
+        case .kanaal:     JeevesKanaalView()
         case .research:   DisciplineView()
         case .stream:      MissionControlDashboardView()
         case .lobby:       LobbyView()
