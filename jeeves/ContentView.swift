@@ -147,19 +147,30 @@ struct ContentView: View {
 
         if let discovered = gateway.startupGatewayConfigFromFile() {
             let normalized = GatewayManager.normalizeEndpoint(host: discovered.host, port: discovered.port)
-            let connection = upsertConnection(
-                host: normalized.host,
-                port: normalized.port,
-                channelId: "ios-app"
-            )
-            gateway.useMock = false
-            gateway.connect(
-                host: normalized.host,
-                port: normalized.port,
-                token: discovered.token,
-                channelId: connection.channelId
-            )
-            return
+            // Use discovery file when:
+            // 1. It points to a local dev host (local override), OR
+            // 2. It points to a remote host and the saved connection is stale-local or absent
+            let savedIsStaleLocal = connections.first.map {
+                GatewayManager.isLocalDevelopmentHost(
+                    GatewayManager.normalizeEndpoint(host: $0.host, port: $0.port).host
+                )
+            } ?? true // nil = no saved connection → treat as "needs discovery"
+
+            if GatewayManager.isLocalDevelopmentHost(normalized.host) || savedIsStaleLocal {
+                let connection = upsertConnection(
+                    host: normalized.host,
+                    port: normalized.port,
+                    channelId: "ios-app"
+                )
+                gateway.useMock = false
+                gateway.connect(
+                    host: normalized.host,
+                    port: normalized.port,
+                    token: discovered.token,
+                    channelId: connection.channelId
+                )
+                return
+            }
         }
 
         if gateway.startupGatewayFileExists() {

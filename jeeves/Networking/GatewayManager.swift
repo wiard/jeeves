@@ -774,19 +774,31 @@ final class GatewayManager {
 
         do {
             let req = try builder.request(for: RouteContract.healthProbe, timeoutInterval: 1.2)
+            print("[Jeeves][HealthProbe] calling \(req.url?.absoluteString ?? "nil")")
             let (data, response) = try await URLSession.shared.data(for: req)
-            guard let http = response as? HTTPURLResponse else { return .unavailable }
+            guard let http = response as? HTTPURLResponse else {
+                print("[Jeeves][HealthProbe] response was not HTTPURLResponse")
+                return .unavailable
+            }
+            let body = String(data: data, encoding: .utf8) ?? "<binary \(data.count) bytes>"
+            print("[Jeeves][HealthProbe] response status=\(http.statusCode) body=\(body)")
             if http.statusCode == 200 {
                 if let decoded = try? JSONDecoder().decode(ConductorHealth.self, from: data) {
-                    return decoded.ok ? .healthy : .unavailable
+                    let result: ConductorProbeStatus = decoded.ok ? .healthy : .unavailable
+                    print("[Jeeves][HealthProbe] result=\(result) (decoded.ok=\(decoded.ok))")
+                    return result
                 }
+                print("[Jeeves][HealthProbe] result=unavailable (JSON decode failed)")
                 return .unavailable
             }
             if http.statusCode == 401 {
+                print("[Jeeves][HealthProbe] result=unauthorized")
                 return .unauthorized
             }
+            print("[Jeeves][HealthProbe] result=unavailable (status \(http.statusCode))")
             return .unavailable
         } catch {
+            print("[Jeeves][HealthProbe] result=unavailable (error: \(error))")
             return .unavailable
         }
     }
