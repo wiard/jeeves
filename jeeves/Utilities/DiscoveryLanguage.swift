@@ -74,16 +74,18 @@ struct DiscoveryLanguage {
 
     static func humanDomain(_ axis: DiscoveryAxis?) -> String {
         guard let axis else { return "onbekend" }
-        let what = cleanDomainName(axis.what)
-        let time = timeLabel(axis.time)
-        return "\(what) (\(time))"
+        let what = translatedWhat(axis.what)
+        let whereValue = translatedWhere(axis.where_)
+        let time = translatedTime(axis.time)
+        return "\(what) (\(whereValue), \(time))"
     }
 
     static func humanDomain(_ axis: RadarAxes?) -> String {
         guard let axis else { return "onbekend" }
-        let what = cleanDomainName(axis.what)
-        let time = timeLabel(axis.time)
-        return "\(what) (\(time))"
+        let what = translatedWhat(axis.what)
+        let whereValue = translatedWhere(axis.whereValue)
+        let time = translatedTime(axis.time)
+        return "\(what) (\(whereValue), \(time))"
     }
 
     private static func headline(outcomeType: String, firstDomain: String, secondDomain: String) -> String {
@@ -127,23 +129,46 @@ struct DiscoveryLanguage {
         return nil
     }
 
+    private static func translatedWhat(_ value: String) -> String {
+        let whatMap: [String: String] = [
+            "architecture": "architectuur",
+            "trust-model": "vertrouwensmodel",
+            "surface": "oppervlak",
+            "model": "model",
+            "engine": "kern",
+            "governance": "governance",
+            "signal": "signaal",
+            "knowledge": "kennis",
+            "fabric": "weefsel"
+        ]
+
+        return whatMap[value] ?? cleanDomainName(value)
+    }
+
+    private static func translatedWhere(_ value: String) -> String {
+        let whereMap: [String: String] = [
+            "internal": "intern",
+            "external": "extern",
+            "engine": "kern"
+        ]
+
+        return whereMap[value] ?? cleanDomainName(value)
+    }
+
+    private static func translatedTime(_ value: String) -> String {
+        let timeMap: [String: String] = [
+            "historical": "historisch",
+            "current": "actueel",
+            "emerging": "opkomend"
+        ]
+
+        return timeMap[value] ?? cleanDomainName(value)
+    }
+
     private static func cleanDomainName(_ value: String) -> String {
         value
             .replacingOccurrences(of: "-", with: " ")
             .replacingOccurrences(of: "_", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func timeLabel(_ value: String) -> String {
-        switch value {
-        case "historical":
-            return "historisch"
-        case "current":
-            return "actueel"
-        case "emerging":
-            return "opkomend"
-        default:
-            return value
-        }
     }
 }
