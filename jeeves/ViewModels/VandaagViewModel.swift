@@ -517,11 +517,9 @@ final class VandaagViewModel: ObservableObject {
     }
 
     private func readableCandidateTitle(for candidate: RadarDiscoveryCandidate) -> String {
-        let cleaned = candidate.candidateType
-            .replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "-", with: " ")
+        let headline = DiscoveryLanguage.headline(for: candidate)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? candidate.candidateId : cleaned
+        return headline.isEmpty ? candidate.candidateId : headline
     }
 
     private func makeDiscoveryDisplayItem(for candidate: RadarDiscoveryCandidate) -> DiscoveryDisplayItem {
@@ -533,41 +531,12 @@ final class VandaagViewModel: ObservableObject {
     }
 
     private func candidateDisplayTitle(for candidate: RadarDiscoveryCandidate) -> String {
-        if candidate.axes.count >= 2 {
-            let first = candidate.axes[0]
-            let second = candidate.axes[1]
-            return "\(axisLabel(first)) × \(axisLabel(second))"
-        }
-
-        let explanation = candidate.explanation.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !explanation.isEmpty {
-            return explanation
-        }
-
-        return candidate.candidateId
+        DiscoveryLanguage.headline(for: candidate)
     }
 
     private func candidateDisplaySubtitle(for candidate: RadarDiscoveryCandidate) -> String {
-        let explanation = candidate.explanation.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !explanation.isEmpty {
-            return explanation
-        }
-
-        if candidate.axes.count >= 2 {
-            let first = candidate.axes[0]
-            let second = candidate.axes[1]
-            return "Intersection tussen \(axisPath(first)) en \(axisPath(second))"
-        }
-
-        return candidate.candidateId
-    }
-
-    private func axisLabel(_ axis: RadarAxes) -> String {
-        "\(axis.what) (\(axis.whereValue))"
-    }
-
-    private func axisPath(_ axis: RadarAxes) -> String {
-        "\(axis.what)/\(axis.whereValue)"
+        let hint = DiscoveryLanguage.actionHint(for: candidate)
+        return hint.isEmpty ? candidate.candidateId : hint
     }
 }
 

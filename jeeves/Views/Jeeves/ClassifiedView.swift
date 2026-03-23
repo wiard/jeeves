@@ -144,17 +144,17 @@ struct ClassifiedView: View {
                 outcomeBadge(discovery.outcomeType)
                 domainBadge(discovery)
                 Spacer()
-                Text(String(format: "%.2f", discovery.candidateScore))
+                Text("Score: \(String(format: "%.2f", discovery.candidateScore))")
                     .font(.jeevesMono.weight(.bold))
                     .foregroundStyle(Color.jeevesInk)
             }
 
-            Text(axisHeadline(discovery))
+            Text(DiscoveryLanguage.headline(for: discovery))
                 .font(.jeevesHeadline.weight(.semibold))
                 .foregroundStyle(Color.jeevesInk)
                 .lineLimit(2)
 
-            Text(discovery.explanation)
+            Text(DiscoveryLanguage.actionHint(discovery.outcomeType))
                 .font(.jeevesCaption)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
@@ -187,14 +187,7 @@ struct ClassifiedView: View {
 
     @ViewBuilder
     private func domainBadge(_ discovery: ClassifiedDiscovery) -> some View {
-        let label: String = switch discovery.domainType {
-        case "single": "1 domein"
-        case "dual":   "2 domeinen"
-        case "cross":  "Cross-domain"
-        default:       discovery.domainType
-        }
-
-        Text(label)
+        Text(DiscoveryLanguage.domainLabel(discovery.domainType))
             .font(.caption.weight(.medium))
             .foregroundStyle(Color.jeevesTeal)
             .padding(.horizontal, 10)
@@ -203,18 +196,6 @@ struct ClassifiedView: View {
                 Capsule()
                     .fill(Color.jeevesTeal.opacity(0.12))
             )
-    }
-
-    // MARK: - Helpers
-
-    private func axisHeadline(_ discovery: ClassifiedDiscovery) -> String {
-        guard let first = discovery.axes.first else { return discovery.explanation }
-        let left = "\(first.what) (\(first.where_))"
-        if discovery.axes.count > 1 {
-            let second = discovery.axes[1]
-            return "\(left) × \(second.what) (\(second.where_))"
-        }
-        return left
     }
 
     private func outcomeColor(_ type: String) -> Color {
