@@ -95,6 +95,47 @@ struct OperatorSurfacesAPI: Sendable {
         return try RadarHeatmapResponse.decode(from: data)
     }
 
+    func fetchChipRecentRuns(limit: Int = 6) async throws -> [ChipRun] {
+        let boundedLimit = max(1, min(limit, 20))
+        let data = try await request(
+            path: "/api/chip/runs/recent",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        return try ChipRun.decodeMany(from: data)
+    }
+
+    func fetchChipRecentOutcomes(limit: Int = 12) async throws -> [ChipOutcome] {
+        let boundedLimit = max(1, min(limit, 40))
+        let data = try await request(
+            path: "/api/chip/outcomes/recent",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        return try ChipOutcome.decodeMany(from: data)
+    }
+
+    func fetchChipRecentHypotheses(limit: Int = 12) async throws -> [ChipHypothesis] {
+        let boundedLimit = max(1, min(limit, 40))
+        let data = try await request(
+            path: "/api/chip/hypotheses/recent",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "limit", value: String(boundedLimit))]
+        )
+        return try ChipHypothesis.decodeMany(from: data)
+    }
+
+    func fetchChipSummary() async throws -> ChipSummary {
+        let data = try await request(path: "/api/chip/summary", method: "GET")
+        return try ChipSummary.decode(from: data)
+    }
+
+    func triggerChipAction(_ action: ChipActionRequest) async throws -> OperatorMutationAck {
+        let body = try JSONEncoder().encode(action)
+        let data = try await request(path: "/api/chip/action", method: "POST", body: body)
+        return decodeAck(from: data)
+    }
+
     func fetchGapProposals(limit: Int = 64) async throws -> GapProposalResponse {
         let boundedLimit = max(1, min(limit, 100))
         let data = try await request(

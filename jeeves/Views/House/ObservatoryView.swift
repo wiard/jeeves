@@ -5,6 +5,7 @@ struct ObservatoryView: View {
     @Environment(GatewayManager.self) private var gateway
     @Query private var connections: [GatewayConnection]
     @StateObject private var model = ObservatorySurfaceModel()
+    @StateObject private var chipLearningModel = ChipLearningViewModel()
 
     private let columns = [
         GridItem(.flexible(minimum: 160), spacing: 14),
@@ -30,17 +31,17 @@ struct ObservatoryView: View {
             .navigationBarTitleDisplayMode(.large)
             #endif
             .refreshable {
-                await model.refresh(gateway: gateway, connection: connections.first)
+                await refreshAll()
             }
             .task {
                 if model.snapshot == nil {
-                    await model.refresh(gateway: gateway, connection: connections.first)
+                    await refreshAll()
                 }
             }
             .onChange(of: gateway.isConnected) {
                 if gateway.isConnected {
                     Task {
-                        await model.refresh(gateway: gateway, connection: connections.first)
+                        await refreshAll()
                     }
                 }
             }
@@ -85,6 +86,9 @@ struct ObservatoryView: View {
 
                         operatorSignalsPanel
                             .calmAppear(delay: 0.158)
+
+                        chipLearningSections
+                            .calmAppear(delay: 0.159)
 
                         if let runtime = model.signalsRuntime,
                            let gravity = runtime.gravitySummary,
@@ -415,6 +419,43 @@ struct ObservatoryView: View {
         case .needsAttention:
             return .consentOrange
         }
+    }
+
+    private var chipLearningSections: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ChipLearningSummarySection(
+                summary: chipLearningModel.summaryCard,
+                runs: chipLearningModel.runs,
+                outcomes: chipLearningModel.outcomes,
+                hypotheses: chipLearningModel.hypotheses,
+                runChanges: chipLearningModel.runChanges,
+                actionBanner: chipLearningModel.latestActionBanner,
+                isLoading: chipLearningModel.isLoading,
+                errorText: chipLearningModel.errorText
+            )
+
+            ChipRecommendedFixesSection(
+                recommendations: chipLearningModel.recommendations,
+                actionState: { recommendation in
+                    chipLearningModel.actionState(for: recommendation)
+                },
+                onTryRecommendation: { recommendation in
+                    Task {
+                        await chipLearningModel.triggerRecommendation(recommendation)
+                    }
+                },
+                isLoading: chipLearningModel.isLoading,
+                errorText: chipLearningModel.errorText
+            )
+        }
+    }
+
+    private func refreshAll() async {
+        chipLearningModel.configure(gateway: gateway)
+
+        async let observatoryRefresh: Void = model.refresh(gateway: gateway, connection: connections.first)
+        async let chipRefresh: Void = chipLearningModel.refresh()
+        _ = await (observatoryRefresh, chipRefresh)
     }
 
     private var drilldownPanel: some View {
