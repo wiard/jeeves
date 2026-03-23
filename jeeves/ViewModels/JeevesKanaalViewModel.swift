@@ -6,6 +6,7 @@ protocol JeevesKanaalAPIClient: Sendable {
     func fetchJacobMeaning() async throws -> [JeevesKanaalMeaningItem]
     func fetchConductorState() async throws -> ConductorState
     func fetchRadarDiscoveries() async throws -> [RadarDiscoveryCandidate]
+    func fetchClassifiedDiscoveries() async throws -> [ClassifiedDiscovery]
     func decideProposal(proposalId: String, decision: String) async throws -> OperatorMutationAck
 }
 
@@ -121,6 +122,8 @@ enum JeevesKanaalIntent: Equatable, Sendable {
     case jacobMeaning
     case status
     case radar
+    case classified
+    case classifiedGaps
     case approve(reference: String)
     case dismiss(reference: String)
     case unknown
@@ -203,6 +206,12 @@ final class JeevesKanaalViewModel: ObservableObject {
         if normalized.contains("wat is de status") {
             return .status
         }
+        if normalized.contains("toon ontdekkingen") {
+            return .classified
+        }
+        if normalized.contains("wat zijn gaps") {
+            return .classifiedGaps
+        }
         if normalized.contains("toon radar") {
             return .radar
         }
@@ -283,6 +292,29 @@ final class JeevesKanaalViewModel: ObservableObject {
             let client = try await resolveClient(using: gateway)
             let state = try await client.fetchConductorState()
             return Self.formatStatus(state)
+        case .classified:
+            let client = try await resolveClient(using: gateway)
+            let items = try await client.fetchClassifiedDiscoveries()
+                .sorted { $0.candidateScore > $1.candidateScore }
+            guard !items.isEmpty else {
+                return "Er zijn nu geen geclassificeerde ontdekkingen."
+            }
+            let lines = items.prefix(3).map { item in
+                "\(item.outcomeType) · \(Self.cleanLine(item.axes.first?.what ?? item.explanation)) (\(Self.scoreText(item.candidateScore)))"
+            }
+            return "Ik zie \(items.count) geclassificeerde ontdekkingen.\n" + lines.joined(separator: "\n")
+        case .classifiedGaps:
+            let client = try await resolveClient(using: gateway)
+            let gaps = try await client.fetchClassifiedDiscoveries()
+                .filter { $0.outcomeType == "GAP" }
+                .sorted { $0.candidateScore > $1.candidateScore }
+            guard !gaps.isEmpty else {
+                return "Er zijn nu geen GAP-ontdekkingen."
+            }
+            let lines = gaps.prefix(3).map { item in
+                "GAP · \(Self.cleanLine(item.axes.first?.what ?? item.explanation)) (\(Self.scoreText(item.candidateScore)))"
+            }
+            return "\(gaps.count) GAP-ontdekkingen gevonden.\n" + lines.joined(separator: "\n")
         case .radar:
             let client = try await resolveClient(using: gateway)
             let discoveries = try await client.fetchRadarDiscoveries().sorted { $0.candidateScore > $1.candidateScore }

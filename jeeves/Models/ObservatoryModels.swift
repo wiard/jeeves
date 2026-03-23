@@ -2566,6 +2566,7 @@ struct RadarDiscoveryCandidate: Decodable, Sendable, Identifiable {
     let candidateScore: Double
     let rank: Int
     let crossDomain: Bool
+    let axes: [RadarAxes]
     let sources: [String]
     let explanation: String
 
@@ -2577,6 +2578,7 @@ struct RadarDiscoveryCandidate: Decodable, Sendable, Identifiable {
         case candidateScore
         case rank
         case crossDomain
+        case axes
         case sources
         case explanation
     }
@@ -2587,6 +2589,7 @@ struct RadarDiscoveryCandidate: Decodable, Sendable, Identifiable {
         candidateScore: Double,
         rank: Int,
         crossDomain: Bool,
+        axes: [RadarAxes] = [],
         sources: [String],
         explanation: String
     ) {
@@ -2595,6 +2598,7 @@ struct RadarDiscoveryCandidate: Decodable, Sendable, Identifiable {
         self.candidateScore = candidateScore
         self.rank = rank
         self.crossDomain = crossDomain
+        self.axes = axes
         self.sources = sources
         self.explanation = explanation
     }
@@ -2606,6 +2610,7 @@ struct RadarDiscoveryCandidate: Decodable, Sendable, Identifiable {
         candidateScore = try c.decodeIfPresent(Double.self, forKey: .candidateScore) ?? 0
         rank = try c.decodeIfPresent(Int.self, forKey: .rank) ?? 0
         crossDomain = try c.decodeIfPresent(Bool.self, forKey: .crossDomain) ?? false
+        axes = try c.decodeIfPresent([RadarAxes].self, forKey: .axes) ?? []
         sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
         explanation = try c.decodeIfPresent(String.self, forKey: .explanation) ?? ""
     }

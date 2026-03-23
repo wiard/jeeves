@@ -21,7 +21,7 @@ struct ContentView: View {
     @StateObject private var beslissingenViewModel = BeslissingenViewModel()
 
     private var primaryTabs: Set<AppScreen> {
-        [.vandaag, .zoeker, .beslissingen, .kanaal, .research, .chat, .stream, .observatory, .house, .settings]
+        [.vandaag, .zoeker, .beslissingen, .kanaal, .classified, .research, .chat, .stream, .observatory, .house, .settings]
     }
 
     var body: some View {
@@ -208,6 +208,7 @@ struct ContentView: View {
                     Label("De Zoeker", systemImage: AppScreen.zoeker.icon).tag(AppScreen.zoeker)
                     Label("Beslissingen", systemImage: AppScreen.beslissingen.icon).tag(AppScreen.beslissingen)
                     Label("Kanaal", systemImage: AppScreen.kanaal.icon).tag(AppScreen.kanaal)
+                    Label("Ontdekkingen", systemImage: AppScreen.classified.icon).tag(AppScreen.classified)
                     Label("Disciplines", systemImage: AppScreen.research.icon).tag(AppScreen.research)
                 }
                 Section("Jeeves") {
@@ -233,37 +234,40 @@ struct ContentView: View {
         .tint(Color.jeevesSky)
         #else
         TabView(selection: $selectedTab) {
-            Tab("Vandaag", systemImage: "house.fill", value: .vandaag) {
-                VandaagView()
-            }
-            Tab("De Zoeker", systemImage: "circle.grid.3x3.fill", value: .zoeker) {
-                ZoekerView()
-            }
-            Tab("Beslissingen", systemImage: "checkmark.circle.fill", value: .beslissingen) {
-                BeslissingenView(viewModel: beslissingenViewModel)
-                    .badge(beslissingenViewModel.badgeText)
-            }
-            Tab("Kanaal", systemImage: "message.fill", value: .kanaal) {
-                JeevesKanaalView()
-            }
-            Tab("Disciplines", systemImage: "magnifyingglass.circle.fill", value: .research) {
-                DisciplineView()
-            }
-            Tab("Jeeves", systemImage: "sun.max", value: .chat) {
-                JeevesView()
-            }
-            Tab("Mission Control", systemImage: "scope", value: .stream) {
-                MissionControlDashboardView()
-            }
-            Tab("Observatory", systemImage: "binoculars", value: .observatory) {
-                ObservatoryView()
-            }
-            Tab("Knowledge", systemImage: "book.closed.fill", value: .house) {
-                KnowledgeBrowserView()
-            }
-            Tab("System", systemImage: "gearshape.fill", value: .settings) {
-                SettingsView()
-            }
+            VandaagView()
+                .tabItem { Label("Vandaag", systemImage: "house.fill") }
+                .tag(AppScreen.vandaag)
+            ZoekerView()
+                .tabItem { Label("De Zoeker", systemImage: "circle.grid.3x3.fill") }
+                .tag(AppScreen.zoeker)
+            BeslissingenView(viewModel: beslissingenViewModel)
+                .badge(beslissingenViewModel.badgeText)
+                .tabItem { Label("Beslissingen", systemImage: "checkmark.circle.fill") }
+                .tag(AppScreen.beslissingen)
+            JeevesKanaalView()
+                .tabItem { Label("Kanaal", systemImage: "message.fill") }
+                .tag(AppScreen.kanaal)
+            ClassifiedView(beslissingenViewModel: beslissingenViewModel)
+                .tabItem { Label("Ontdekkingen", systemImage: "sparkles") }
+                .tag(AppScreen.classified)
+            DisciplineView()
+                .tabItem { Label("Disciplines", systemImage: "magnifyingglass.circle.fill") }
+                .tag(AppScreen.research)
+            JeevesView()
+                .tabItem { Label("Jeeves", systemImage: "sun.max") }
+                .tag(AppScreen.chat)
+            MissionControlDashboardView()
+                .tabItem { Label("Mission Control", systemImage: "scope") }
+                .tag(AppScreen.stream)
+            ObservatoryView()
+                .tabItem { Label("Observatory", systemImage: "binoculars") }
+                .tag(AppScreen.observatory)
+            KnowledgeBrowserView()
+                .tabItem { Label("Knowledge", systemImage: "book.closed.fill") }
+                .tag(AppScreen.house)
+            SettingsView()
+                .tabItem { Label("System", systemImage: "gearshape.fill") }
+                .tag(AppScreen.settings)
         }
         .tint(.jeevesSky)
         .overlay(alignment: .top) {
@@ -290,6 +294,7 @@ struct ContentView: View {
         case .zoeker:     ZoekerView()
         case .beslissingen: BeslissingenView(viewModel: beslissingenViewModel)
         case .kanaal:     JeevesKanaalView()
+        case .classified: ClassifiedView(beslissingenViewModel: beslissingenViewModel)
         case .research:   DisciplineView()
         case .stream:      MissionControlDashboardView()
         case .lobby:       LobbyView()

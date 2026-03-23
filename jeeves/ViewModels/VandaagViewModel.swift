@@ -2,6 +2,14 @@ import Foundation
 
 @MainActor
 final class VandaagViewModel: ObservableObject {
+    struct DiscoveryDisplayItem: Identifiable {
+        let candidate: RadarDiscoveryCandidate
+        let title: String
+        let subtitle: String
+
+        var id: String { candidate.id }
+    }
+
     struct ToastMessage: Equatable {
         enum Tone {
             case success
@@ -13,7 +21,11 @@ final class VandaagViewModel: ObservableObject {
     }
 
     @Published var items: [BiebLatestCell] = []
+    @Published var pendingProposals: [Proposal] = []
+    @Published var radarDiscoveries: [RadarDiscoveryCandidate] = []
+    @Published var jacobMeaningItems: [JeevesKanaalMeaningItem] = []
     @Published var isLoading = false
+    @Published var isFrontPageLoading = false
     @Published var error: String?
     @Published var activeDecisionId: String?
     @Published var toast: ToastMessage?
@@ -38,6 +50,46 @@ final class VandaagViewModel: ObservableObject {
 
     var waitingCount: Int {
         items.count
+    }
+
+    var firstPendingProposal: Proposal? {
+        pendingProposals.sorted { lhs, rhs in
+            (lhs.priorityScore ?? 0) > (rhs.priorityScore ?? 0)
+        }.first
+    }
+
+    var strongestDiscovery: RadarDiscoveryCandidate? {
+        radarDiscoveries.sorted { lhs, rhs in
+            if lhs.candidateScore == rhs.candidateScore {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.candidateScore > rhs.candidateScore
+        }.first
+    }
+
+    var topDiscoveryNews: [RadarDiscoveryCandidate] {
+        Array(
+            radarDiscoveries
+                .sorted { lhs, rhs in
+                    if lhs.candidateScore == rhs.candidateScore {
+                        return lhs.rank < rhs.rank
+                    }
+                    return lhs.candidateScore > rhs.candidateScore
+                }
+                .prefix(5)
+        )
+    }
+
+    var strongestDiscoveryDisplay: DiscoveryDisplayItem? {
+        strongestDiscovery.map(makeDiscoveryDisplayItem)
+    }
+
+    var topDiscoveryDisplayItems: [DiscoveryDisplayItem] {
+        topDiscoveryNews.map(makeDiscoveryDisplayItem)
+    }
+
+    var firstMeaningItem: JeevesKanaalMeaningItem? {
+        jacobMeaningItems.first
     }
 
     func configure(gateway: GatewayManager) {
@@ -109,6 +161,33 @@ final class VandaagViewModel: ObservableObject {
             self.error = "De Bieb kon niet worden geladen."
             return nil
         }
+    }
+
+    func fetchFrontPage() async {
+        guard let gateway else { return }
+        guard !isFrontPageLoading else { return }
+
+        isFrontPageLoading = true
+        defer { isFrontPageLoading = false }
+
+        guard let api = await gateway.makeOperatorSurfacesAPI() else {
+            if !gateway.useMock {
+                pendingProposals = []
+                radarDiscoveries = []
+                jacobMeaningItems = []
+            }
+            return
+        }
+
+        async let proposalsTask = loadAgentProposals(api: api)
+        async let discoveriesTask = loadRadarDiscoveries(api: api)
+        async let meaningTask = loadJacobMeaning(api: api)
+
+        let (proposals, discoveries, meaning) = await (proposalsTask, discoveriesTask, meaningTask)
+
+        pendingProposals = proposals
+        radarDiscoveries = discoveries
+        jacobMeaningItems = meaning
     }
 
     @discardableResult
@@ -189,6 +268,47 @@ final class VandaagViewModel: ObservableObject {
         toast = nil
     }
 
+    func matchedDecision(
+        for candidate: RadarDiscoveryCandidate,
+        from openDecisions: [GapProposal]
+    ) -> GapProposal? {
+        guard !openDecisions.isEmpty else { return nil }
+
+        if let direct = freshestGap(in: openDecisions.filter({ $0.sourcePacketId == candidate.candidateId })) {
+            return direct
+        }
+
+        let normalizedCandidateTitle = normalize(readableCandidateTitle(for: candidate))
+        let normalizedExplanation = normalize(candidate.explanation)
+
+        let titleMatches = openDecisions.filter { gap in
+            let gapTitle = normalize(gap.displayTitle)
+            return !gapTitle.isEmpty && (
+                gapTitle.contains(normalizedCandidateTitle) || normalizedCandidateTitle.contains(gapTitle)
+            )
+        }
+        if let bestTitle = freshestGap(in: titleMatches) {
+            return bestTitle
+        }
+
+        let explanationMatches = openDecisions.filter { gap in
+            let hypothesis = normalize(gap.hypothesis)
+            return !hypothesis.isEmpty && (
+                normalizedExplanation.contains(hypothesis) || hypothesis.contains(normalizedExplanation)
+            )
+        }
+        if let bestExplanation = freshestGap(in: explanationMatches) {
+            return bestExplanation
+        }
+
+        let sortedDecisions = openDecisions.sorted { ($0.score ?? 0) > ($1.score ?? 0) }
+        if let index = topDiscoveryNews.firstIndex(where: { $0.id == candidate.id }), sortedDecisions.indices.contains(index) {
+            return sortedDecisions[index]
+        }
+
+        return sortedDecisions.first
+    }
+
     private func showToast(for decision: String) {
         let isApproval = decision == "approve"
         toast = ToastMessage(
@@ -202,6 +322,36 @@ final class VandaagViewModel: ObservableObject {
                 toast = nil
             }
         }
+    }
+
+    private func loadAgentProposals(api: OperatorSurfacesAPI) async -> [Proposal] {
+        guard let proposals = try? await api.fetchAgentProposals() else {
+            return []
+        }
+
+        return proposals
+            .filter { proposal in
+                let status = proposal.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                return status == "pending" || status == "proposed" || status == "awaiting_review"
+            }
+            .sorted { ($0.priorityScore ?? 0) > ($1.priorityScore ?? 0) }
+    }
+
+    private func loadRadarDiscoveries(api: OperatorSurfacesAPI) async -> [RadarDiscoveryCandidate] {
+        guard let discoveries = try? await api.fetchRadarDiscoveries() else {
+            return []
+        }
+
+        return discoveries.sorted { lhs, rhs in
+            if lhs.candidateScore == rhs.candidateScore {
+                return lhs.rank < rhs.rank
+            }
+            return lhs.candidateScore > rhs.candidateScore
+        }
+    }
+
+    private func loadJacobMeaning(api: OperatorSurfacesAPI) async -> [JeevesKanaalMeaningItem] {
+        (try? await api.fetchJacobMeaning()) ?? []
     }
 
     private func resolveDecisionTarget(for item: BiebLatestCell, api: OperatorSurfacesAPI) async throws -> String? {
@@ -364,6 +514,60 @@ final class VandaagViewModel: ObservableObject {
             .replacingOccurrences(of: "Gap proposal:", with: "", options: [.caseInsensitive])
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    private func readableCandidateTitle(for candidate: RadarDiscoveryCandidate) -> String {
+        let cleaned = candidate.candidateType
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? candidate.candidateId : cleaned
+    }
+
+    private func makeDiscoveryDisplayItem(for candidate: RadarDiscoveryCandidate) -> DiscoveryDisplayItem {
+        DiscoveryDisplayItem(
+            candidate: candidate,
+            title: candidateDisplayTitle(for: candidate),
+            subtitle: candidateDisplaySubtitle(for: candidate)
+        )
+    }
+
+    private func candidateDisplayTitle(for candidate: RadarDiscoveryCandidate) -> String {
+        if candidate.axes.count >= 2 {
+            let first = candidate.axes[0]
+            let second = candidate.axes[1]
+            return "\(axisLabel(first)) × \(axisLabel(second))"
+        }
+
+        let explanation = candidate.explanation.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !explanation.isEmpty {
+            return explanation
+        }
+
+        return candidate.candidateId
+    }
+
+    private func candidateDisplaySubtitle(for candidate: RadarDiscoveryCandidate) -> String {
+        let explanation = candidate.explanation.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !explanation.isEmpty {
+            return explanation
+        }
+
+        if candidate.axes.count >= 2 {
+            let first = candidate.axes[0]
+            let second = candidate.axes[1]
+            return "Intersection tussen \(axisPath(first)) en \(axisPath(second))"
+        }
+
+        return candidate.candidateId
+    }
+
+    private func axisLabel(_ axis: RadarAxes) -> String {
+        "\(axis.what) (\(axis.whereValue))"
+    }
+
+    private func axisPath(_ axis: RadarAxes) -> String {
+        "\(axis.what)/\(axis.whereValue)"
     }
 }
 

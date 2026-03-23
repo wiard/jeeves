@@ -133,6 +133,20 @@ struct OperatorSurfacesAPI: Sendable {
         return try JSONDecoder().decode(ConductorState.self, from: data)
     }
 
+    func fetchClassifiedDiscoveries() async throws -> [ClassifiedDiscovery] {
+        let data = try await request(path: "/api/radar/classified", method: "GET")
+        let decoder = JSONDecoder()
+
+        if let envelope = try? decoder.decode(ClassifiedResponse.self, from: data) {
+            return envelope.classified
+        }
+        if let direct = try? decoder.decode([ClassifiedDiscovery].self, from: data) {
+            return direct
+        }
+
+        throw URLError(.cannotParseResponse)
+    }
+
     func fetchRadarDiscoveries() async throws -> [RadarDiscoveryCandidate] {
         let data = try await request(path: "/api/radar/discoveries", method: "GET")
         let decoder = JSONDecoder()

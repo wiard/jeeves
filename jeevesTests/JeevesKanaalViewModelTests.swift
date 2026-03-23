@@ -44,6 +44,7 @@ private final class MockKanaalAPI: JeevesKanaalAPIClient {
     var fetchJacobMeaningCalls = 0
     var fetchConductorStateCalls = 0
     var fetchRadarDiscoveriesCalls = 0
+    var fetchClassifiedDiscoveriesCalls = 0
     var decideProposalCalls: [(String, String)] = []
 
     func fetchAgentProposals() async throws -> [Proposal] {
@@ -71,6 +72,11 @@ private final class MockKanaalAPI: JeevesKanaalAPIClient {
 
     func fetchRadarDiscoveries() async throws -> [RadarDiscoveryCandidate] {
         fetchRadarDiscoveriesCalls += 1
+        return []
+    }
+
+    func fetchClassifiedDiscoveries() async throws -> [ClassifiedDiscovery] {
+        fetchClassifiedDiscoveriesCalls += 1
         return []
     }
 

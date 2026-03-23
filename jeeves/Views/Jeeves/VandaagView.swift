@@ -6,11 +6,14 @@ struct VandaagView: View {
     @AppStorage("jeeves_intro_dismissed") private var introDismissed = false
     @AppStorage("vandaag_cache_bieb") private var cachedBieb = ""
     @StateObject private var viewModel = VandaagViewModel()
+    @StateObject private var decisionsViewModel = BeslissingenViewModel()
     @StateObject private var disciplineViewModel = DisciplineViewModel()
     @StateObject private var disciplineSelection = DisciplineSelectionStore.shared
     @State private var selectedItem: BiebLatestCell?
     @State private var showGlossary = false
     @State private var showIntroOnRequest = false
+    @State private var showPendingProposals = false
+    @State private var showMeaningHistory = false
 
     var body: some View {
         NavigationStack {
@@ -35,6 +38,10 @@ struct VandaagView: View {
                         if let error = viewModel.error {
                             statusNotice(error, accent: .jeevesLogoRed)
                         }
+
+                        newspaperFrontPage
+
+                        radarNewsSection
 
                         if let topDiscipline = disciplineViewModel.featuredDiscipline {
                             Button {
@@ -141,6 +148,16 @@ struct VandaagView: View {
             }
             .sheet(item: $selectedItem) { item in
                 BiebDetailView(item: item, viewModel: viewModel)
+            }
+            .sheet(isPresented: $showPendingProposals) {
+                NavigationStack {
+                    PendingProposalSheet(proposals: viewModel.pendingProposals)
+                }
+            }
+            .sheet(isPresented: $showMeaningHistory) {
+                NavigationStack {
+                    MeaningHistorySheet(items: viewModel.jacobMeaningItems)
+                }
             }
             .sheet(isPresented: $showGlossary) {
                 GlossaryView()
@@ -315,6 +332,142 @@ struct VandaagView: View {
         return "Het systeem observeert. \(activeSignalsCount) signalen actief."
     }
 
+    private var newspaperFrontPage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            frontPageBlock(
+                eyebrow: "WACHT OP U",
+                title: waitBlockTitle,
+                detail: waitBlockDetail,
+                primaryButtonTitle: "Bekijk eerste →",
+                primaryAction: {
+                    showPendingProposals = true
+                }
+            )
+
+            frontPageBlock(
+                eyebrow: "STERKSTE SIGNAAL",
+                title: strongestSignalTitle,
+                detail: strongestSignalDetail,
+                actionRow: {
+                    strongestSignalActions
+                }
+            )
+            .modifier(DiscoveryDecisionSwipeModifier(
+                gap: strongestSignalDecision,
+                decisionsViewModel: decisionsViewModel,
+                refresh: refreshFrontPageOnly
+            ))
+
+            frontPageBlock(
+                eyebrow: "WAT ER TOE DEED",
+                title: jacobMeaningTitle,
+                detail: jacobMeaningDetail,
+                primaryButtonTitle: "Zie geschiedenis",
+                primaryAction: {
+                    showMeaningHistory = true
+                }
+            )
+        }
+    }
+
+    private var radarNewsSection: some View {
+        InstrumentSectionPanel(
+            eyebrow: "Nieuwslaag",
+            title: "Wat vandaag oplicht",
+            subtitle: "De vijf sterkste radar candidates in leesbare volgorde. Keur goed of wijs af via de governed frontier-flow.",
+            accent: .jeevesLogoRed,
+            metric: viewModel.isFrontPageLoading && viewModel.topDiscoveryDisplayItems.isEmpty ? "Laden" : nil
+        ) {
+            if viewModel.isFrontPageLoading && viewModel.topDiscoveryDisplayItems.isEmpty {
+                ForEach(0..<3, id: \.self) { _ in
+                    newspaperSkeletonCard
+                }
+            } else if viewModel.topDiscoveryDisplayItems.isEmpty {
+                emptyState("De radar meldt nu geen nieuwe candidates.")
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(viewModel.topDiscoveryDisplayItems) { item in
+                        radarNewsCard(item)
+                    }
+                }
+            }
+        }
+    }
+
+    private var waitBlockTitle: String {
+        let count = viewModel.pendingProposals.count
+        if count == 0 {
+            return "Geen proposals in de queue"
+        }
+        return "\(count) proposal\(count == 1 ? "" : "s") open"
+    }
+
+    private var waitBlockDetail: String {
+        viewModel.firstPendingProposal?.title ?? "De governance-queue is rustig."
+    }
+
+    private var strongestSignalTitle: String {
+        guard let item = viewModel.strongestDiscoveryDisplay else {
+            return "Nog geen sterk signaal"
+        }
+        return item.title
+    }
+
+    private var strongestSignalDetail: String {
+        guard let item = viewModel.strongestDiscoveryDisplay else {
+            return "De radar wacht op een nieuwe candidate."
+        }
+        return item.subtitle
+    }
+
+    private var jacobMeaningTitle: String {
+        viewModel.firstMeaningItem?.title ?? "Jacob: nog geen beslissingen"
+    }
+
+    private var jacobMeaningDetail: String {
+        viewModel.firstMeaningItem?.summary ?? "Er is nog geen impactvolle verschuiving geregistreerd."
+    }
+
+    private var strongestSignalDecision: GapProposal? {
+        guard let strongest = viewModel.strongestDiscoveryDisplay?.candidate else { return nil }
+        return viewModel.matchedDecision(for: strongest, from: decisionsViewModel.openDecisions)
+    }
+
+    @ViewBuilder
+    private var strongestSignalActions: some View {
+        if let strongest = viewModel.strongestDiscoveryDisplay?.candidate,
+           let gap = viewModel.matchedDecision(for: strongest, from: decisionsViewModel.openDecisions) {
+            HStack(spacing: 6) {
+                newspaperDecisionButton(
+                    systemImage: "checkmark",
+                    tint: .consentGreen,
+                    isLoading: decisionsViewModel.activeDecisionId == gap.id,
+                    action: {
+                        Task {
+                            await decisionsViewModel.decide(gap, decision: "approve")
+                            await refreshFrontPageOnly()
+                        }
+                    }
+                )
+                newspaperDecisionButton(
+                    systemImage: "xmark",
+                    tint: .consentRed,
+                    isLoading: decisionsViewModel.activeDecisionId == gap.id,
+                    action: {
+                        Task {
+                            await decisionsViewModel.decide(gap, decision: "deny")
+                            await refreshFrontPageOnly()
+                        }
+                    }
+                )
+            }
+        } else {
+            Text("Nog niet in review")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func disciplineBannerText(_ discipline: Discipline) -> String {
         "\(discipline.displayLabel) actief · \(discipline.displayGapCount) gaps · score \(scoreLabel(discipline.effectiveAverageScore))"
     }
@@ -358,13 +511,66 @@ struct VandaagView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
+    @ViewBuilder
+    private func frontPageBlock(
+        eyebrow: String,
+        title: String,
+        detail: String,
+        primaryButtonTitle: String? = nil,
+        primaryAction: (() -> Void)? = nil,
+        @ViewBuilder actionRow: () -> some View = { EmptyView() }
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(eyebrow)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.jeevesLogoRed)
+                .tracking(0.8)
+
+            Text(title)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.jeevesInk)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(detail)
+                .font(.system(size: 12))
+                .foregroundStyle(Color(red: 0.42, green: 0.42, blue: 0.42))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+
+            if let primaryButtonTitle, let primaryAction {
+                Button(primaryButtonTitle, action: primaryAction)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.jeevesLogoRed)
+                    .buttonStyle(.plain)
+            } else {
+                actionRow()
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 154, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.94))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.jeevesLogoRed.opacity(0.12), lineWidth: 1)
+                )
+        )
+    }
+
     private func loadInitialContent() async {
         viewModel.configure(gateway: gateway)
         viewModel.loadCachedBieb(from: cachedBieb)
+        decisionsViewModel.configure(gateway: gateway)
 
         async let latestLoad: String? = loadLatestIfNeeded()
+        async let frontPageLoad: Void = loadFrontPageIfNeeded()
+        async let decisionLoad: Void = loadDecisionsIfNeeded()
         async let disciplineLoad: Void = loadDisciplinesIfNeeded()
-        let (latestPayload, _) = await (latestLoad, disciplineLoad)
+        let (latestPayload, _, _, _) = await (latestLoad, frontPageLoad, decisionLoad, disciplineLoad)
         if let latestPayload {
             cachedBieb = latestPayload
         }
@@ -372,10 +578,13 @@ struct VandaagView: View {
 
     private func refreshContent() async {
         viewModel.configure(gateway: gateway)
+        decisionsViewModel.configure(gateway: gateway)
 
         async let latestRefresh: String? = viewModel.fetchLatest()
+        async let frontPageRefresh: Void = viewModel.fetchFrontPage()
+        async let decisionsRefresh: Void = decisionsViewModel.fetchOpenDecisions()
         async let disciplineRefresh: Void = disciplineViewModel.loadDisciplines()
-        let (latestPayload, _) = await (latestRefresh, disciplineRefresh)
+        let (latestPayload, _, _, _) = await (latestRefresh, frontPageRefresh, decisionsRefresh, disciplineRefresh)
         if let latestPayload {
             cachedBieb = latestPayload
         }
@@ -389,6 +598,26 @@ struct VandaagView: View {
     private func loadDisciplinesIfNeeded() async {
         guard disciplineViewModel.disciplines.isEmpty else { return }
         await disciplineViewModel.loadDisciplines()
+    }
+
+    private func loadFrontPageIfNeeded() async {
+        guard viewModel.pendingProposals.isEmpty,
+              viewModel.radarDiscoveries.isEmpty,
+              viewModel.jacobMeaningItems.isEmpty else {
+            return
+        }
+        await viewModel.fetchFrontPage()
+    }
+
+    private func loadDecisionsIfNeeded() async {
+        guard decisionsViewModel.gaps.isEmpty else { return }
+        await decisionsViewModel.fetchOpenDecisions()
+    }
+
+    private func refreshFrontPageOnly() async {
+        async let frontPageRefresh: Void = viewModel.fetchFrontPage()
+        async let decisionsRefresh: Void = decisionsViewModel.fetchOpenDecisions()
+        _ = await (frontPageRefresh, decisionsRefresh)
     }
 
     @ViewBuilder
@@ -463,6 +692,76 @@ struct VandaagView: View {
     }
 
     @ViewBuilder
+    private func radarNewsCard(_ item: VandaagViewModel.DiscoveryDisplayItem) -> some View {
+        let candidate = item.candidate
+        let linkedDecision = viewModel.matchedDecision(for: candidate, from: decisionsViewModel.openDecisions)
+
+        VStack(alignment: .leading, spacing: 10) {
+            Text(item.title)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color.jeevesInk)
+                .lineLimit(2)
+
+            Text(item.subtitle)
+                .font(.system(size: 12))
+                .foregroundStyle(Color(red: 0.4, green: 0.4, blue: 0.4))
+                .lineLimit(2)
+
+            Text(relativeTimestampLabel(for: candidate))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let linkedDecision {
+                HStack(spacing: 8) {
+                    newspaperDecisionButton(
+                        systemImage: "checkmark",
+                        tint: .consentGreen,
+                        isLoading: decisionsViewModel.activeDecisionId == linkedDecision.id,
+                        action: {
+                            Task {
+                                await decisionsViewModel.decide(linkedDecision, decision: "approve")
+                                await refreshFrontPageOnly()
+                            }
+                        }
+                    )
+
+                    newspaperDecisionButton(
+                        systemImage: "xmark",
+                        tint: .consentRed,
+                        isLoading: decisionsViewModel.activeDecisionId == linkedDecision.id,
+                        action: {
+                            Task {
+                                await decisionsViewModel.decide(linkedDecision, decision: "deny")
+                                await refreshFrontPageOnly()
+                            }
+                        }
+                    )
+                }
+            } else {
+                Text("Nog niet in review")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.94))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.jeevesLogoRed.opacity(0.12), lineWidth: 1)
+                )
+        )
+        .modifier(DiscoveryDecisionSwipeModifier(
+            gap: linkedDecision,
+            decisionsViewModel: decisionsViewModel,
+            refresh: refreshFrontPageOnly
+        ))
+    }
+
+    @ViewBuilder
     private func statusNotice(_ message: String, accent: Color) -> some View {
         Text(message)
             .font(.jeevesBody)
@@ -477,6 +776,35 @@ struct VandaagView: View {
                             .stroke(accent.opacity(0.14), lineWidth: 1)
                     )
             )
+    }
+
+    private func newspaperDecisionButton(
+        systemImage: String,
+        tint: Color,
+        isLoading: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ZStack {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 13, weight: .bold))
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(tint)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
     @ViewBuilder
@@ -562,8 +890,49 @@ struct VandaagView: View {
         .redacted(reason: .placeholder)
     }
 
+    private var newspaperSkeletonCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.gray.opacity(0.18))
+                .frame(width: 160, height: 18)
+
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.gray.opacity(0.14))
+                .frame(width: 124, height: 14)
+
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.gray.opacity(0.12))
+                .frame(width: 72, height: 12)
+
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color.gray.opacity(0.14))
+                    .frame(height: 28)
+                RoundedRectangle(cornerRadius: 999, style: .continuous)
+                    .fill(Color.gray.opacity(0.14))
+                    .frame(height: 28)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.94))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.jeevesLogoRed.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .redacted(reason: .placeholder)
+    }
+
     private func scoreLabel(_ score: Double) -> String {
         String(format: "%.0f%%", min(max(score, 0), 1) * 100)
+    }
+
+    private func scoreText(for score: Double) -> String {
+        String(format: "%.2f", score)
     }
 
     private func gapHeadline(for item: BiebLatestCell) -> String {
@@ -620,6 +989,20 @@ struct VandaagView: View {
             || normalized.hasPrefix("signals in")
     }
 
+    private func relativeTimestampLabel(for candidate: RadarDiscoveryCandidate) -> String {
+        guard let iso = poller.streamEvents.first(where: {
+            $0.candidateId == candidate.candidateId || $0.id == candidate.candidateId
+        })?.timestampIso,
+              let date = ISO8601DateFormatter().date(from: iso) else {
+            return "zojuist"
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "nl_NL")
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
     private func truncate(_ value: String, maxLength: Int) -> String {
         guard value.count > maxLength else { return value }
         let prefix = String(value.prefix(maxLength))
@@ -674,6 +1057,113 @@ struct VandaagView: View {
             return Color(red: 0.15, green: 0.68, blue: 0.38)
         default:
             return .jeevesSubtleText
+        }
+    }
+}
+
+private struct PendingProposalSheet: View {
+    let proposals: [Proposal]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            if proposals.isEmpty {
+                Text("Er wachten nu geen proposals op uw oordeel.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(proposals) { proposal in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(proposal.title)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.jeevesInk)
+                        if let score = proposal.priorityScore {
+                            Text(String(format: "Prioriteit %.2f", score))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(proposal.status.capitalized)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .navigationTitle("Wacht op u")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Sluit") { dismiss() }
+            }
+        }
+    }
+}
+
+private struct MeaningHistorySheet: View {
+    let items: [JeevesKanaalMeaningItem]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            if items.isEmpty {
+                Text("Jacob heeft nog geen betekenisvolle verschuiving geregistreerd.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(items) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.title)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.jeevesInk)
+                        Text(item.summary)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .navigationTitle("Wat er toe deed")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Sluit") { dismiss() }
+            }
+        }
+    }
+}
+
+private struct DiscoveryDecisionSwipeModifier: ViewModifier {
+    let gap: GapProposal?
+    @ObservedObject var decisionsViewModel: BeslissingenViewModel
+    let refresh: () async -> Void
+
+    func body(content: Content) -> some View {
+        if let gap {
+            content
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button {
+                        Task {
+                            await decisionsViewModel.decide(gap, decision: "approve")
+                            await refresh()
+                        }
+                    } label: {
+                        Image(systemName: "checkmark")
+                    }
+                    .tint(.green)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button {
+                        Task {
+                            await decisionsViewModel.decide(gap, decision: "deny")
+                            await refresh()
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .tint(.red)
+                }
+        } else {
+            content
         }
     }
 }

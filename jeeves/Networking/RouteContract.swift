@@ -125,6 +125,7 @@ enum RouteContract {
         static let sources     = Route.get("/api/radar/sources")
         static let gravity     = Route.get("/api/radar/gravity")
         static let discoveries = Route.get("/api/radar/discoveries")
+        static let classified  = Route.get("/api/radar/classified")
     }
 
     // MARK: - Cube
