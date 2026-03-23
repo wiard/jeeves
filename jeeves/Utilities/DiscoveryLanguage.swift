@@ -4,18 +4,28 @@ struct DiscoveryLanguage {
     static func headline(for discovery: ClassifiedDiscovery) -> String {
         headline(
             outcomeType: discovery.outcomeType,
-            firstDomain: humanDomain(discovery.axes.first),
-            secondDomain: humanDomain(discovery.axes.dropFirst().first)
+            firstDomain: humanWhat(discovery.axes.first),
+            secondDomain: humanWhat(discovery.axes.dropFirst().first),
+            firstTime: humanTime(discovery.axes.first?.time),
+            secondTime: humanTime(discovery.axes.dropFirst().first?.time)
         )
     }
 
     static func headline(for candidate: RadarDiscoveryCandidate) -> String {
-        let firstDomain = humanDomain(candidate.axes.first)
-        let secondDomain = humanDomain(candidate.axes.dropFirst().first)
+        let firstDomain = humanWhat(candidate.axes.first)
+        let secondDomain = humanWhat(candidate.axes.dropFirst().first)
+        let firstTime = humanTime(candidate.axes.first?.time)
+        let secondTime = humanTime(candidate.axes.dropFirst().first?.time)
         let outcomeType = inferredOutcomeType(from: candidate)
 
         if let outcomeType {
-            return headline(outcomeType: outcomeType, firstDomain: firstDomain, secondDomain: secondDomain)
+            return headline(
+                outcomeType: outcomeType,
+                firstDomain: firstDomain,
+                secondDomain: secondDomain,
+                firstTime: firstTime,
+                secondTime: secondTime
+            )
         }
 
         let explanation = candidate.explanation.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -24,6 +34,9 @@ struct DiscoveryLanguage {
         }
 
         if candidate.axes.count >= 2 {
+            if !firstTime.isEmpty, !secondTime.isEmpty, firstTime != secondTime {
+                return "Verschuiving tussen \(firstDomain) (\(firstTime)) en \(secondDomain) (\(secondTime))"
+            }
             return "Signaal tussen \(firstDomain) × \(secondDomain)"
         }
 
@@ -74,32 +87,64 @@ struct DiscoveryLanguage {
 
     static func humanDomain(_ axis: DiscoveryAxis?) -> String {
         guard let axis else { return "onbekend" }
-        let what = translatedWhat(axis.what)
+        let what = humanWhat(axis)
         let whereValue = translatedWhere(axis.where_)
-        let time = translatedTime(axis.time)
+        let time = humanTime(axis.time)
         return "\(what) (\(whereValue), \(time))"
     }
 
     static func humanDomain(_ axis: RadarAxes?) -> String {
         guard let axis else { return "onbekend" }
-        let what = translatedWhat(axis.what)
+        let what = humanWhat(axis)
         let whereValue = translatedWhere(axis.whereValue)
-        let time = translatedTime(axis.time)
+        let time = humanTime(axis.time)
         return "\(what) (\(whereValue), \(time))"
     }
 
-    private static func headline(outcomeType: String, firstDomain: String, secondDomain: String) -> String {
+    static func humanWhat(_ axis: DiscoveryAxis?) -> String {
+        guard let axis else { return "onbekend" }
+        return translatedWhat(axis.what)
+    }
+
+    static func humanWhat(_ axis: RadarAxes?) -> String {
+        guard let axis else { return "onbekend" }
+        return translatedWhat(axis.what)
+    }
+
+    static func humanTime(_ time: String?) -> String {
+        switch time {
+        case "historical":
+            return "historisch"
+        case "current":
+            return "actueel"
+        case "emerging":
+            return "opkomend"
+        default:
+            return time ?? ""
+        }
+    }
+
+    private static func headline(
+        outcomeType: String,
+        firstDomain: String,
+        secondDomain: String,
+        firstTime: String,
+        secondTime: String
+    ) -> String {
         switch outcomeType {
         case "GAP":
-            return "Ontbrekend terrein in \(firstDomain) × \(secondDomain)"
+            if !firstTime.isEmpty, !secondTime.isEmpty, firstTime != secondTime {
+                return "Kloof tussen \(firstDomain) (\(firstTime)) en \(secondDomain) (\(secondTime))"
+            }
+            return "Ontbrekend terrein: \(firstDomain) × \(secondDomain)"
         case "DISCOVERY":
-            return "Nieuw verband gevonden: \(firstDomain) × \(secondDomain)"
+            return "Nieuw verband: \(firstDomain) × \(secondDomain)"
         case "OPPORTUNITY":
-            return "Kans in \(firstDomain) × \(secondDomain)"
+            return "Kans: \(firstDomain) raakt \(secondDomain)"
         case "SURPRISE":
-            return "Onverwacht signaal: \(firstDomain) × \(secondDomain)"
+            return "Onverwacht: \(firstDomain) × \(secondDomain)"
         case "SURE_WIN":
-            return "Bewezen kans: \(firstDomain) × \(secondDomain)"
+            return "Bewezen: \(firstDomain) × \(secondDomain)"
         default:
             return "\(firstDomain) × \(secondDomain)"
         }
@@ -153,16 +198,6 @@ struct DiscoveryLanguage {
         ]
 
         return whereMap[value] ?? cleanDomainName(value)
-    }
-
-    private static func translatedTime(_ value: String) -> String {
-        let timeMap: [String: String] = [
-            "historical": "historisch",
-            "current": "actueel",
-            "emerging": "opkomend"
-        ]
-
-        return timeMap[value] ?? cleanDomainName(value)
     }
 
     private static func cleanDomainName(_ value: String) -> String {

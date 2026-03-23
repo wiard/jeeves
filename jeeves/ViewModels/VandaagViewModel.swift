@@ -59,7 +59,7 @@ final class VandaagViewModel: ObservableObject {
     }
 
     var strongestDiscovery: RadarDiscoveryCandidate? {
-        radarDiscoveries.sorted { lhs, rhs in
+        deduplicatedDiscoveries.sorted { lhs, rhs in
             if lhs.candidateScore == rhs.candidateScore {
                 return lhs.rank < rhs.rank
             }
@@ -69,7 +69,7 @@ final class VandaagViewModel: ObservableObject {
 
     var topDiscoveryNews: [RadarDiscoveryCandidate] {
         Array(
-            radarDiscoveries
+            deduplicatedDiscoveries
                 .sorted { lhs, rhs in
                     if lhs.candidateScore == rhs.candidateScore {
                         return lhs.rank < rhs.rank
@@ -352,6 +352,25 @@ final class VandaagViewModel: ObservableObject {
 
     private func loadJacobMeaning(api: OperatorSurfacesAPI) async -> [JeevesKanaalMeaningItem] {
         (try? await api.fetchJacobMeaning()) ?? []
+    }
+
+    private var deduplicatedDiscoveries: [RadarDiscoveryCandidate] {
+        let grouped = Dictionary(grouping: radarDiscoveries) { candidate in
+            let key = candidate.axes
+                .map(\.what)
+                .sorted()
+                .joined(separator: "×")
+            return key.isEmpty ? candidate.candidateId : key
+        }
+
+        return grouped.values.compactMap { group in
+            group.max { lhs, rhs in
+                if lhs.candidateScore == rhs.candidateScore {
+                    return lhs.rank > rhs.rank
+                }
+                return lhs.candidateScore < rhs.candidateScore
+            }
+        }
     }
 
     private func resolveDecisionTarget(for item: BiebLatestCell, api: OperatorSurfacesAPI) async throws -> String? {
