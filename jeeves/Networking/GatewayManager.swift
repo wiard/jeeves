@@ -773,14 +773,14 @@ final class GatewayManager {
         let builder = AuthorizedRequestBuilder(host: host, port: port, token: token)
 
         do {
-            let req = try builder.request(for: RouteContract.Conductor.health, timeoutInterval: 1.2)
+            let req = try builder.request(for: RouteContract.healthProbe, timeoutInterval: 1.2)
             let (data, response) = try await URLSession.shared.data(for: req)
             guard let http = response as? HTTPURLResponse else { return .unavailable }
             if http.statusCode == 200 {
                 if let decoded = try? JSONDecoder().decode(ConductorHealth.self, from: data) {
                     return decoded.ok ? .healthy : .unavailable
                 }
-                return .healthy
+                return .unavailable
             }
             if http.statusCode == 401 {
                 return .unauthorized
