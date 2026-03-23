@@ -245,22 +245,24 @@ struct ContentView: View {
         .tint(Color.jeevesSky)
         #else
         TabView(selection: $selectedTab) {
+            // Primary tabs (visible in tab bar)
             VandaagView()
                 .tabItem { Label("Vandaag", systemImage: "house.fill") }
                 .tag(AppScreen.vandaag)
-            ZoekerView()
-                .tabItem { Label("De Zoeker", systemImage: "circle.grid.3x3.fill") }
-                .tag(AppScreen.zoeker)
             BeslissingenView(viewModel: beslissingenViewModel)
                 .badge(beslissingenViewModel.badgeText)
                 .tabItem { Label("Beslissingen", systemImage: "checkmark.circle.fill") }
                 .tag(AppScreen.beslissingen)
-            JeevesKanaalView()
-                .tabItem { Label("Kanaal", systemImage: "message.fill") }
-                .tag(AppScreen.kanaal)
             ClassifiedView(beslissingenViewModel: beslissingenViewModel)
                 .tabItem { Label("Ontdekkingen", systemImage: "sparkles") }
                 .tag(AppScreen.classified)
+            JeevesKanaalView()
+                .tabItem { Label("Kanaal", systemImage: "message.fill") }
+                .tag(AppScreen.kanaal)
+            // Remaining tabs (accessible via More)
+            ZoekerView()
+                .tabItem { Label("De Zoeker", systemImage: "circle.grid.3x3.fill") }
+                .tag(AppScreen.zoeker)
             DisciplineView()
                 .tabItem { Label("Disciplines", systemImage: "magnifyingglass.circle.fill") }
                 .tag(AppScreen.research)
